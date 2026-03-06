@@ -231,6 +231,9 @@ def notebook_create(
     max_results: Annotated[int, typer.Option("--max", "-n", help="Max results per source")] = 10,
     oa_only: Annotated[bool, typer.Option("--oa-only", help="Only include open-access papers")] = False,
     podcast: Annotated[bool, typer.Option("--podcast", help="Queue an Audio Overview after import")] = False,
+    year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
+    author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
+    journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
 ):
     """Create a NotebookLM notebook from a search query or a directory of PDFs.
 
@@ -271,10 +274,23 @@ def notebook_create(
     cache = Cache(cfg["db_path"])
     email = cfg.get("unpaywall", {}).get("email", "")
 
+    filters: SearchFilters | None = None
+    if year or author or journal:
+        filters = SearchFilters(authors=list(author), journal=journal)
+        if year:
+            try:
+                parsed = SearchFilters.parse_year(year)
+                filters.year_from = parsed.year_from
+                filters.year_to   = parsed.year_to
+                filters.years     = parsed.years
+            except ValueError:
+                rprint(f'[red]Invalid --year format "{year}". Use: 2020, 2020-2024, or 2020,2022,2024[/red]')
+                raise typer.Exit(1)
+
     errors: list[str] = []
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
         prog.add_task(f"Searching {len(sources)} source(s) for [bold]{query}[/bold]…")
-        papers = search_all(sources, query, max_per_source=max_results, errors=errors)
+        papers = search_all(sources, query, max_per_source=max_results, filters=filters, errors=errors)
 
     for err in errors:
         rprint(f"[yellow]Warning:[/yellow] {err}")

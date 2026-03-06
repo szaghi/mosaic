@@ -147,14 +147,11 @@ Config is stored at `~/.config/mosaic/config.toml`. Downloaded PDFs go to `~/mos
 Send search results directly to a Google NotebookLM notebook:
 
 ```bash
-# 1. Install notebooklm-py with browser support (needed for auth)
-pip install "notebooklm-py[browser]"
-playwright install chromium
+# 1. Inject into MOSAIC (--include-apps exposes the notebooklm CLI)
+pipx inject --include-apps mosaic-search "notebooklm-py[browser]"
 
-# 2. Inject into your MOSAIC installation
-pipx inject mosaic-search notebooklm-py        # pipx
-# uv tool inject mosaic-search notebooklm-py   # uv
-# pip install 'mosaic-search[notebooklm]'       # venv
+# 2. Install Chromium — playwright lives inside the pipx venv, call it directly
+~/.local/share/pipx/venvs/mosaic-search/bin/playwright install chromium
 
 # 3. Authenticate once
 notebooklm login

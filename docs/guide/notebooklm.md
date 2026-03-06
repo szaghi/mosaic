@@ -12,30 +12,48 @@ This feature uses [notebooklm-py](https://github.com/teng-lin/notebooklm-py), an
 
 ## Setup
 
-### 1. Install notebooklm-py
+### 1. Inject notebooklm-py into MOSAIC
 
-[notebooklm-py](https://github.com/teng-lin/notebooklm-py) must be installed with its `[browser]` extra, which pulls in [Playwright](https://playwright.dev/python/) for the Google sign-in flow:
+`--include-apps` exposes the `notebooklm` CLI to your PATH. `[browser]` pulls in Playwright, which is needed for the one-time Google sign-in.
 
 ```bash
+# pipx
+pipx inject --include-apps mosaic-search "notebooklm-py[browser]"
+
+# uv
+uv tool inject --include-apps mosaic-search "notebooklm-py[browser]"
+
+# pip / venv (activate your venv first)
 pip install "notebooklm-py[browser]"
+```
+
+### 2. Install the Chromium browser (one-time)
+
+Playwright is installed inside the MOSAIC tool venv but its own CLI is not exposed to PATH by pipx/uv. Download the Chromium binary by calling it directly from the venv:
+
+```bash
+# pipx
+~/.local/share/pipx/venvs/mosaic-search/bin/playwright install chromium
+
+# uv
+~/.local/share/uv/tools/mosaic-search/bin/playwright install chromium
+
+# pip / venv (playwright is on PATH inside the activated venv)
 playwright install chromium
 ```
 
-### 2. Install the MOSAIC extra
+This is a ~150 MB one-time download to `~/.cache/ms-playwright/`.
+
+### 3. Authenticate (one-time)
 
 ```bash
-# if you installed MOSAIC with pipx
-pipx inject mosaic-search notebooklm-py
-
-# if you installed MOSAIC with pip (inside your venv)
-pip install 'mosaic-search[notebooklm]'
-
-# if you installed MOSAIC with uv
-uv tool inject mosaic-search notebooklm-py
+notebooklm login
 ```
 
-::: tip One package, two install steps
-`notebooklm-py[browser]` is only needed **once** for authentication. After sign-in, MOSAIC uses the stored credentials and does not require Playwright at runtime. If you only want to authenticate once and then use a different machine, you can copy `~/.config/notebooklm/` across.
+A Chromium window opens for Google sign-in. After logging in, press **Enter** in the terminal. Credentials are saved to `~/.notebooklm/` and reused automatically by every future `mosaic notebook` call.
+
+::: tip
+After the first sign-in, Playwright and Chromium are never invoked again. You can also copy `~/.notebooklm/` to another machine to skip re-authentication.
 :::
 
 ### 3. Authenticate (one-time)

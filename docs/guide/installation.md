@@ -52,19 +52,26 @@ pip install -e .
 
 To use `mosaic notebook create` you need [notebooklm-py](https://github.com/teng-lin/notebooklm-py), an unofficial Python client for Google NotebookLM.
 
-**Step 1 — install notebooklm-py with browser support** (required for the one-time Google sign-in):
+**Step 1 — inject notebooklm-py into MOSAIC** (`--include-apps` exposes the `notebooklm` CLI; `[browser]` pulls in Playwright for the one-time sign-in):
 
 ```bash
-pip install "notebooklm-py[browser]"
-playwright install chromium
+pipx inject --include-apps mosaic-search "notebooklm-py[browser]"   # pipx
+uv tool inject --include-apps mosaic-search "notebooklm-py[browser]"   # uv
+pip install 'mosaic-search[notebooklm]'                                  # pip / venv
 ```
 
-**Step 2 — inject it into your MOSAIC installation:**
+**Step 2 — install the Chromium browser** (pipx/uv bury `playwright` inside the tool venv so call it with its full path):
 
 ```bash
-pipx inject mosaic-search notebooklm-py   # pipx
-uv tool inject mosaic-search notebooklm-py   # uv
-pip install 'mosaic-search[notebooklm]'      # pip / venv
+~/.local/share/pipx/venvs/mosaic-search/bin/playwright install chromium   # pipx
+~/.local/share/uv/tools/mosaic-search/bin/playwright install chromium      # uv
+playwright install chromium                                                  # pip / venv
+```
+
+**Step 3 — authenticate once:**
+
+```bash
+notebooklm login
 ```
 
 **Step 3 — authenticate once:**

@@ -180,8 +180,11 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 | `--max` | `-n` | int | `10` | Max results per source (with `--query`) |
 | `--oa-only` | | flag | off | Only include open-access papers |
 | `--podcast` | | flag | off | Queue an Audio Overview after import |
+| `--year` | `-y` | str | | Year filter (same formats as `search`) |
+| `--author` | `-a` | str | | Author filter, repeatable |
+| `--journal` | `-j` | str | | Journal name substring filter |
 
-`--query` and `--from-dir` are mutually exclusive; exactly one must be provided.
+`--query` and `--from-dir` are mutually exclusive; exactly one must be provided. Filters (`-y`, `-a`, `-j`) only apply when using `--query`.
 
 **Examples:**
 
@@ -189,8 +192,11 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 # Search, download, and import into a new notebook
 mosaic notebook create "Transformers" --query "attention is all you need" --oa-only
 
-# Also queue an Audio Overview
-mosaic notebook create "Diffusion Models" --query "diffusion models survey" --oa-only --podcast
+# Filter by year and queue an Audio Overview
+mosaic notebook create "AMR-GPU" --query "adaptive mesh refinement gpu" -y 2024-2026 --oa-only --podcast
+
+# Filter by author and journal
+mosaic notebook create "Hinton Papers" --query "deep learning" -a Hinton -j "Nature" --oa-only
 
 # Import PDFs you already have locally
 mosaic notebook create "My Papers" --from-dir ~/mosaic-papers/
