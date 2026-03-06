@@ -74,6 +74,7 @@ def search(
     max_results: Annotated[int, typer.Option("--max", "-n", help="Max results per source")] = 10,
     download: Annotated[bool, typer.Option("--download", "-d", help="Download available PDFs")] = False,
     oa_only: Annotated[bool, typer.Option("--oa-only", help="Show only open access papers")] = False,
+    pdf_only: Annotated[bool, typer.Option("--pdf-only", help="Show only papers with a downloadable PDF")] = False,
     source: Annotated[str, typer.Option("--source", "-s", help="Limit to one source (arxiv, ss, sd, doaj, epmc, oa, base, core)")] = "",
     year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
     author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
@@ -127,6 +128,8 @@ def search(
 
     if oa_only:
         papers = [p for p in papers if p.is_open_access or p.pdf_url]
+    if pdf_only:
+        papers = [p for p in papers if p.pdf_url]
 
     if not papers:
         rprint("[yellow]No results found.[/yellow]")
@@ -236,6 +239,7 @@ def notebook_create(
     from_dir: Annotated[Optional[Path], typer.Option("--from-dir", help="Import all PDFs from this directory")] = None,
     max_results: Annotated[int, typer.Option("--max", "-n", help="Max results per source")] = 10,
     oa_only: Annotated[bool, typer.Option("--oa-only", help="Only include open-access papers")] = False,
+    pdf_only: Annotated[bool, typer.Option("--pdf-only", help="Only include papers with a downloadable PDF")] = False,
     podcast: Annotated[bool, typer.Option("--podcast", help="Queue an Audio Overview after import")] = False,
     year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
     author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
@@ -309,6 +313,8 @@ def notebook_create(
 
     if oa_only:
         papers = [p for p in papers if p.is_open_access or p.pdf_url]
+    if pdf_only:
+        papers = [p for p in papers if p.pdf_url]
 
     if not papers:
         rprint("[yellow]No results found.[/yellow]")

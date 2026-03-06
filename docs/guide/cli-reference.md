@@ -35,6 +35,7 @@ mosaic search [OPTIONS] QUERY
 | `--max` | `-n` | int | `10` | Max results per source |
 | `--download` | `-d` | flag | off | Download available PDFs after search |
 | `--oa-only` | | flag | off | Show only open-access papers |
+| `--pdf-only` | | flag | off | Show only papers with a known PDF URL |
 | `--source` | `-s` | str | all | Limit to one source |
 | `--year` | `-y` | str | | Year filter (see formats below) |
 | `--author` | `-a` | str | | Author filter, repeatable |
@@ -197,6 +198,7 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 | `--from-dir` | | path | | Import all PDFs from this directory |
 | `--max` | `-n` | int | `10` | Max results per source (with `--query`) |
 | `--oa-only` | | flag | off | Only include open-access papers |
+| `--pdf-only` | | flag | off | Only include papers with a known PDF URL |
 | `--podcast` | | flag | off | Queue an Audio Overview after import |
 | `--year` | `-y` | str | | Year filter (same formats as `search`) |
 | `--author` | `-a` | str | | Author filter, repeatable |
@@ -204,7 +206,7 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 | `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
 
-`--query` and `--from-dir` are mutually exclusive; exactly one must be provided. Filters (`-y`, `-a`, `-j`, `-f`, `--raw-query`) only apply when using `--query`.
+`--query` and `--from-dir` are mutually exclusive; exactly one must be provided. Filters (`-y`, `-a`, `-j`, `-f`, `--raw-query`) only apply when using `--query`. `--oa-only` and `--pdf-only` apply in both modes.
 
 **Examples:**
 
