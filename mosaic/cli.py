@@ -196,6 +196,7 @@ def _print_results(papers: list) -> None:
     table.add_column("Title", min_width=30, ratio=3)
     table.add_column("Authors", ratio=2)
     table.add_column("Year", width=6)
+    table.add_column("DOI", ratio=2)
     table.add_column("Source", width=16)
     table.add_column("OA", width=4)
     table.add_column("PDF", width=5)
@@ -203,7 +204,8 @@ def _print_results(papers: list) -> None:
     for i, p in enumerate(papers, 1):
         oa = "[green]yes[/green]" if p.is_open_access else "[red]no[/red]"
         pdf = "[green]✓[/green]" if p.pdf_url else "[dim]–[/dim]"
-        table.add_row(str(i), p.title[:80], p.short_authors, str(p.year or ""), p.source, oa, pdf)
+        doi = p.doi or "[dim]–[/dim]"
+        table.add_row(str(i), p.title[:80], p.short_authors, str(p.year or ""), doi, p.source, oa, pdf)
 
     console.print(table)
     console.print(f"[dim]{len(papers)} result(s)[/dim]")

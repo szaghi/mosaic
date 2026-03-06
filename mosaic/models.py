@@ -79,7 +79,12 @@ class Paper:
     def uid(self) -> str:
         """Best available unique identifier."""
         if self.doi:
-            return f"doi:{self.doi.lower()}"
+            doi_lower = self.doi.lower()
+            # Normalize arXiv DOIs (10.48550/arxiv.XXXX) to arxiv: prefix so
+            # the same paper from arXiv + OpenAlex/EPMC deduplicates correctly.
+            if doi_lower.startswith("10.48550/arxiv."):
+                return f"arxiv:{doi_lower.removeprefix('10.48550/arxiv.')}"
+            return f"doi:{doi_lower}"
         if self.arxiv_id:
             return f"arxiv:{self.arxiv_id}"
         if self.pii:

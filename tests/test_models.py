@@ -127,6 +127,14 @@ class TestPaperUid:
         p = Paper(title="T", doi="10.1234/TEST")
         assert p.uid == "doi:10.1234/test"
 
+    def test_arxiv_doi_normalised_to_arxiv_prefix(self):
+        # Ensures arXiv papers from OpenAlex (doi=10.48550/arxiv.XXXX) and
+        # from arXiv directly (arxiv_id=XXXX) produce the same uid.
+        p_openalex = Paper(title="T", doi="10.48550/arXiv.2501.12345")
+        p_arxiv    = Paper(title="T", arxiv_id="2501.12345")
+        assert p_openalex.uid == "arxiv:2501.12345"
+        assert p_arxiv.uid    == "arxiv:2501.12345"
+
 
 class TestPaperShortAuthors:
     def test_no_authors(self):
