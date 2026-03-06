@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [0.0.12] — 2026-03-06
+### Added
+- **cli**: Allow --output to be repeated for concurrent multi-format export
+
+
 ## [0.0.11] — 2026-03-06
 ### Added
 - **cli**: Add --output flag to export results as md, markdown, csv, json, bib
@@ -14,6 +19,11 @@ title: Changelog
 ## [0.0.10] — 2026-03-06
 ### Fixed
 - **sources**: Synthesize canonical arXiv DOI when journal DOI is absent
+
+
+## [0.0.9] — 2026-03-06
+### Added
+- **cli**: Add DOI column to results table and fix arXiv cross-source dedup
 
 
 ## [0.0.8] — 2026-03-06
