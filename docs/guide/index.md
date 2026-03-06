@@ -6,7 +6,7 @@ title: About MOSAIC
 
 **MOSAIC** (Multi-source Scientific Article Index and Collector) is a command-line tool for searching and downloading scientific papers from multiple open bibliographic databases.
 
-Instead of visiting a dozen or more different websites to find a paper, MOSAIC queries them all at once, deduplicates the results by DOI, and — when a PDF is available — downloads it to your local disk.
+Instead of visiting a dozen or more different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via Unpaywall — in one shot. Results can also be sent directly to a Google NotebookLM notebook for AI-powered Q&A, audio overviews, video summaries, slide decks, mind maps, flashcards, quizzes, infographics, study guides, and more.
 
 ## Why MOSAIC?
 
@@ -16,6 +16,7 @@ Finding scientific papers across databases is tedious:
 - The same paper often appears in multiple databases under slightly different metadata
 - Locating a free legal PDF requires checking the journal site, arXiv, PubMed Central, and institutional repositories
 - There is no programmatic way to keep a local archive of your searches
+- There is no automatic summary creation for bibliographics collections
 
 MOSAIC solves all of this in a single command.
 
@@ -23,9 +24,11 @@ MOSAIC solves all of this in a single command.
 
 - **One command, many sources** — fan-out search with transparent deduplication
 - **Legal open-access only by default** — no paywall circumvention
+- **Closed-access** — supported by users API key (if provided, e.g. Elsevier source)
 - **Minimal dependencies** — `httpx`, `typer`, `rich`, `tomli-w`; no heavy frameworks
 - **Offline-friendly** — local SQLite cache means repeated queries are instant
 - **Extensible** — each source is an independent class; adding a new one takes ~50 lines
+- **AI-powered artifacts creation (summary, presentation, podcast, ecc...)** by [Google NotebookLM](https://notebooklm.google.com/)
 
 ## Authors
 

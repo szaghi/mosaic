@@ -29,6 +29,28 @@ mosaic search "attention is all you need" --oa-only --download
 mosaic notebook create "Attention Papers" --query "attention is all you need" --oa-only --podcast
 ```
 
+## Why MOSAIC?
+
+Finding scientific papers across databases is tedious:
+
+- Each database has its own search syntax and web interface
+- The same paper often appears in multiple databases under slightly different metadata
+- Locating a free legal PDF requires checking the journal site, arXiv, PubMed Central, and institutional repositories
+- There is no programmatic way to keep a local archive of your searches
+- There is no automatic summary creation for bibliographics collections
+
+MOSAIC solves all of this in a single command.
+
+## Design principles
+
+- **One command, many sources** — fan-out search with transparent deduplication
+- **Legal open-access only by default** — no paywall circumvention
+- **Closed-access** — supported by users API key (if provided, e.g. Elsevier source)
+- **Minimal dependencies** — `httpx`, `typer`, `rich`, `tomli-w`; no heavy frameworks
+- **Offline-friendly** — local SQLite cache means repeated queries are instant
+- **Extensible** — each source is an independent class; adding a new one takes ~50 lines
+- **AI-powered artifacts creation (summary, presentation, podcast, ecc...)** by [Google NotebookLM](https://notebooklm.google.com/)
+
 ---
 
 ## Sources
