@@ -5,6 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+# Activate the virtual environment first (system Python is externally managed)
+source .venv/bin/activate
+
 # Install for development
 pip install -e ".[dev]"
 

@@ -40,7 +40,7 @@ features:
 ## Quick start
 
 ```bash
-pipx install mosaic-search     # recommended — or: pip install mosaic-search
+pipx install mosaic-search   # or: uv tool install mosaic-search
 mosaic config --unpaywall-email you@example.com
 mosaic search "attention is all you need" --oa-only --download
 ```

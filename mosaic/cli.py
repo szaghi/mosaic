@@ -15,7 +15,7 @@ from mosaic.search import search_all
 from mosaic.downloader import download as dl_paper
 from mosaic.sources import (
     ArxivSource, SemanticScholarSource, ScienceDirectSource,
-    DoajSource, EuropePMCSource,
+    DoajSource, EuropePMCSource, OpenAlexSource,
 )
 
 app = typer.Typer(help="MOSAIC — Multi-source Scientific Article Index and Collector")
@@ -39,6 +39,8 @@ def _build_sources(cfg: dict) -> list:
         sources.append(DoajSource())
     if src_cfg.get("europepmc", {}).get("enabled", True):
         sources.append(EuropePMCSource())
+    if src_cfg.get("openalex", {}).get("enabled", True):
+        sources.append(OpenAlexSource(email=cfg.get("unpaywall", {}).get("email", "")))
     return sources
 
 
@@ -48,7 +50,7 @@ def search(
     max_results: Annotated[int, typer.Option("--max", "-n", help="Max results per source")] = 10,
     download: Annotated[bool, typer.Option("--download", "-d", help="Download available PDFs")] = False,
     oa_only: Annotated[bool, typer.Option("--oa-only", help="Show only open access papers")] = False,
-    source: Annotated[str, typer.Option("--source", "-s", help="Limit to one source (arxiv, ss, sd, doaj, epmc)")] = "",
+    source: Annotated[str, typer.Option("--source", "-s", help="Limit to one source (arxiv, ss, sd, doaj, epmc, oa)")] = "",
     year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
     author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
     journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
@@ -62,6 +64,7 @@ def search(
     _src_map = {
         "arxiv": "arXiv", "ss": "Semantic Scholar",
         "sd": "ScienceDirect", "doaj": "DOAJ", "epmc": "Europe PMC",
+        "oa": "OpenAlex",
     }
     if source:
         name = _src_map.get(source.lower(), source)

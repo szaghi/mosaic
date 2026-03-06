@@ -62,6 +62,9 @@ enabled = true
 
 [sources.europepmc]
 enabled = true
+
+[sources.openalex]
+enabled = true
 ```
 
 ## Obtaining API keys

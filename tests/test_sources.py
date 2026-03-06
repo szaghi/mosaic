@@ -295,6 +295,86 @@ class TestDoajSource:
         assert "2020" in url
 
 
+_OPENALEX_JSON = {
+    "results": [{
+        "id": "https://openalex.org/W2741809807",
+        "title": "Attention Is All You Need",
+        "authorships": [
+            {"author": {"display_name": "Ashish Vaswani"}},
+            {"author": {"display_name": "Noam Shazeer"}},
+        ],
+        "publication_year": 2017,
+        "doi": "https://doi.org/10.48550/arxiv.1706.03762",
+        "ids": {"arxiv": "https://arxiv.org/abs/1706.03762"},
+        "abstract_inverted_index": {"We": [0], "propose": [1], "the": [2], "Transformer.": [3]},
+        "primary_location": {
+            "source": {"display_name": "NeurIPS"},
+            "pdf_url": None,
+        },
+        "best_oa_location": {"pdf_url": "https://arxiv.org/pdf/1706.03762"},
+        "open_access": {"is_oa": True},
+        "biblio": {"volume": "30", "issue": "1", "first_page": "1", "last_page": "11"},
+    }]
+}
+
+
+# ── OpenAlex ──────────────────────────────────────────────────────────────────
+
+class TestOpenAlexSource:
+    def _source(self, email=""):
+        from mosaic.sources.openalex import OpenAlexSource
+        return OpenAlexSource(email=email)
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_OPENALEX_JSON)):
+            papers = self._source().search("attention")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert "Ashish Vaswani" in p.authors
+        assert p.year == 2017
+        assert p.doi == "10.48550/arxiv.1706.03762"
+        assert p.arxiv_id == "1706.03762"
+        assert p.abstract == "We propose the Transformer."
+        assert p.journal == "NeurIPS"
+        assert p.pdf_url == "https://arxiv.org/pdf/1706.03762"
+        assert p.is_open_access is True
+        assert p.pages == "1-11"
+        assert p.url == "https://openalex.org/W2741809807"
+
+    def test_year_filter_sent_as_filter_param(self):
+        f = SearchFilters(year_from=2016, year_to=2020)
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["filter"] == "publication_year:2016-2020"
+
+    def test_explicit_year_list_uses_min_max(self):
+        f = SearchFilters(years=[2017, 2019, 2021])
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["filter"] == "publication_year:2017-2021"
+
+    def test_no_filter_param_without_year(self):
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention")
+        params = mock.call_args.kwargs["params"]
+        assert "filter" not in params
+
+    def test_mailto_sent_when_email_provided(self):
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source(email="test@example.com").search("attention")
+        params = mock.call_args.kwargs["params"]
+        assert params["mailto"] == "test@example.com"
+
+    def test_no_mailto_without_email(self):
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention")
+        params = mock.call_args.kwargs["params"]
+        assert "mailto" not in params
+
+
 # ── Unpaywall ─────────────────────────────────────────────────────────────────
 
 class TestUnpaywall:

@@ -16,6 +16,7 @@ _DEFAULTS: dict = {
         "sciencedirect": {"enabled": True, "api_key": ""},
         "doaj": {"enabled": True},
         "europepmc": {"enabled": True},
+        "openalex": {"enabled": True},
     },
     "unpaywall": {"email": ""},
 }

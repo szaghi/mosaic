@@ -13,12 +13,13 @@ flowchart TD
     Q --> C[ScienceDirect]
     Q --> D[DOAJ]
     Q --> E[Europe PMC]
-    A & B & C & D & E --> F{Deduplicate\nby DOI}
-    F --> G[Result table]
-    G -->|download| H{Has pdf_url?}
-    H -- yes --> I[(Local disk)]
-    H -- no --> J[Unpaywall]
-    J --> I
+    Q --> F[OpenAlex]
+    A & B & C & D & E & F --> G{Deduplicate\nby DOI}
+    G --> H[Result table]
+    H -->|download| I{Has pdf_url?}
+    I -- yes --> J[(Local disk)]
+    I -- no --> K[Unpaywall]
+    K --> J
 ```
 
 ## arXiv
@@ -94,6 +95,28 @@ Every result from DOAJ is fully open access by definition. Good source for human
 | Base URL | `https://www.ebi.ac.uk/europepmc/webservices/rest/search` |
 
 Europe PMC is the best source for biomedical literature. Open-access papers with a PubMed Central ID (PMCID) include a direct PDF link.
+
+## OpenAlex
+
+| Property | Value |
+|----------|-------|
+| Auth | None (email optional) |
+| Content | 250 million+ works across all disciplines |
+| PDF | `best_oa_location.pdf_url` when available |
+| Rate limit | 100 000 req/day (anonymous) · higher with polite-pool email |
+| Base URL | `https://api.openalex.org/works` |
+
+OpenAlex is the broadest freely available bibliographic database, covering journals, conference papers, books, datasets, and preprints across all disciplines. It is the successor to Microsoft Academic Graph.
+
+When you set an Unpaywall email in the config, MOSAIC reuses it as the OpenAlex [polite-pool](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication) identifier, which grants significantly higher rate limits.
+
+Abstracts in OpenAlex are stored as inverted indices (due to publisher licensing). MOSAIC reconstructs them automatically into plain text.
+
+::: tip CLI shorthand
+```bash
+mosaic search "transformer" --source oa
+```
+:::
 
 ## Unpaywall (PDF resolver)
 
