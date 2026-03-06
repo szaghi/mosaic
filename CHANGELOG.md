@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.0.13] — 2026-03-06
+### Fixed
+- **sources**: Add trailing slash to CORE API URL to avoid 301 redirect
+
+
 ## [0.0.12] — 2026-03-06
 ### Added
 - **cli**: Allow --output to be repeated for concurrent multi-format export
