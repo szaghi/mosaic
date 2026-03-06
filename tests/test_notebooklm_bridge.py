@@ -66,11 +66,11 @@ class TestRequireNotebooklm:
 # ---------------------------------------------------------------------------
 
 class TestCreateNotebook:
-    def _run_create(self, papers_with_paths, generate_podcast=False, nb_id="nb-42"):
+    def _run_create(self, papers_with_paths, artifacts=None, nb_id="nb-42"):
         from mosaic.notebooklm_bridge import create_notebook
         fake_mod, client = _make_fake_notebooklm(nb_id)
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
-            result = _run(create_notebook("Test NB", papers_with_paths, generate_podcast))
+            result = _run(create_notebook("Test NB", papers_with_paths, artifacts=artifacts))
         return result, client
 
     def test_returns_notebook_id(self):
@@ -108,17 +108,17 @@ class TestCreateNotebook:
 
     def test_podcast_generated_when_flag_set(self):
         paper = Paper(title="A Paper", url="https://example.com/paper")
-        _, client = self._run_create([(paper, None)], generate_podcast=True)
+        _, client = self._run_create([(paper, None)], artifacts={"podcast"})
         client.artifacts.generate_audio.assert_awaited_once_with("nb-42")
 
     def test_podcast_not_generated_when_flag_false(self):
         paper = Paper(title="A Paper", url="https://example.com/paper")
-        _, client = self._run_create([(paper, None)], generate_podcast=False)
+        _, client = self._run_create([(paper, None)])
         client.artifacts.generate_audio.assert_not_awaited()
 
     def test_podcast_not_generated_when_no_sources_added(self):
         paper = Paper(title="No URL and no path")
-        _, client = self._run_create([(paper, None)], generate_podcast=True)
+        _, client = self._run_create([(paper, None)], artifacts={"podcast"})
         client.artifacts.generate_audio.assert_not_awaited()
 
     def test_source_failure_is_non_fatal(self):
@@ -144,11 +144,11 @@ class TestCreateNotebook:
 # ---------------------------------------------------------------------------
 
 class TestCreateNotebookFromDir:
-    def _run_from_dir(self, directory, generate_podcast=False, nb_id="nb-dir"):
+    def _run_from_dir(self, directory, artifacts=None, nb_id="nb-dir"):
         from mosaic.notebooklm_bridge import create_notebook_from_dir
         fake_mod, client = _make_fake_notebooklm(nb_id)
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
-            result = _run(create_notebook_from_dir("Dir NB", directory, generate_podcast))
+            result = _run(create_notebook_from_dir("Dir NB", directory, artifacts=artifacts))
         return result, client
 
     def test_raises_when_no_pdfs(self, tmp_path):
@@ -177,7 +177,7 @@ class TestCreateNotebookFromDir:
 
     def test_podcast_queued_when_flag_set(self, tmp_path):
         (tmp_path / "paper.pdf").write_bytes(b"%PDF")
-        _, client = self._run_from_dir(tmp_path, generate_podcast=True)
+        _, client = self._run_from_dir(tmp_path, artifacts={"podcast"})
         client.artifacts.generate_audio.assert_awaited_once_with("nb-dir")
 
     def test_pdf_failure_is_non_fatal(self, tmp_path):
