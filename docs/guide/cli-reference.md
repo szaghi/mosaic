@@ -8,6 +8,18 @@ title: CLI Reference
 mosaic [OPTIONS] COMMAND [ARGS]...
 ```
 
+## Global options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--version` | `-v` | Print the installed version and exit |
+| `--help` | | Show help and exit |
+
+```bash
+mosaic --version   # e.g. mosaic 0.0.5
+mosaic -v
+```
+
 ## Commands
 
 ### `search`
@@ -37,6 +49,9 @@ mosaic search [OPTIONS] QUERY
 | `sd` | ScienceDirect |
 | `doaj` | DOAJ |
 | `epmc` | Europe PMC |
+| `oa` | OpenAlex |
+| `base` | BASE |
+| `core` | CORE |
 
 **`--year` / `-y` formats:**
 
@@ -66,6 +81,9 @@ Each filter is applied at the **source API level** where supported, then as a **
 | ScienceDirect | ✓ native | ✓ native | ✓ native |
 | Europe PMC | ✓ native | ✓ native | ✓ native |
 | DOAJ | ✓ native | ✓ native | ✓ native |
+| OpenAlex | ✓ native | post-process | post-process |
+| BASE | ✓ native | ✓ native | ✓ native |
+| CORE | ✓ native | ✓ native | ✓ native |
 
 **Examples:**
 
@@ -141,6 +159,41 @@ mosaic config --unpaywall-email me@uni.edu --download-dir ~/papers
 
 # Enable ScienceDirect
 mosaic config --elsevier-key abc123def456
+```
+
+---
+
+### `notebook create`
+
+Create a Google NotebookLM notebook from a search query or a directory of PDFs.
+
+```
+mosaic notebook create [OPTIONS] NAME
+```
+
+Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm).
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--query` | `-q` | str | | Search query to populate the notebook |
+| `--from-dir` | | path | | Import all PDFs from this directory |
+| `--max` | `-n` | int | `10` | Max results per source (with `--query`) |
+| `--oa-only` | | flag | off | Only include open-access papers |
+| `--podcast` | | flag | off | Queue an Audio Overview after import |
+
+`--query` and `--from-dir` are mutually exclusive; exactly one must be provided.
+
+**Examples:**
+
+```bash
+# Search, download, and import into a new notebook
+mosaic notebook create "Transformers" --query "attention is all you need" --oa-only
+
+# Also queue an Audio Overview
+mosaic notebook create "Diffusion Models" --query "diffusion models survey" --oa-only --podcast
+
+# Import PDFs you already have locally
+mosaic notebook create "My Papers" --from-dir ~/mosaic-papers/
 ```
 
 ---

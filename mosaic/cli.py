@@ -19,9 +19,26 @@ from mosaic.sources import (
     DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
 )
 
+def _version_callback(value: bool) -> None:
+    if value:
+        from mosaic import __version__
+        rprint(f"mosaic {__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(help="MOSAIC — Multi-source Scientific Article Index and Collector")
 notebook_app = typer.Typer(help="Create and populate Google NotebookLM notebooks from search results.")
 app.add_typer(notebook_app, name="notebook")
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option("--version", "-v", callback=_version_callback, is_eager=True, help="Show version and exit"),
+    ] = False,
+) -> None:
+    pass
 console = Console()
 
 
