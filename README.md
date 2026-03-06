@@ -1,0 +1,184 @@
+<div align="center">
+
+# MOSAIC
+
+### Multi-sOurce Scientific Article Index and Collector
+
+*Search, discover, and download scientific papers from multiple open databases — with a single command.*
+
+[![Tests](https://github.com/szaghi/mosaic/actions/workflows/tests.yml/badge.svg)](https://github.com/szaghi/mosaic/actions/workflows/tests.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://szaghi.github.io/mosaic/coverage-badge.json)](https://szaghi.github.io/mosaic/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue)](LICENSE.gpl3.md)
+[![License: BSD-2](https://img.shields.io/badge/license-BSD--2--Clause-blue)](LICENSE.bsd-2.md)
+[![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE.bsd-3.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE.mit.md)
+
+</div>
+
+---
+
+## What is MOSAIC?
+
+Instead of visiting five different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot.
+
+```bash
+mosaic search "attention is all you need" --oa-only --download
+```
+
+---
+
+## Sources
+
+| Source | Coverage | Auth | OA PDF |
+|---|---|---|---|
+| **arXiv** | Physics, CS, Math, Biology… | None | Always |
+| **Semantic Scholar** | 214 M papers, all disciplines | Optional key | When indexed |
+| **ScienceDirect** | Elsevier journals & books | API key | OA articles |
+| **DOAJ** | 8 M+ fully open-access articles | None | Always |
+| **Europe PMC** | 45 M biomedical papers | None | PMC articles |
+| **Unpaywall** | PDF resolver for any DOI | Email only | Legal OA copy |
+
+---
+
+## Installation
+
+```bash
+# from PyPI — recommended (isolated install, globally available)
+pipx install mosaic-search
+```
+
+```bash
+# from PyPI with pip (into current environment)
+pip install mosaic-search
+```
+
+```bash
+# from source
+git clone https://github.com/szaghi/mosaic
+cd mosaic
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+```
+
+> Requires Python 3.11+
+
+---
+
+## Quick Start
+
+```bash
+# 1. Set your email (enables Unpaywall PDF fallback)
+mosaic config --unpaywall-email you@example.com
+
+# 2. Optional: add an Elsevier API key to unlock ScienceDirect
+mosaic config --elsevier-key YOUR_KEY
+
+# 3. Search and download
+mosaic search "transformer architecture" --oa-only --download
+```
+
+---
+
+## Usage
+
+### Search
+
+```bash
+# Search all enabled sources (10 results per source by default)
+mosaic search "protein folding"
+
+# More results, open-access only
+mosaic search "deep learning" -n 25 --oa-only
+
+# Single source
+mosaic search "RNA velocity" --source epmc
+```
+
+**Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc`
+
+### Filters
+
+```bash
+# By year — single, range, or list
+mosaic search "BERT" --year 2019
+mosaic search "diffusion models" -y 2020-2023
+mosaic search "GPT" -y 2020,2022,2024
+
+# By author (repeatable, OR logic, case-insensitive substring)
+mosaic search "attention" -a Vaswani -a Shazeer
+
+# By journal (case-insensitive substring)
+mosaic search "CRISPR" --journal "Nature"
+
+# Combine freely
+mosaic search "graph neural" -y 2021-2023 -a Kipf -j "ICLR" --oa-only --download
+```
+
+### Download by DOI
+
+```bash
+mosaic get 10.48550/arXiv.1706.03762
+```
+
+Checks the local cache first, then tries Unpaywall if no PDF URL is known.
+
+### Configuration
+
+```bash
+mosaic config --show                          # print current config
+mosaic config --unpaywall-email me@uni.edu
+mosaic config --elsevier-key abc123
+mosaic config --ss-key xyz789
+mosaic config --download-dir ~/papers
+```
+
+Config is stored at `~/.config/mosaic/config.toml`. Downloaded PDFs go to `~/mosaic-papers/` by default.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    CLI -->|query + filters| Search
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & DOAJ & EPMC[Europe PMC]
+    arXiv & SS & SD & DOAJ & EPMC -->|Paper list| Dedup{Deduplicate\nby DOI}
+    Dedup --> Cache[(SQLite\ncache)]
+    Dedup --> Table[Rich table]
+    Table -->|--download| DL[Downloader]
+    DL -->|no pdf_url| UPW[Unpaywall]
+    UPW --> DL
+    DL --> Disk[(~/mosaic-papers/)]
+```
+
+---
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+
+# run tests + coverage
+pytest
+
+# live docs
+cd docs && npm install && npm run docs:dev
+```
+
+Coverage report and badge JSON are written to `docs/public/` after every test run.
+
+---
+
+## License
+
+MOSAIC is available under your choice of license:
+
+| License | SPDX | File |
+|---|---|---|
+| GNU General Public License v3 | `GPL-3.0-or-later` | [LICENSE.gpl3.md](LICENSE.gpl3.md) |
+| BSD 2-Clause | `BSD-2-Clause` | [LICENSE.bsd-2.md](LICENSE.bsd-2.md) |
+| BSD 3-Clause | `BSD-3-Clause` | [LICENSE.bsd-3.md](LICENSE.bsd-3.md) |
+| MIT | `MIT` | [LICENSE.mit.md](LICENSE.mit.md) |
+
+© [Stefano Zaghi](https://github.com/szaghi)

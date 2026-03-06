@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+*.egg
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+# coverage JSONs in docs/public/ are intentionally tracked (used for badges)
+# so they are NOT listed here
+
+# VitePress
+docs/node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
+# MOSAIC runtime data
+mosaic-papers/
+*.db
+
+# Config (may contain API keys)
+.env
+config.toml
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
