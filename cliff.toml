@@ -29,6 +29,9 @@ footer = ""
 trim = true
 
 [git]
+commit_preprocessors = [
+    { pattern = "^\\s+", replace = "" },
+]
 conventional_commits = true
 filter_unconventional = true
 split_commits = false
