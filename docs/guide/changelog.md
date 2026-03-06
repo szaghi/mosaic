@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [0.0.8] — 2026-03-06
+### Added
+- **cli**: Add --pdf-only flag to filter results to papers with a PDF URL
+
+
 ## [0.0.7] — 2026-03-06
 ### Added
 - **search**: Add --field and --raw-query options for fine-grained query scoping
