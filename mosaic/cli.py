@@ -82,9 +82,12 @@ def search(
     field: Annotated[str, typer.Option("--field", "-f", help='Scope query to "title", "abstract", or "all" (default)')] = "all",
     raw_query: Annotated[str, typer.Option("--raw-query", help="Raw query sent directly to source APIs, bypassing all field transforms")] = "",
     output: Annotated[list[Path], typer.Option("--output", "-o", help="Save results to file (.md, .markdown, .csv, .json, .bib); repeatable")] = [],
+    download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
+    if download_dir:
+        cfg["download_dir"] = download_dir
     cache = Cache(cfg["db_path"])
     sources = _build_sources(cfg)
 
@@ -268,6 +271,7 @@ def notebook_create(
     journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
     field: Annotated[str, typer.Option("--field", "-f", help='Scope query to "title", "abstract", or "all" (default)')] = "all",
     raw_query: Annotated[str, typer.Option("--raw-query", help="Raw query sent directly to source APIs, bypassing all field transforms")] = "",
+    download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
 ):
     """Create a NotebookLM notebook from a search query or a directory of PDFs.
 
@@ -284,6 +288,8 @@ def notebook_create(
         raise typer.Exit(1)
 
     cfg = cfg_mod.load()
+    if download_dir:
+        cfg["download_dir"] = download_dir
 
     # collect requested artifacts
     _artifacts: set[str] = set()

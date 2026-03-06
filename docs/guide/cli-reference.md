@@ -43,6 +43,7 @@ mosaic search [OPTIONS] QUERY
 | `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
 | `--output` | `-o` | path | | Save results to file (repeatable); format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib` |
+| `--download-dir` | | path | config | Override PDF download directory for this run only |
 
 **Source shorthands for `--source`:**
 
@@ -236,6 +237,7 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 | `--journal` | `-j` | str | | Journal name substring filter |
 | `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
+| `--download-dir` | | path | config | Override PDF download directory for this run only |
 | `--podcast` | | flag | off | Queue an Audio Overview after import |
 | `--video` | | flag | off | Queue a Video Overview after import |
 | `--briefing` | | flag | off | Queue a Briefing Doc after import |

@@ -287,6 +287,7 @@ mosaic notebook create "Metabolomics Overview" \
 | `--journal`, `-j` | — | Journal name substring filter |
 | `--field`, `-f` | `all` | Scope query to `title`, `abstract`, or `all` |
 | `--raw-query` | — | Raw query sent directly to APIs, bypasses all transforms |
+| `--download-dir` | config | Override PDF download directory for this run only |
 | `--podcast` | off | Queue an Audio Overview after import |
 | `--video` | off | Queue a Video Overview after import |
 | `--briefing` | off | Queue a Briefing Doc after import |
