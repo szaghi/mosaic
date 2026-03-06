@@ -4,6 +4,15 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.0.11] — 2026-03-06
+### Added
+- **cli**: Add --output flag to export results as md, markdown, csv, json, bib
+
+
+### Fixed
+- **cli**: Prevent DOI column from being truncated in results table
+
+
 ## [0.0.10] — 2026-03-06
 ### Fixed
 - **sources**: Synthesize canonical arXiv DOI when journal DOI is absent
