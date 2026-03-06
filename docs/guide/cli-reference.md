@@ -231,12 +231,21 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 | `--max` | `-n` | int | `10` | Max results per source (with `--query`) |
 | `--oa-only` | | flag | off | Only include open-access papers |
 | `--pdf-only` | | flag | off | Only include papers with a known PDF URL |
-| `--podcast` | | flag | off | Queue an Audio Overview after import |
 | `--year` | `-y` | str | | Year filter (same formats as `search`) |
 | `--author` | `-a` | str | | Author filter, repeatable |
 | `--journal` | `-j` | str | | Journal name substring filter |
 | `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
+| `--podcast` | | flag | off | Queue an Audio Overview after import |
+| `--video` | | flag | off | Queue a Video Overview after import |
+| `--briefing` | | flag | off | Queue a Briefing Doc after import |
+| `--study-guide` | | flag | off | Queue a Study Guide after import |
+| `--quiz` | | flag | off | Queue a Quiz after import |
+| `--flashcards` | | flag | off | Queue Flashcards after import |
+| `--infographic` | | flag | off | Queue an Infographic after import |
+| `--slide-deck` | | flag | off | Queue a Slide Deck after import |
+| `--data-table` | | flag | off | Queue a Data Table after import |
+| `--mind-map` | | flag | off | Queue a Mind Map after import |
 
 `--query` and `--from-dir` are mutually exclusive; exactly one must be provided. Filters (`-y`, `-a`, `-j`, `-f`, `--raw-query`) only apply when using `--query`. `--oa-only` and `--pdf-only` apply in both modes.
 
@@ -246,14 +255,21 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 # Search, download, and import into a new notebook
 mosaic notebook create "Transformers" --query "attention is all you need" --oa-only
 
-# Filter by year and queue an Audio Overview
+# Queue an Audio Overview (podcast) after import
 mosaic notebook create "AMR-GPU" --query "adaptive mesh refinement gpu" -y 2024-2026 --oa-only --podcast
+
+# Queue multiple artifacts at once
+mosaic notebook create "CRISPR 2024" --query "CRISPR gene editing" --oa-only \
+  --briefing --quiz --mind-map
 
 # Filter by author and journal
 mosaic notebook create "Hinton Papers" --query "deep learning" -a Hinton -j "Nature" --oa-only
 
 # Import PDFs you already have locally
 mosaic notebook create "My Papers" --from-dir ~/mosaic-papers/
+
+# Import local PDFs and queue a slide deck
+mosaic notebook create "My Papers" --from-dir ~/mosaic-papers/ --slide-deck
 ```
 
 ---

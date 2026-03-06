@@ -254,6 +254,15 @@ def notebook_create(
     oa_only: Annotated[bool, typer.Option("--oa-only", help="Only include open-access papers")] = False,
     pdf_only: Annotated[bool, typer.Option("--pdf-only", help="Only include papers with a downloadable PDF")] = False,
     podcast: Annotated[bool, typer.Option("--podcast", help="Queue an Audio Overview after import")] = False,
+    video: Annotated[bool, typer.Option("--video", help="Queue a Video Overview after import")] = False,
+    briefing: Annotated[bool, typer.Option("--briefing", help="Queue a Briefing Doc after import")] = False,
+    study_guide: Annotated[bool, typer.Option("--study-guide", help="Queue a Study Guide after import")] = False,
+    quiz: Annotated[bool, typer.Option("--quiz", help="Queue a Quiz after import")] = False,
+    flashcards: Annotated[bool, typer.Option("--flashcards", help="Queue Flashcards after import")] = False,
+    infographic: Annotated[bool, typer.Option("--infographic", help="Queue an Infographic after import")] = False,
+    slide_deck: Annotated[bool, typer.Option("--slide-deck", help="Queue a Slide Deck after import")] = False,
+    data_table: Annotated[bool, typer.Option("--data-table", help="Queue a Data Table after import")] = False,
+    mind_map: Annotated[bool, typer.Option("--mind-map", help="Queue a Mind Map after import")] = False,
     year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
     author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
     journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
@@ -276,6 +285,19 @@ def notebook_create(
 
     cfg = cfg_mod.load()
 
+    # collect requested artifacts
+    _artifacts: set[str] = set()
+    if podcast:     _artifacts.add("podcast")
+    if video:       _artifacts.add("video")
+    if briefing:    _artifacts.add("briefing")
+    if study_guide: _artifacts.add("study_guide")
+    if quiz:        _artifacts.add("quiz")
+    if flashcards:  _artifacts.add("flashcards")
+    if infographic: _artifacts.add("infographic")
+    if slide_deck:  _artifacts.add("slide_deck")
+    if data_table:  _artifacts.add("data_table")
+    if mind_map:    _artifacts.add("mind_map")
+
     # ── from-dir path ─────────────────────────────────────────────────────────
     if from_dir:
         from_dir = Path(from_dir)
@@ -285,13 +307,13 @@ def notebook_create(
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
             prog.add_task(f"Creating notebook [bold]{name}[/bold] from {from_dir}…")
             try:
-                nb_id = asyncio.run(create_notebook_from_dir(name, from_dir, generate_podcast=podcast))
+                nb_id = asyncio.run(create_notebook_from_dir(name, from_dir, artifacts=_artifacts))
             except ValueError as e:
                 rprint(f"[red]{e}[/red]")
                 raise typer.Exit(1)
         rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
-        if podcast:
-            rprint("[dim]Audio Overview queued — check NotebookLM in a few minutes.[/dim]")
+        if _artifacts:
+            rprint(f"[dim]{', '.join(sorted(_artifacts))} queued — check NotebookLM in a few minutes.[/dim]")
         return
 
     # ── query path: search → download → import ────────────────────────────────
@@ -348,11 +370,11 @@ def notebook_create(
 
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
         prog.add_task(f"Importing into NotebookLM notebook [bold]{name}[/bold]…")
-        nb_id = asyncio.run(create_notebook(name, papers_with_paths, generate_podcast=podcast))
+        nb_id = asyncio.run(create_notebook(name, papers_with_paths, artifacts=_artifacts))
 
     rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
-    if podcast:
-        rprint("[dim]Audio Overview queued — check NotebookLM in a few minutes.[/dim]")
+    if _artifacts:
+        rprint(f"[dim]{', '.join(sorted(_artifacts))} queued — check NotebookLM in a few minutes.[/dim]")
 
 
 if __name__ == "__main__":

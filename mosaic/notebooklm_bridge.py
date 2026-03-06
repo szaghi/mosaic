@@ -8,6 +8,20 @@ from mosaic.models import Paper
 # NotebookLM enforces a hard cap of 50 sources per notebook.
 _SOURCE_LIMIT = 50
 
+# Mapping from flag name to artifacts client method name
+_ARTIFACT_METHODS: dict[str, str] = {
+    "podcast":     "generate_audio",
+    "video":       "generate_video",
+    "briefing":    "generate_report",
+    "study_guide": "generate_study_guide",
+    "quiz":        "generate_quiz",
+    "flashcards":  "generate_flashcards",
+    "infographic": "generate_infographic",
+    "slide_deck":  "generate_slide_deck",
+    "data_table":  "generate_data_table",
+    "mind_map":    "generate_mind_map",
+}
+
 
 def _require_notebooklm() -> None:
     """Raise a clear ImportError if notebooklm-py is not installed."""
@@ -21,10 +35,21 @@ def _require_notebooklm() -> None:
         )
 
 
+async def _generate_artifacts(client, nb_id: str, artifacts: set[str], added: int) -> None:
+    """Queue artifact generation for *nb_id* based on the *artifacts* set."""
+    if not artifacts or added == 0:
+        return
+    for flag, method_name in _ARTIFACT_METHODS.items():
+        if flag in artifacts:
+            method = getattr(client.artifacts, method_name, None)
+            if method is not None:
+                await method(nb_id)
+
+
 async def create_notebook(
     name: str,
     papers_with_paths: list[tuple[Paper, Path | None]],
-    generate_podcast: bool = False,
+    artifacts: set[str] | None = None,
 ) -> str:
     """Create a NotebookLM notebook and populate it with papers.
 
@@ -34,11 +59,14 @@ async def create_notebook(
       - Otherwise                 → skipped.
 
     At most 50 sources are added (NotebookLM hard limit).
-    If *generate_podcast* is True, an Audio Overview is queued after import.
+    *artifacts* is a set of flag names (e.g. {"podcast", "briefing"}) — any
+    matching artifact generation is queued after import.
 
     Returns the new notebook ID.
     """
     from notebooklm import NotebookLMClient
+
+    artifacts = artifacts or set()
 
     async with await NotebookLMClient.from_storage() as client:
         nb = await client.notebooks.create(name)
@@ -58,8 +86,7 @@ async def create_notebook(
             except Exception:
                 pass  # individual source failures are non-fatal
 
-        if generate_podcast and added > 0:
-            await client.artifacts.generate_audio(nb_id)
+        await _generate_artifacts(client, nb_id, artifacts, added)
 
         return nb_id
 
@@ -67,18 +94,20 @@ async def create_notebook(
 async def create_notebook_from_dir(
     name: str,
     directory: Path,
-    generate_podcast: bool = False,
+    artifacts: set[str] | None = None,
 ) -> str:
     """Create a NotebookLM notebook from all PDFs in *directory*.
 
     PDFs are added in alphabetical order, up to the 50-source limit.
-    If *generate_podcast* is True, an Audio Overview is queued after import.
+    *artifacts* is a set of flag names (e.g. {"podcast", "slide_deck"}) — any
+    matching artifact generation is queued after import.
 
     Returns the new notebook ID.
     Raises ValueError if no PDFs are found in *directory*.
     """
     from notebooklm import NotebookLMClient
 
+    artifacts = artifacts or set()
     pdfs = sorted(directory.glob("*.pdf"))
     if not pdfs:
         raise ValueError(f"No PDF files found in {directory}")
@@ -86,14 +115,15 @@ async def create_notebook_from_dir(
     async with await NotebookLMClient.from_storage() as client:
         nb = await client.notebooks.create(name)
         nb_id = nb.id
+        added = 0
 
         for pdf in pdfs[:_SOURCE_LIMIT]:
             try:
                 await client.sources.add_file(nb_id, pdf)
+                added += 1
             except Exception:
                 pass
 
-        if generate_podcast:
-            await client.artifacts.generate_audio(nb_id)
+        await _generate_artifacts(client, nb_id, artifacts, added)
 
         return nb_id
