@@ -2,6 +2,13 @@
 title: Changelog
 ---
 
+## [0.0.14] — 2026-03-06
+### Added
+- **notebooklm**: Add artifact generation flags for all NotebookLM output types
+
+- **cli**: Add --download-dir flag to search and notebook create
+
+
 ## [0.0.13] — 2026-03-06
 ### Fixed
 - **sources**: Add trailing slash to CORE API URL to avoid 301 redirect
