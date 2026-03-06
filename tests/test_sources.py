@@ -464,6 +464,97 @@ class TestBASESource:
         assert 'dcsource:"NeurIPS"' in params["query"]
 
 
+_CORE_JSON = {
+    "totalHits": 1,
+    "results": [{
+        "id": 2741809807,
+        "title": "Attention Is All You Need",
+        "authors": [{"name": "Ashish Vaswani"}, {"name": "Noam Shazeer"}],
+        "yearPublished": 2017,
+        "doi": "10.48550/arxiv.1706.03762",
+        "abstract": "We propose the Transformer.",
+        "journals": [{"title": "NeurIPS"}],
+        "downloadUrl": "https://arxiv.org/pdf/1706.03762",
+        "isOpenAccess": True,
+    }]
+}
+
+
+# ── CORE ──────────────────────────────────────────────────────────────────────
+
+class TestCORESource:
+    def _source(self, api_key="test-key"):
+        from mosaic.sources.core import CORESource
+        return CORESource(api_key=api_key)
+
+    def test_unavailable_without_api_key(self):
+        from mosaic.sources.core import CORESource
+        assert not CORESource(api_key="").available()
+
+    def test_available_with_api_key(self):
+        assert self._source().available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_CORE_JSON)):
+            papers = self._source().search("attention")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert "Ashish Vaswani" in p.authors
+        assert p.year == 2017
+        assert p.doi == "10.48550/arxiv.1706.03762"
+        assert p.abstract == "We propose the Transformer."
+        assert p.journal == "NeurIPS"
+        assert p.pdf_url == "https://arxiv.org/pdf/1706.03762"
+        assert p.is_open_access is True
+        assert p.url == "https://core.ac.uk/works/2741809807"
+
+    def test_api_key_sent_in_auth_header(self):
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source(api_key="mykey").search("attention")
+        headers = mock.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "Bearer mykey"
+
+    def test_no_auth_header_without_key(self):
+        from mosaic.sources.core import CORESource
+        src = CORESource(api_key="")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            # call search directly (bypassing available() check)
+            src.search("attention")
+        headers = mock.call_args.kwargs["headers"]
+        assert "Authorization" not in headers
+
+    def test_year_range_filter_appended_to_query(self):
+        f = SearchFilters(year_from=2016, year_to=2020)
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "yearPublished>=2016" in params["q"]
+        assert "yearPublished<=2020" in params["q"]
+
+    def test_explicit_year_list_uses_min_max(self):
+        f = SearchFilters(years=[2017, 2019, 2021])
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "yearPublished>=2017" in params["q"]
+        assert "yearPublished<=2021" in params["q"]
+
+    def test_author_filter_appended_to_query(self):
+        f = SearchFilters(authors=["Vaswani"])
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert 'authors.name:"Vaswani"' in params["q"]
+
+    def test_journal_filter_appended_to_query(self):
+        f = SearchFilters(journal="NeurIPS")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert 'journals.title:"NeurIPS"' in params["q"]
+
+
 # ── Unpaywall ─────────────────────────────────────────────────────────────────
 
 class TestUnpaywall:

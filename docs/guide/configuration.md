@@ -68,6 +68,11 @@ enabled = true
 
 [sources.base]
 enabled = true
+
+[sources.core]
+enabled = true
+# Required. Register free at https://core.ac.uk/services/api
+api_key = ""
 ```
 
 ## Obtaining API keys

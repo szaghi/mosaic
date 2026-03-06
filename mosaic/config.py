@@ -18,6 +18,7 @@ _DEFAULTS: dict = {
         "europepmc": {"enabled": True},
         "openalex": {"enabled": True},
         "base": {"enabled": True},
+        "core": {"enabled": True, "api_key": ""},
     },
     "unpaywall": {"email": ""},
 }

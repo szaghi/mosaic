@@ -15,12 +15,13 @@ flowchart TD
     Q --> E[Europe PMC]
     Q --> F[OpenAlex]
     Q --> G[BASE]
-    A & B & C & D & E & F & G --> H{Deduplicate\nby DOI}
-    H --> I[Result table]
-    I -->|download| J{Has pdf_url?}
-    J -- yes --> K[(Local disk)]
-    J -- no --> L[Unpaywall]
-    L --> K
+    Q --> H[CORE]
+    A & B & C & D & E & F & G & H --> I{Deduplicate\nby DOI}
+    I --> J[Result table]
+    J -->|download| K{Has pdf_url?}
+    K -- yes --> L[(Local disk)]
+    K -- no --> M[Unpaywall]
+    M --> L
 ```
 
 ## arXiv
@@ -136,6 +137,36 @@ Search queries support Lucene syntax. Filters for author (`dccreator`), journal 
 ::: tip CLI shorthand
 ```bash
 mosaic search "climate change" --source base
+```
+:::
+
+## CORE
+
+| Property | Value |
+|----------|-------|
+| Auth | API key required (free — register at [core.ac.uk/services/api](https://core.ac.uk/services/api)) |
+| Content | 200 million+ OA full-text documents from 10 000+ repositories |
+| PDF | `downloadUrl` field — CORE's recommended full-text link |
+| Rate limit | Varies by tier; free academic key gives generous limits |
+| Base URL | `https://api.core.ac.uk/v3/search/works` |
+
+CORE aggregates open-access full text from institutional repositories, preprint servers, and OA journals worldwide. Unlike BASE, CORE focuses exclusively on OA content and always provides a `downloadUrl` pointing to the actual document — making it the most reliable source for direct PDF access.
+
+Filters for author (`authors.name`), journal (`journals.title`), and year (`yearPublished`) are applied natively in the query.
+
+::: warning API key required
+CORE is disabled until you set an API key:
+```bash
+# Edit ~/.config/mosaic/config.toml
+[sources.core]
+api_key = "YOUR_FREE_KEY"
+```
+Register for a free key at [core.ac.uk/services/api](https://core.ac.uk/services/api).
+:::
+
+::: tip CLI shorthand
+```bash
+mosaic search "open access publishing" --source core
 ```
 :::
 

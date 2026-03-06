@@ -20,7 +20,7 @@
 
 ## What is MOSAIC?
 
-Instead of visiting seven different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot.
+Instead of visiting eight different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot.
 
 ```bash
 mosaic search "attention is all you need" --oa-only --download
@@ -39,6 +39,7 @@ mosaic search "attention is all you need" --oa-only --download
 | **Europe PMC** | `epmc` | 45 M biomedical papers | None | PMC articles |
 | **OpenAlex** | `oa` | 250 M+ works, all disciplines | None | When available |
 | **BASE** | `base` | 300 M+ docs from 10 000+ repos | None | When OA + PDF format |
+| **CORE** | `core` | 200 M+ OA full-text from repos | Free API key | `downloadUrl` field |
 | **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
 
 ---
@@ -98,7 +99,7 @@ mosaic search "deep learning" -n 25 --oa-only
 mosaic search "RNA velocity" --source epmc
 ```
 
-**Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc` · `oa` · `base`
+**Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc` · `oa` · `base` · `core`
 
 ### Filters
 
@@ -145,8 +146,8 @@ Config is stored at `~/.config/mosaic/config.toml`. Downloaded PDFs go to `~/mos
 ```mermaid
 flowchart LR
     CLI -->|query + filters| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE
-    arXiv & SS & SD & DOAJ & EPMC & OA & BASE -->|Paper list| Dedup{Deduplicate\nby DOI}
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE
+    arXiv & SS & SD & DOAJ & EPMC & OA & BASE & CORE -->|Paper list| Dedup{Deduplicate\nby DOI}
     Dedup --> Cache[(SQLite\ncache)]
     Dedup --> Table[Rich table]
     Table -->|--download| DL[Downloader]
