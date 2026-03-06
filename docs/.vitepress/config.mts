@@ -15,6 +15,7 @@ export default withMermaid({
           { text: 'Configuration', link: '/guide/configuration' },
           { text: 'Usage',         link: '/guide/usage' },
           { text: 'Sources',       link: '/guide/sources' },
+          { text: 'NotebookLM',    link: '/guide/notebooklm' },
           { text: 'CLI Reference', link: '/guide/cli-reference' },
           { text: 'Changelog',     link: '/guide/changelog' },
         ],
@@ -35,6 +36,7 @@ export default withMermaid({
             { text: 'Installation',  link: '/guide/installation' },
             { text: 'Configuration', link: '/guide/configuration' },
             { text: 'Usage',         link: '/guide/usage' },
+            { text: 'NotebookLM',    link: '/guide/notebooklm' },
           ],
         },
         {

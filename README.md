@@ -20,10 +20,11 @@
 
 ## What is MOSAIC?
 
-Instead of visiting eight different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot.
+Instead of visiting eight different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot. Results can also be sent directly to a [Google NotebookLM](https://notebooklm.google.com/) notebook for AI-powered Q&A and audio overviews.
 
 ```bash
 mosaic search "attention is all you need" --oa-only --download
+mosaic notebook create "Attention Papers" --query "attention is all you need" --oa-only --podcast
 ```
 
 ---
@@ -139,6 +140,32 @@ mosaic config --download-dir ~/papers
 
 Config is stored at `~/.config/mosaic/config.toml`. Downloaded PDFs go to `~/mosaic-papers/` by default.
 
+### NotebookLM
+
+Send search results directly to a Google NotebookLM notebook:
+
+```bash
+# 1. Install notebooklm-py with browser support (needed for auth)
+pip install "notebooklm-py[browser]"
+playwright install chromium
+
+# 2. Inject into your MOSAIC installation
+pipx inject mosaic-search notebooklm-py        # pipx
+# uv tool inject mosaic-search notebooklm-py   # uv
+# pip install 'mosaic-search[notebooklm]'       # venv
+
+# 3. Authenticate once
+notebooklm login
+
+# 4. Search, download, and create a notebook in one command
+mosaic notebook create "Transformers" --query "transformer architecture" --oa-only --podcast
+
+# Or import PDFs you already have
+mosaic notebook create "My Papers" --from-dir ~/mosaic-papers/
+```
+
+MOSAIC uploads local PDFs when available, falls back to URLs otherwise, and respects NotebookLM's 50-source limit. With `--podcast`, an Audio Overview is queued automatically.
+
 ---
 
 ## Architecture
@@ -154,6 +181,7 @@ flowchart LR
     DL -->|no pdf_url| UPW[Unpaywall]
     UPW --> DL
     DL --> Disk[(~/mosaic-papers/)]
+    DL -->|mosaic notebook create| NLM[NotebookLM]
 ```
 
 ---
@@ -162,6 +190,10 @@ flowchart LR
 
 ```bash
 pip install -e ".[dev]"
+
+# with NotebookLM integration (includes Playwright for auth)
+pip install -e ".[dev,notebooklm]"
+playwright install chromium
 
 # run tests + coverage
 pytest

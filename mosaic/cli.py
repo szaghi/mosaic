@@ -1,7 +1,8 @@
 """MOSAIC CLI — Multi-source Scientific Article Index and Collector."""
 from __future__ import annotations
+import asyncio
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -19,6 +20,8 @@ from mosaic.sources import (
 )
 
 app = typer.Typer(help="MOSAIC — Multi-source Scientific Article Index and Collector")
+notebook_app = typer.Typer(help="Create and populate Google NotebookLM notebooks from search results.")
+app.add_typer(notebook_app, name="notebook")
 console = Console()
 
 
@@ -201,6 +204,91 @@ def _download_all(papers: list, cfg: dict, cache: Cache) -> None:
                 rprint(f"  [red]✗[/red] {p.title[:60]}")
 
     console.print(f"\n[bold]Done:[/bold] {ok} downloaded, {fail} failed, {skip} skipped (no PDF)")
+
+
+@notebook_app.command("create")
+def notebook_create(
+    name: Annotated[str, typer.Argument(help="Notebook name")],
+    query: Annotated[str, typer.Option("--query", "-q", help="Search query to populate the notebook")] = "",
+    from_dir: Annotated[Optional[Path], typer.Option("--from-dir", help="Import all PDFs from this directory")] = None,
+    max_results: Annotated[int, typer.Option("--max", "-n", help="Max results per source")] = 10,
+    oa_only: Annotated[bool, typer.Option("--oa-only", help="Only include open-access papers")] = False,
+    podcast: Annotated[bool, typer.Option("--podcast", help="Queue an Audio Overview after import")] = False,
+):
+    """Create a NotebookLM notebook from a search query or a directory of PDFs.
+
+    Requires: pip install 'mosaic-search[notebooklm]' && notebooklm login
+    """
+    from mosaic.notebooklm_bridge import _require_notebooklm, create_notebook, create_notebook_from_dir
+    _require_notebooklm()
+
+    if from_dir and query:
+        rprint("[red]Use either --query or --from-dir, not both.[/red]")
+        raise typer.Exit(1)
+    if not from_dir and not query:
+        rprint("[red]Provide --query or --from-dir.[/red]")
+        raise typer.Exit(1)
+
+    cfg = cfg_mod.load()
+
+    # ── from-dir path ─────────────────────────────────────────────────────────
+    if from_dir:
+        from_dir = Path(from_dir)
+        if not from_dir.is_dir():
+            rprint(f"[red]Directory not found: {from_dir}[/red]")
+            raise typer.Exit(1)
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
+            prog.add_task(f"Creating notebook [bold]{name}[/bold] from {from_dir}…")
+            try:
+                nb_id = asyncio.run(create_notebook_from_dir(name, from_dir, generate_podcast=podcast))
+            except ValueError as e:
+                rprint(f"[red]{e}[/red]")
+                raise typer.Exit(1)
+        rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
+        if podcast:
+            rprint("[dim]Audio Overview queued — check NotebookLM in a few minutes.[/dim]")
+        return
+
+    # ── query path: search → download → import ────────────────────────────────
+    sources = _build_sources(cfg)
+    cache = Cache(cfg["db_path"])
+    email = cfg.get("unpaywall", {}).get("email", "")
+
+    errors: list[str] = []
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
+        prog.add_task(f"Searching {len(sources)} source(s) for [bold]{query}[/bold]…")
+        papers = search_all(sources, query, max_per_source=max_results, errors=errors)
+
+    for err in errors:
+        rprint(f"[yellow]Warning:[/yellow] {err}")
+
+    if oa_only:
+        papers = [p for p in papers if p.is_open_access or p.pdf_url]
+
+    if not papers:
+        rprint("[yellow]No results found.[/yellow]")
+        raise typer.Exit()
+
+    rprint(f"[dim]Found {len(papers)} paper(s). Downloading PDFs…[/dim]")
+
+    papers_with_paths: list[tuple] = []
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
+        for p in papers:
+            task = prog.add_task(f"{p.title[:55]}…")
+            path = dl_paper(p, cfg["download_dir"], cache, email)
+            prog.remove_task(task)
+            papers_with_paths.append((p, Path(path) if path else None))
+
+    downloaded = sum(1 for _, path in papers_with_paths if path)
+    rprint(f"[dim]{downloaded} PDF(s) downloaded, {len(papers) - downloaded} fallback to URL.[/dim]")
+
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
+        prog.add_task(f"Importing into NotebookLM notebook [bold]{name}[/bold]…")
+        nb_id = asyncio.run(create_notebook(name, papers_with_paths, generate_podcast=podcast))
+
+    rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
+    if podcast:
+        rprint("[dim]Audio Overview queued — check NotebookLM in a few minutes.[/dim]")
 
 
 if __name__ == "__main__":

@@ -48,13 +48,40 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
+## Optional: NotebookLM integration
+
+To use `mosaic notebook create` you need [notebooklm-py](https://github.com/teng-lin/notebooklm-py), an unofficial Python client for Google NotebookLM.
+
+**Step 1 — install notebooklm-py with browser support** (required for the one-time Google sign-in):
+
+```bash
+pip install "notebooklm-py[browser]"
+playwright install chromium
+```
+
+**Step 2 — inject it into your MOSAIC installation:**
+
+```bash
+pipx inject mosaic-search notebooklm-py   # pipx
+uv tool inject mosaic-search notebooklm-py   # uv
+pip install 'mosaic-search[notebooklm]'      # pip / venv
+```
+
+**Step 3 — authenticate once:**
+
+```bash
+notebooklm login
+```
+
+A Chromium window opens for Google sign-in. After that, `mosaic notebook create` works without a browser.
+
 ## Verify
 
 ```bash
 mosaic --help
 ```
 
-You should see the three available commands: `search`, `get`, and `config`.
+You should see the available commands: `search`, `get`, `config`, and `notebook`.
 
 ## Shell completion
 
