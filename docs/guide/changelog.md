@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [0.0.15] — 2026-03-06
+### Fixed
+- **tests**: Update notebooklm bridge tests to use artifacts set parameter
+
+
 ## [0.0.14] — 2026-03-06
 ### Added
 - **notebooklm**: Add artifact generation flags for all NotebookLM output types
