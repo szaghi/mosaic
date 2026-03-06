@@ -4,7 +4,7 @@ import httpx
 from mosaic.models import Paper, SearchFilters
 from mosaic.sources.base import BaseSource
 
-_BASE = "https://api.core.ac.uk/v3/search/works"
+_BASE = "https://api.core.ac.uk/v3/search/works/"
 
 
 class CORESource(BaseSource):

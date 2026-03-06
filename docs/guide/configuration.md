@@ -81,9 +81,25 @@ api_key = ""
 
 ScienceDirect is **disabled** until an Elsevier API key is set. Without it MOSAIC simply skips the source.
 
-1. Register at [dev.elsevier.com](https://dev.elsevier.com) (free for academic/non-commercial use)
-2. Create a new API key under **My API Key List**
-3. Apply it:
+**Step 1 — create an Elsevier developer account:**
+
+1. Go to [dev.elsevier.com](https://dev.elsevier.com) and click **I want an API key**
+2. Sign in with an existing Elsevier / Scopus account, or click **Register** to create one (free)
+3. Fill in your name, email, and organisation; accept the API terms of service
+
+**Step 2 — create an API key:**
+
+1. Once logged in, click your name in the top-right corner → **Manage API Keys** (or go directly to [dev.elsevier.com/apikey/manage](https://dev.elsevier.com/apikey/manage))
+2. Click **Create API Key**
+3. Enter a label (e.g. `MOSAIC`) and optionally a website URL (can be left blank)
+4. Click **Submit** — the key appears immediately in your key list
+5. Copy the key string (a 32-character hex string)
+
+**Step 3 — add the key to MOSAIC:**
+
+::: warning Wait before using the key
+Newly created Elsevier API keys can take up to **15 minutes** to activate. If you get a `401 Unauthorized` error immediately after creation, wait a few minutes and try again.
+:::
 
 ```bash
 mosaic config --elsevier-key YOUR_KEY
