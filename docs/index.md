@@ -19,7 +19,7 @@ hero:
 features:
   - icon: 🔍
     title: Multi-source Search
-    details: Query arXiv, Semantic Scholar, ScienceDirect, DOAJ, and Europe PMC simultaneously. Results are deduplicated by DOI so you never see the same paper twice.
+    details: Query arXiv, Semantic Scholar, ScienceDirect, DOAJ, Europe PMC, OpenAlex, and BASE simultaneously. Results are deduplicated by DOI so you never see the same paper twice.
   - icon: 📄
     title: PDF Download
     details: Download open-access PDFs directly. When no PDF link is known, MOSAIC queries Unpaywall to find a legal open-access copy automatically.

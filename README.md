@@ -20,7 +20,7 @@
 
 ## What is MOSAIC?
 
-Instead of visiting five different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot.
+Instead of visiting seven different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot.
 
 ```bash
 mosaic search "attention is all you need" --oa-only --download
@@ -30,26 +30,29 @@ mosaic search "attention is all you need" --oa-only --download
 
 ## Sources
 
-| Source | Coverage | Auth | OA PDF |
-|---|---|---|---|
-| **arXiv** | Physics, CS, Math, Biology… | None | Always |
-| **Semantic Scholar** | 214 M papers, all disciplines | Optional key | When indexed |
-| **ScienceDirect** | Elsevier journals & books | API key | OA articles |
-| **DOAJ** | 8 M+ fully open-access articles | None | Always |
-| **Europe PMC** | 45 M biomedical papers | None | PMC articles |
-| **Unpaywall** | PDF resolver for any DOI | Email only | Legal OA copy |
+| Source | Shorthand | Coverage | Auth | OA PDF |
+|---|---|---|---|---|
+| **arXiv** | `arxiv` | Physics, CS, Math, Biology… | None | Always |
+| **Semantic Scholar** | `ss` | 214 M papers, all disciplines | Optional key | When indexed |
+| **ScienceDirect** | `sd` | Elsevier journals & books | API key required | OA articles |
+| **DOAJ** | `doaj` | 8 M+ fully open-access articles | None | Always |
+| **Europe PMC** | `epmc` | 45 M biomedical papers | None | PMC articles |
+| **OpenAlex** | `oa` | 250 M+ works, all disciplines | None | When available |
+| **BASE** | `base` | 300 M+ docs from 10 000+ repos | None | When OA + PDF format |
+| **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
 
 ---
 
 ## Installation
 
 ```bash
-# from PyPI — recommended (isolated install, globally available)
-pipx install mosaic-search
+# recommended — isolated install, globally available
+pipx install mosaic-search        # or: uv tool install mosaic-search
 ```
 
 ```bash
-# from PyPI with pip (into current environment)
+# pip — must be inside a virtualenv (modern systems enforce PEP 668)
+python -m venv ~/.venvs/mosaic && source ~/.venvs/mosaic/bin/activate
 pip install mosaic-search
 ```
 
@@ -95,7 +98,7 @@ mosaic search "deep learning" -n 25 --oa-only
 mosaic search "RNA velocity" --source epmc
 ```
 
-**Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc`
+**Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc` · `oa` · `base`
 
 ### Filters
 
@@ -142,8 +145,8 @@ Config is stored at `~/.config/mosaic/config.toml`. Downloaded PDFs go to `~/mos
 ```mermaid
 flowchart LR
     CLI -->|query + filters| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & DOAJ & EPMC[Europe PMC]
-    arXiv & SS & SD & DOAJ & EPMC -->|Paper list| Dedup{Deduplicate\nby DOI}
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE
+    arXiv & SS & SD & DOAJ & EPMC & OA & BASE -->|Paper list| Dedup{Deduplicate\nby DOI}
     Dedup --> Cache[(SQLite\ncache)]
     Dedup --> Table[Rich table]
     Table -->|--download| DL[Downloader]
