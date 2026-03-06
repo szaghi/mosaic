@@ -4,6 +4,7 @@ from mosaic.sources.sciencedirect import ScienceDirectSource
 from mosaic.sources.doaj import DoajSource
 from mosaic.sources.europepmc import EuropePMCSource
 from mosaic.sources.openalex import OpenAlexSource
+from mosaic.sources.base_search import BASESource
 
 __all__ = [
     "ArxivSource",
@@ -12,4 +13,5 @@ __all__ = [
     "DoajSource",
     "EuropePMCSource",
     "OpenAlexSource",
+    "BASESource",
 ]

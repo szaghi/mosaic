@@ -14,12 +14,13 @@ flowchart TD
     Q --> D[DOAJ]
     Q --> E[Europe PMC]
     Q --> F[OpenAlex]
-    A & B & C & D & E & F --> G{Deduplicate\nby DOI}
-    G --> H[Result table]
-    H -->|download| I{Has pdf_url?}
-    I -- yes --> J[(Local disk)]
-    I -- no --> K[Unpaywall]
-    K --> J
+    Q --> G[BASE]
+    A & B & C & D & E & F & G --> H{Deduplicate\nby DOI}
+    H --> I[Result table]
+    I -->|download| J{Has pdf_url?}
+    J -- yes --> K[(Local disk)]
+    J -- no --> L[Unpaywall]
+    L --> K
 ```
 
 ## arXiv
@@ -115,6 +116,26 @@ Abstracts in OpenAlex are stored as inverted indices (due to publisher licensing
 ::: tip CLI shorthand
 ```bash
 mosaic search "transformer" --source oa
+```
+:::
+
+## BASE (Bielefeld Academic Search Engine)
+
+| Property | Value |
+|----------|-------|
+| Auth | None |
+| Content | 300 million+ documents from 10 000+ content providers |
+| PDF | Direct PDF link when source format is `application/pdf` and OA |
+| Rate limit | No documented hard limit — use responsibly |
+| Base URL | `https://api.base-search.net/cgi-bin/BaseHttpSearchInterface.fcgi` |
+
+BASE aggregates metadata from institutional repositories, open-access journals, and digital libraries worldwide. It is particularly strong for grey literature, theses, and documents not indexed by journal-centric databases.
+
+Search queries support Lucene syntax. Filters for author (`dccreator`), journal (`dcsource`), and year (`dcyear`) are appended natively.
+
+::: tip CLI shorthand
+```bash
+mosaic search "climate change" --source base
 ```
 :::
 

@@ -375,6 +375,95 @@ class TestOpenAlexSource:
         assert "mailto" not in params
 
 
+_BASE_JSON = {
+    "response": {
+        "numFound": 1,
+        "docs": [{
+            "dctitle": "Attention Is All You Need",
+            "dccreator": ["Ashish Vaswani", "Noam Shazeer"],
+            "dcyear": "2017",
+            "dcdoi": "10.48550/arxiv.1706.03762",
+            "dcdescription": "We propose the Transformer.",
+            "dcsource": "NeurIPS",
+            "dclink": "https://arxiv.org/pdf/1706.03762",
+            "dcoa": 1,
+            "dcformat": "application/pdf",
+        }]
+    }
+}
+
+
+# ── BASE ──────────────────────────────────────────────────────────────────────
+
+class TestBASESource:
+    def _source(self):
+        from mosaic.sources.base_search import BASESource
+        return BASESource()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_BASE_JSON)):
+            papers = self._source().search("attention")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert "Ashish Vaswani" in p.authors
+        assert p.year == 2017
+        assert p.doi == "10.48550/arxiv.1706.03762"
+        assert p.abstract == "We propose the Transformer."
+        assert p.journal == "NeurIPS"
+        assert p.is_open_access is True
+        assert p.pdf_url == "https://arxiv.org/pdf/1706.03762"
+        assert p.url == "https://arxiv.org/pdf/1706.03762"
+
+    def test_no_pdf_url_when_not_oa(self):
+        doc = {**_BASE_JSON["response"]["docs"][0], "dcoa": 0}
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": [doc]}})):
+            papers = self._source().search("attention")
+        assert papers[0].pdf_url is None
+        assert papers[0].is_open_access is False
+
+    def test_no_pdf_url_when_not_pdf_format(self):
+        doc = {**_BASE_JSON["response"]["docs"][0], "dcformat": "text/html"}
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": [doc]}})):
+            papers = self._source().search("attention")
+        assert papers[0].pdf_url is None
+
+    def test_handles_string_title(self):
+        doc = {**_BASE_JSON["response"]["docs"][0], "dctitle": "Single String Title"}
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": [doc]}})):
+            papers = self._source().search("attention")
+        assert papers[0].title == "Single String Title"
+
+    def test_year_range_filter_appended_to_query(self):
+        f = SearchFilters(year_from=2016, year_to=2020)
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "dcyear:[2016 TO 2020]" in params["query"]
+
+    def test_explicit_year_list_filter(self):
+        f = SearchFilters(years=[2017, 2019])
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "dcyear:2017" in params["query"]
+        assert "dcyear:2019" in params["query"]
+
+    def test_author_filter_appended_to_query(self):
+        f = SearchFilters(authors=["Vaswani"])
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert 'dccreator:"Vaswani"' in params["query"]
+
+    def test_journal_filter_appended_to_query(self):
+        f = SearchFilters(journal="NeurIPS")
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert 'dcsource:"NeurIPS"' in params["query"]
+
+
 # ── Unpaywall ─────────────────────────────────────────────────────────────────
 
 class TestUnpaywall:

@@ -17,6 +17,7 @@ _DEFAULTS: dict = {
         "doaj": {"enabled": True},
         "europepmc": {"enabled": True},
         "openalex": {"enabled": True},
+        "base": {"enabled": True},
     },
     "unpaywall": {"email": ""},
 }

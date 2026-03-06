@@ -65,6 +65,9 @@ enabled = true
 
 [sources.openalex]
 enabled = true
+
+[sources.base]
+enabled = true
 ```
 
 ## Obtaining API keys
