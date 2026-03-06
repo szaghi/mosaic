@@ -14,13 +14,15 @@
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE.bsd-3.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE.mit.md)
 
+**[Full documentation](https://szaghi.github.io/mosaic/)**
+
 </div>
 
 ---
 
 ## What is MOSAIC?
 
-Instead of visiting eight different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot. Results can also be sent directly to a [Google NotebookLM](https://notebooklm.google.com/) notebook for AI-powered Q&A and audio overviews.
+Instead of visiting a dozen or more different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot. Results can also be sent directly to a [Google NotebookLM](https://notebooklm.google.com/) notebook for AI-powered Q&A, audio overviews, video summaries, slide decks, mind maps, flashcards, quizzes, infographics, study guides, and more.
 
 ```bash
 mosaic search "attention is all you need" --oa-only --download
