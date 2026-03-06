@@ -6,7 +6,7 @@ title: About MOSAIC
 
 **MOSAIC** (Multi-source Scientific Article Index and Collector) is a command-line tool for searching and downloading scientific papers from multiple open bibliographic databases.
 
-Instead of visiting eight different websites to find a paper, MOSAIC queries them all at once, deduplicates the results by DOI, and — when a PDF is available — downloads it to your local disk.
+Instead of visiting a dozen or more different websites to find a paper, MOSAIC queries them all at once, deduplicates the results by DOI, and — when a PDF is available — downloads it to your local disk.
 
 ## Why MOSAIC?
 
