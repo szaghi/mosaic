@@ -15,7 +15,8 @@ class SemanticScholarSource(BaseSource):
         self._headers = {"x-api-key": api_key} if api_key else {}
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
-        params: dict = {"query": query, "limit": min(max_results, 100), "fields": _FIELDS}
+        q = (filters.raw_query if filters and filters.raw_query else query)
+        params: dict = {"query": q, "limit": min(max_results, 100), "fields": _FIELDS}
         if filters:
             # SS supports year=YYYY or year=YYYY-YYYY
             if filters.years:

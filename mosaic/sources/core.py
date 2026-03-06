@@ -17,7 +17,14 @@ class CORESource(BaseSource):
         return bool(self._headers)
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
-        core_query = query
+        if filters and filters.raw_query:
+            core_query = filters.raw_query
+        elif filters and filters.field == "title":
+            core_query = f'title:"{query}"'
+        elif filters and filters.field == "abstract":
+            core_query = f'abstract:"{query}"'
+        else:
+            core_query = query
         if filters:
             if filters.authors:
                 for author in filters.authors:

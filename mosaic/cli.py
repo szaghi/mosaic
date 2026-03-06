@@ -78,6 +78,8 @@ def search(
     year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
     author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
     journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
+    field: Annotated[str, typer.Option("--field", "-f", help='Scope query to "title", "abstract", or "all" (default)')] = "all",
+    raw_query: Annotated[str, typer.Option("--raw-query", help="Raw query sent directly to source APIs, bypassing all field transforms")] = "",
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -97,10 +99,14 @@ def search(
             rprint(f"[red]Unknown source '{source}'. Use: {', '.join(_src_map.keys())}[/red]")
             raise typer.Exit(1)
 
+    if field not in ("all", "title", "abstract"):
+        rprint('[red]--field must be "title", "abstract", or "all"[/red]')
+        raise typer.Exit(1)
+
     # build filters
     filters: SearchFilters | None = None
-    if year or author or journal:
-        filters = SearchFilters(authors=list(author), journal=journal)
+    if year or author or journal or field != "all" or raw_query:
+        filters = SearchFilters(authors=list(author), journal=journal, field=field, raw_query=raw_query)
         if year:
             try:
                 parsed = SearchFilters.parse_year(year)
@@ -234,6 +240,8 @@ def notebook_create(
     year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
     author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
     journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
+    field: Annotated[str, typer.Option("--field", "-f", help='Scope query to "title", "abstract", or "all" (default)')] = "all",
+    raw_query: Annotated[str, typer.Option("--raw-query", help="Raw query sent directly to source APIs, bypassing all field transforms")] = "",
 ):
     """Create a NotebookLM notebook from a search query or a directory of PDFs.
 
@@ -274,9 +282,13 @@ def notebook_create(
     cache = Cache(cfg["db_path"])
     email = cfg.get("unpaywall", {}).get("email", "")
 
+    if field not in ("all", "title", "abstract"):
+        rprint('[red]--field must be "title", "abstract", or "all"[/red]')
+        raise typer.Exit(1)
+
     filters: SearchFilters | None = None
-    if year or author or journal:
-        filters = SearchFilters(authors=list(author), journal=journal)
+    if year or author or journal or field != "all" or raw_query:
+        filters = SearchFilters(authors=list(author), journal=journal, field=field, raw_query=raw_query)
         if year:
             try:
                 parsed = SearchFilters.parse_year(year)

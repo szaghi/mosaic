@@ -11,7 +11,14 @@ class DoajSource(BaseSource):
     name = "DOAJ"
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
-        doaj_query = query
+        if filters and filters.raw_query:
+            doaj_query = filters.raw_query
+        elif filters and filters.field == "title":
+            doaj_query = f'bibjson.title:"{query}"'
+        elif filters and filters.field == "abstract":
+            doaj_query = f'bibjson.abstract:"{query}"'
+        else:
+            doaj_query = query
         if filters:
             if filters.authors:
                 for author in filters.authors:

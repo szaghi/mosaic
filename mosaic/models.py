@@ -11,6 +11,10 @@ class SearchFilters:
     years: list[int] | None = None   # explicit list; mutually exclusive with from/to range
     authors: list[str] = field(default_factory=list)
     journal: str = ""
+    # Field-scoping: "title" | "abstract" | "all" (default)
+    field: str = "all"
+    # Raw query override: sent directly to the source API, bypassing field transformation
+    raw_query: str = ""
 
     def match(self, paper: "Paper") -> bool:
         """Return True if paper passes all active filters."""

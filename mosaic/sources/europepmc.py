@@ -11,7 +11,14 @@ class EuropePMCSource(BaseSource):
     name = "Europe PMC"
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
-        epmc_query = query
+        if filters and filters.raw_query:
+            epmc_query = filters.raw_query
+        elif filters and filters.field == "title":
+            epmc_query = f'TITLE:"{query}"'
+        elif filters and filters.field == "abstract":
+            epmc_query = f'ABSTRACT:"{query}"'
+        else:
+            epmc_query = query
         if filters:
             if filters.authors:
                 for author in filters.authors:

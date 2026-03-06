@@ -11,7 +11,14 @@ class BASESource(BaseSource):
     name = "BASE"
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
-        base_query = query
+        if filters and filters.raw_query:
+            base_query = filters.raw_query
+        elif filters and filters.field == "title":
+            base_query = f'dctitle:"{query}"'
+        elif filters and filters.field == "abstract":
+            base_query = f'dcabstract:"{query}"'
+        else:
+            base_query = query
         if filters:
             if filters.authors:
                 for author in filters.authors:

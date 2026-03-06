@@ -25,7 +25,14 @@ class ArxivSource(BaseSource):
         if elapsed < self._delay:
             time.sleep(self._delay - elapsed)
 
-        search_query = f"all:{query}"
+        if filters and filters.raw_query:
+            search_query = filters.raw_query
+        elif filters and filters.field == "title":
+            search_query = f"ti:{query}"
+        elif filters and filters.field == "abstract":
+            search_query = f"abs:{query}"
+        else:
+            search_query = f"all:{query}"
         if filters:
             if filters.authors:
                 for author in filters.authors:

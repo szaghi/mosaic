@@ -137,6 +137,27 @@ class TestArxivSource:
         query = mock.call_args.kwargs["params"]["search_query"]
         assert "jr:NeurIPS" in query
 
+    def test_field_title_uses_ti_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(text="<feed/>")) as mock:
+            self._source().search("attention", filters=f)
+        query = mock.call_args.kwargs["params"]["search_query"]
+        assert query.startswith("ti:attention")
+
+    def test_field_abstract_uses_abs_prefix(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(text="<feed/>")) as mock:
+            self._source().search("attention", filters=f)
+        query = mock.call_args.kwargs["params"]["search_query"]
+        assert query.startswith("abs:attention")
+
+    def test_raw_query_overrides_field_transform(self):
+        f = SearchFilters(raw_query="ti:transformers AND au:Vaswani")
+        with patch("httpx.get", return_value=_mock_get(text="<feed/>")) as mock:
+            self._source().search("attention", filters=f)
+        query = mock.call_args.kwargs["params"]["search_query"]
+        assert query == "ti:transformers AND au:Vaswani"
+
 
 # ── Semantic Scholar ──────────────────────────────────────────────────────────
 
@@ -176,6 +197,13 @@ class TestSemanticScholarSource:
             self._source().search("attention")
         params = mock.call_args.kwargs["params"]
         assert "year" not in params
+
+    def test_raw_query_overrides_default(self):
+        f = SearchFilters(raw_query="neural networks survey")
+        with patch("httpx.get", return_value=_mock_get(json_data={"data": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["query"] == "neural networks survey"
 
 
 # ── ScienceDirect ─────────────────────────────────────────────────────────────
@@ -219,6 +247,27 @@ class TestScienceDirectSource:
         body = mock.call_args.kwargs["json"]
         assert body["filters"]["openAccess"] is True
 
+    def test_field_title_uses_TITLE_syntax(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.put", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("deep learning", filters=f)
+        body = mock.call_args.kwargs["json"]
+        assert body["qs"] == "TITLE(deep learning)"
+
+    def test_field_abstract_uses_ABS_syntax(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.put", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("deep learning", filters=f)
+        body = mock.call_args.kwargs["json"]
+        assert body["qs"] == "ABS(deep learning)"
+
+    def test_raw_query_overrides_qs(self):
+        f = SearchFilters(raw_query="TITLE(transformers) AND AUTHOR(Vaswani)")
+        with patch("httpx.put", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        body = mock.call_args.kwargs["json"]
+        assert body["qs"] == "TITLE(transformers) AND AUTHOR(Vaswani)"
+
 
 # ── Europe PMC ────────────────────────────────────────────────────────────────
 
@@ -260,6 +309,27 @@ class TestEuropePMCSource:
         query = mock.call_args.kwargs["params"]["query"]
         assert 'JOURNAL:"Nature"' in query
 
+    def test_field_title_uses_TITLE_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"resultList": {"result": []}})) as mock:
+            self._source().search("RNA", filters=f)
+        query = mock.call_args.kwargs["params"]["query"]
+        assert query.startswith('TITLE:"RNA"')
+
+    def test_field_abstract_uses_ABSTRACT_prefix(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(json_data={"resultList": {"result": []}})) as mock:
+            self._source().search("RNA", filters=f)
+        query = mock.call_args.kwargs["params"]["query"]
+        assert query.startswith('ABSTRACT:"RNA"')
+
+    def test_raw_query_overrides_field_transform(self):
+        f = SearchFilters(raw_query="TITLE:CRISPR AND AUTH:Zhang")
+        with patch("httpx.get", return_value=_mock_get(json_data={"resultList": {"result": []}})) as mock:
+            self._source().search("RNA", filters=f)
+        query = mock.call_args.kwargs["params"]["query"]
+        assert query == "TITLE:CRISPR AND AUTH:Zhang"
+
 
 # ── DOAJ ──────────────────────────────────────────────────────────────────────
 
@@ -293,6 +363,27 @@ class TestDoajSource:
             self._source().search("test", filters=f)
         url = str(mock.call_args.args[0])
         assert "2020" in url
+
+    def test_field_title_uses_bibjson_title(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("CRISPR", filters=f)
+        url = str(mock.call_args.args[0])
+        assert "bibjson.title" in url
+
+    def test_field_abstract_uses_bibjson_abstract(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("CRISPR", filters=f)
+        url = str(mock.call_args.args[0])
+        assert "bibjson.abstract" in url
+
+    def test_raw_query_overrides_field_transform(self):
+        f = SearchFilters(raw_query="bibjson.title:CRISPR AND bibjson.author.name:Zhang")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("CRISPR", filters=f)
+        url = str(mock.call_args.args[0])
+        assert "bibjson.title%3ACRISPR" in url or "bibjson.title:CRISPR" in url
 
 
 _OPENALEX_JSON = {
@@ -373,6 +464,36 @@ class TestOpenAlexSource:
             self._source().search("attention")
         params = mock.call_args.kwargs["params"]
         assert "mailto" not in params
+
+    def test_field_title_uses_filter_title_search(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params.get("filter") == "title.search:attention"
+        assert "search" not in params
+
+    def test_field_abstract_uses_filter_abstract_search(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params.get("filter") == "abstract.search:attention"
+
+    def test_raw_query_uses_search_param(self):
+        f = SearchFilters(raw_query="title.search:transformers")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params.get("search") == "title.search:transformers"
+
+    def test_field_title_with_year_merges_filter(self):
+        f = SearchFilters(field="title", year_from=2020, year_to=2022)
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "title.search:attention" in params["filter"]
+        assert "publication_year:2020-2022" in params["filter"]
 
 
 _BASE_JSON = {
@@ -462,6 +583,27 @@ class TestBASESource:
             self._source().search("attention", filters=f)
         params = mock.call_args.kwargs["params"]
         assert 'dcsource:"NeurIPS"' in params["query"]
+
+    def test_field_title_uses_dctitle_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["query"].startswith('dctitle:"attention"')
+
+    def test_field_abstract_uses_dcabstract_prefix(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["query"].startswith('dcabstract:"attention"')
+
+    def test_raw_query_overrides_field_transform(self):
+        f = SearchFilters(raw_query="dctitle:transformers AND dccreator:Vaswani")
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["query"] == "dctitle:transformers AND dccreator:Vaswani"
 
 
 _CORE_JSON = {
@@ -553,6 +695,27 @@ class TestCORESource:
             self._source().search("attention", filters=f)
         params = mock.call_args.kwargs["params"]
         assert 'journals.title:"NeurIPS"' in params["q"]
+
+    def test_field_title_uses_title_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].startswith('title:"attention"')
+
+    def test_field_abstract_uses_abstract_prefix(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].startswith('abstract:"attention"')
+
+    def test_raw_query_overrides_field_transform(self):
+        f = SearchFilters(raw_query="title:transformers AND authors.name:Vaswani")
+        with patch("httpx.get", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"] == "title:transformers AND authors.name:Vaswani"
 
 
 # ── Unpaywall ─────────────────────────────────────────────────────────────────

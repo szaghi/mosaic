@@ -39,6 +39,8 @@ mosaic search [OPTIONS] QUERY
 | `--year` | `-y` | str | | Year filter (see formats below) |
 | `--author` | `-a` | str | | Author filter, repeatable |
 | `--journal` | `-j` | str | | Journal name substring filter |
+| `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
+| `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
 
 **Source shorthands for `--source`:**
 
@@ -85,6 +87,16 @@ Each filter is applied at the **source API level** where supported, then as a **
 | BASE | ✓ native | ✓ native | ✓ native |
 | CORE | ✓ native | ✓ native | ✓ native |
 
+**`--field` / `-f` behaviour:**
+- `all` (default): query is sent as a general full-text search to each source
+- `title`: scopes the query to the title field using each source's native syntax
+- `abstract`: scopes the query to the abstract field using each source's native syntax
+
+**`--raw-query` behaviour:**
+- Sent verbatim to every queried source, bypassing all field/author/journal transforms
+- Useful for power-users who know each source's query language (e.g. arXiv's `ti:` prefixes, Lucene syntax for BASE/DOAJ/CORE)
+- Note: year filter (`-y`) is still applied as post-processing even when `--raw-query` is set
+
 **Examples:**
 
 ```bash
@@ -109,8 +121,14 @@ mosaic search "graph neural" -a Kipf -a Velickovic --source ss --download
 # Search arXiv only, download PDFs
 mosaic search "diffusion models" --source arxiv --download
 
-# Free text + specific source
-mosaic search "CRISPR off-target" --source epmc -n 50
+# Scope query to title only
+mosaic search "attention mechanism" --field title
+
+# Scope query to abstract only (shorter synonym)
+mosaic search "CRISPR off-target" -f abstract --source epmc -n 50
+
+# Power-user raw query (arXiv native syntax)
+mosaic search "" --raw-query "ti:transformers AND au:Vaswani" --source arxiv
 ```
 
 ---
@@ -183,8 +201,10 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 | `--year` | `-y` | str | | Year filter (same formats as `search`) |
 | `--author` | `-a` | str | | Author filter, repeatable |
 | `--journal` | `-j` | str | | Journal name substring filter |
+| `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
+| `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
 
-`--query` and `--from-dir` are mutually exclusive; exactly one must be provided. Filters (`-y`, `-a`, `-j`) only apply when using `--query`.
+`--query` and `--from-dir` are mutually exclusive; exactly one must be provided. Filters (`-y`, `-a`, `-j`, `-f`, `--raw-query`) only apply when using `--query`.
 
 **Examples:**
 

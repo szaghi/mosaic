@@ -19,13 +19,18 @@ class OpenAlexSource(BaseSource):
         self._email = email
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
-        params: dict = {
-            "search": query,
-            "per_page": min(max_results, 200),
-            "select": _SELECT,
-        }
+        params: dict = {"per_page": min(max_results, 200), "select": _SELECT}
         if self._email:
             params["mailto"] = self._email
+
+        if filters and filters.raw_query:
+            params["search"] = filters.raw_query
+        elif filters and filters.field == "title":
+            params["filter"] = f"title.search:{query}"
+        elif filters and filters.field == "abstract":
+            params["filter"] = f"abstract.search:{query}"
+        else:
+            params["search"] = query
 
         filter_parts: list[str] = []
         if filters:
@@ -36,7 +41,9 @@ class OpenAlexSource(BaseSource):
                 y_to   = filters.year_to   or filters.year_from
                 filter_parts.append(f"publication_year:{y_from}-{y_to}")
         if filter_parts:
-            params["filter"] = ",".join(filter_parts)
+            # Merge with any existing filter (e.g. title.search set above)
+            existing = params.get("filter", "")
+            params["filter"] = ",".join([existing] + filter_parts) if existing else ",".join(filter_parts)
 
         resp = httpx.get(_BASE, params=params, timeout=30)
         resp.raise_for_status()

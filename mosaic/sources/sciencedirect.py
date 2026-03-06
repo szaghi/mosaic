@@ -27,8 +27,17 @@ class ScienceDirectSource(BaseSource):
         if self._inst_token:
             headers["X-ELS-Insttoken"] = self._inst_token
 
+        if filters and filters.raw_query:
+            qs = filters.raw_query
+        elif filters and filters.field == "title":
+            qs = f"TITLE({query})"
+        elif filters and filters.field == "abstract":
+            qs = f"ABS({query})"
+        else:
+            qs = query
+
         body: dict = {
-            "qs": query,
+            "qs": qs,
             "display": {"show": min(max_results, 100), "offset": 0, "sortBy": "relevance"},
         }
         if self._oa_only:
