@@ -42,6 +42,7 @@ mosaic search [OPTIONS] QUERY
 | `--journal` | `-j` | str | | Journal name substring filter |
 | `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
+| `--output` | `-o` | path | | Save results to file (format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib`) |
 
 **Source shorthands for `--source`:**
 
@@ -98,6 +99,18 @@ Each filter is applied at the **source API level** where supported, then as a **
 - Useful for power-users who know each source's query language (e.g. arXiv's `ti:` prefixes, Lucene syntax for BASE/DOAJ/CORE)
 - Note: year filter (`-y`) is still applied as post-processing even when `--raw-query` is set
 
+**`--output` / `-o` formats:**
+
+Format is inferred from the file extension:
+
+| Extension | Format | Contents |
+|-----------|--------|----------|
+| `.md` | Markdown table | Compact summary: title, authors, year, DOI, source, OA, PDF |
+| `.markdown` | Markdown sections | One `##` subsection per paper with a full-field key/value table; empty fields omitted |
+| `.csv` | CSV | All fields; authors joined with `;`; opens in Excel / Google Sheets |
+| `.json` | JSON array | All fields as a JSON list; authors as a native array; suitable for scripting |
+| `.bib` | BibTeX | `@article` for journal papers, `@misc` for preprints; includes `eprint`/`eprinttype` for arXiv, `abstract`, `pdf`, OA note |
+
 **Examples:**
 
 ```bash
@@ -130,6 +143,21 @@ mosaic search "CRISPR off-target" -f abstract --source epmc -n 50
 
 # Power-user raw query (arXiv native syntax)
 mosaic search "" --raw-query "ti:transformers AND au:Vaswani" --source arxiv
+
+# Save results to Markdown (summary table)
+mosaic search "protein folding" -n 20 --output results.md
+
+# Save results to Markdown (one subsection per paper, all fields)
+mosaic search "protein folding" -n 20 --output results.markdown
+
+# Save to BibTeX for import into Zotero / JabRef / LaTeX
+mosaic search "diffusion models" -y 2023-2025 --oa-only --output refs.bib
+
+# Save to CSV for Excel / Sheets
+mosaic search "CRISPR" -j "Nature" --output crispr.csv
+
+# Save full metadata as JSON
+mosaic search "attention mechanism" --output attention.json
 ```
 
 ---
