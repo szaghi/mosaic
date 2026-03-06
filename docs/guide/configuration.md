@@ -111,8 +111,10 @@ api_key = "YOUR_KEY"
 
 Without a key, requests share the public rate-limit pool (1 000 req/s across all anonymous users). With a dedicated key you get a private slot at 1 req/s — enough for interactive use.
 
-1. Request a key at [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api)
-2. Apply it:
+1. Go to [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api) and scroll down to **"Get API Key"**
+2. Fill in your name, email, and a brief description of your use case
+3. The key is issued automatically and sent to your email — usually within a few minutes; no institutional affiliation is required
+4. Apply it:
 
 ```bash
 mosaic config --ss-key YOUR_KEY
