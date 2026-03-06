@@ -196,7 +196,7 @@ def _print_results(papers: list) -> None:
     table.add_column("Title", min_width=30, ratio=3)
     table.add_column("Authors", ratio=2)
     table.add_column("Year", width=6)
-    table.add_column("DOI", ratio=2)
+    table.add_column("DOI", min_width=20, overflow="fold")
     table.add_column("Source", width=16)
     table.add_column("OA", width=4)
     table.add_column("PDF", width=5)
