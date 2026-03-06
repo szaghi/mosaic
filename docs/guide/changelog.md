@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [0.0.7] — 2026-03-06
+### Added
+- **search**: Add --field and --raw-query options for fine-grained query scoping
+
+
 ## [0.0.6] — 2026-03-06
 ### Added
 - **cli**: Add --version / -v flag and complete CLI reference docs
