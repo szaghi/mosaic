@@ -80,7 +80,9 @@ class ArxivSource(BaseSource):
                 pdf_url = link.get("href")
 
         doi_el = entry.find("arxiv:doi", _NS)
-        doi = doi_el.text.strip() if doi_el is not None and doi_el.text else None
+        # Fall back to the canonical arXiv preprint DOI (strip version suffix).
+        _arxiv_id_base = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+        doi = doi_el.text.strip() if doi_el is not None and doi_el.text else f"10.48550/arXiv.{_arxiv_id_base}"
 
         journal_el = entry.find("arxiv:journal_ref", _NS)
         journal = journal_el.text.strip() if journal_el is not None and journal_el.text else None

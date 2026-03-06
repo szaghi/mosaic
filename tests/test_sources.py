@@ -137,6 +137,14 @@ class TestArxivSource:
         query = mock.call_args.kwargs["params"]["search_query"]
         assert "jr:NeurIPS" in query
 
+    def test_doi_fallback_to_arxiv_doi(self):
+        xml = _ARXIV_XML.replace(
+            "<arxiv:doi>10.48550/arXiv.1706.03762</arxiv:doi>", ""
+        )
+        with patch("httpx.get", return_value=_mock_get(text=xml)):
+            papers = self._source().search("attention")
+        assert papers[0].doi == "10.48550/arXiv.1706.03762"
+
     def test_field_title_uses_ti_prefix(self):
         f = SearchFilters(field="title")
         with patch("httpx.get", return_value=_mock_get(text="<feed/>")) as mock:
