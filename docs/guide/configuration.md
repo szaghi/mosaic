@@ -75,22 +75,61 @@ enabled = true
 api_key = ""
 ```
 
-## Obtaining API keys
+## Source credentials
 
-### Elsevier / ScienceDirect
+### ScienceDirect (Elsevier) — API key required
 
-1. Register at [dev.elsevier.com](https://dev.elsevier.com)
-2. Create a new API key (free for academic/non-commercial use)
-3. Run `mosaic config --elsevier-key YOUR_KEY`
+ScienceDirect is **disabled** until an Elsevier API key is set. Without it MOSAIC simply skips the source.
+
+1. Register at [dev.elsevier.com](https://dev.elsevier.com) (free for academic/non-commercial use)
+2. Create a new API key under **My API Key List**
+3. Apply it:
+
+```bash
+mosaic config --elsevier-key YOUR_KEY
+```
 
 ::: tip Institutional access
-For full-text access to subscribed content, your institution's library must request an **Institution Token** from Elsevier. Running MOSAIC from campus or over your institution's VPN automatically grants the same access as a browser login via IP-based authentication.
+Without an institutional token, only open-access articles are returned. For full-text access to subscribed content, your institution's library must request an **Institution Token** from Elsevier. Running MOSAIC from campus or via your institution's VPN grants the same access as a browser login through IP-based authentication — no extra config needed.
 :::
 
-### Semantic Scholar
+### CORE — free API key required
 
-An API key is optional but gives you a dedicated rate limit slot instead of sharing the public pool. Request one at [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api).
+CORE is **disabled** until an API key is set. Registration is free for academic use.
 
-### Unpaywall
+1. Register at [core.ac.uk/services/api](https://core.ac.uk/services/api)
+2. Copy the key from your dashboard
+3. Add it to the config file directly (no CLI shorthand yet):
 
-No key required — just provide any valid email address. Unpaywall uses it only for usage tracking.
+```toml
+# ~/.config/mosaic/config.toml
+[sources.core]
+api_key = "YOUR_KEY"
+```
+
+### Semantic Scholar — optional API key
+
+Without a key, requests share the public rate-limit pool (1 000 req/s across all anonymous users). With a dedicated key you get a private slot at 1 req/s — enough for interactive use.
+
+1. Request a key at [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api)
+2. Apply it:
+
+```bash
+mosaic config --ss-key YOUR_KEY
+```
+
+### Unpaywall — email address required
+
+Unpaywall is not a search source but the PDF fallback resolver used during download. It requires any valid email address for usage tracking — no account or password.
+
+```bash
+mosaic config --unpaywall-email you@example.com
+```
+
+### OpenAlex — optional email (polite pool)
+
+OpenAlex works without any credentials. Providing your email opts you into the [polite pool](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication), which grants significantly higher rate limits. MOSAIC reuses the Unpaywall email automatically — no separate step needed once `--unpaywall-email` is set.
+
+### arXiv, DOAJ, Europe PMC, BASE
+
+These sources require no credentials and are ready to use out of the box.
