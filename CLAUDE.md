@@ -8,6 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Activate the virtual environment first (system Python is externally managed)
 source .venv/bin/activate
 
+# Preview what the next changelog would look like (unreleased commits)
+git cliff --unreleased
+
+# Regenerate CHANGELOG.md and docs/guide/changelog.md manually
+git cliff -o CHANGELOG.md
+{ printf -- "---\ntitle: Changelog\n---\n\n"; awk '/^## \[/{found=1} found' CHANGELOG.md; } > docs/guide/changelog.md
+
 # Install for development
 pip install -e ".[dev]"
 

@@ -11,9 +11,10 @@
 #   1. Validates the working tree is clean
 #   2. Computes the new version
 #   3. Updates pyproject.toml and mosaic/__init__.py
-#   4. Commits the version bump
-#   5. Creates an annotated git tag vX.Y.Z
-#   6. Pushes commit + tag  →  triggers CI (tests → PyPI publish)
+#   4. Generates CHANGELOG.md via git cliff (requires: pip install git-cliff)
+#   5. Commits the version bump + changelog
+#   6. Creates an annotated git tag vX.Y.Z
+#   7. Pushes commit + tag  →  triggers CI (tests → PyPI publish)
 
 set -euo pipefail
 
@@ -86,10 +87,21 @@ sed -i "s/__version__ = \"${CURRENT}\"/__version__ = \"${NEW}\"/" mosaic/__init_
 grep -q "version = \"${NEW}\"" pyproject.toml       || die "pyproject.toml was not updated"
 grep -q "__version__ = \"${NEW}\"" mosaic/__init__.py || die "mosaic/__init__.py was not updated"
 
+# ── generate changelog ─────────────────────────────────────────────────────────
+
+command -v git-cliff &>/dev/null || die "git-cliff not found — install with: cargo install git-cliff"
+
+echo "--- generating CHANGELOG.md for v${NEW}"
+# Tag doesn't exist yet, so pass --tag to pretend it does for the header
+git cliff --tag "v${NEW}" -o CHANGELOG.md
+
+# Mirror into VitePress docs (skip the preamble, start at first version section)
+{ printf -- "---\ntitle: Changelog\n---\n\n"; awk '/^## \[/{found=1} found' CHANGELOG.md; } > docs/guide/changelog.md
+
 # ── commit + tag ───────────────────────────────────────────────────────────────
 
 echo "--- committing version bump"
-git add pyproject.toml mosaic/__init__.py
+git add pyproject.toml mosaic/__init__.py CHANGELOG.md docs/guide/changelog.md
 git commit -m "chore(release): bump version to ${NEW}"
 
 echo "--- creating annotated tag v${NEW}"
