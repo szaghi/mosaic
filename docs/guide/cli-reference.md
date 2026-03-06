@@ -42,7 +42,7 @@ mosaic search [OPTIONS] QUERY
 | `--journal` | `-j` | str | | Journal name substring filter |
 | `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
-| `--output` | `-o` | path | | Save results to file (format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib`) |
+| `--output` | `-o` | path | | Save results to file (repeatable); format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib` |
 
 **Source shorthands for `--source`:**
 
@@ -158,6 +158,10 @@ mosaic search "CRISPR" -j "Nature" --output crispr.csv
 
 # Save full metadata as JSON
 mosaic search "attention mechanism" --output attention.json
+
+# Save to multiple formats in one search
+mosaic search "diffusion models" -y 2023-2025 --oa-only \
+  --output results.md --output refs.bib --output results.json
 ```
 
 ---

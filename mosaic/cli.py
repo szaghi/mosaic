@@ -81,7 +81,7 @@ def search(
     journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
     field: Annotated[str, typer.Option("--field", "-f", help='Scope query to "title", "abstract", or "all" (default)')] = "all",
     raw_query: Annotated[str, typer.Option("--raw-query", help="Raw query sent directly to source APIs, bypassing all field transforms")] = "",
-    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Save results to file (.md, .markdown, .csv, .json, .bib)")] = None,
+    output: Annotated[list[Path], typer.Option("--output", "-o", help="Save results to file (.md, .markdown, .csv, .json, .bib); repeatable")] = [],
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -144,12 +144,13 @@ def search(
 
     if output:
         from mosaic.exporter import export
-        try:
-            export(papers, output)
-            rprint(f"[green]Saved:[/green] {output}")
-        except ValueError as e:
-            rprint(f"[red]{e}[/red]")
-            raise typer.Exit(1)
+        for path in output:
+            try:
+                export(papers, path)
+                rprint(f"[green]Saved:[/green] {path}")
+            except ValueError as e:
+                rprint(f"[red]{e}[/red]")
+                raise typer.Exit(1)
 
     if download:
         _download_all(papers, cfg, cache)
