@@ -2,9 +2,12 @@
 
 # MOSAIC
 
+#### *a vivid mosaic of open scientific literature, assembled in seconds*
+
 ### Multi-sOurce Scientific Article Index and Collector
 
-*Search, discover, and download scientific papers from multiple open databases — with a single command.*
+>Search, discover, and download scientific papers from multiple open databases — with a single command.
+>Send results directly to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
 
 [![Tests](https://github.com/szaghi/mosaic/actions/workflows/tests.yml/badge.svg)](https://github.com/szaghi/mosaic/actions/workflows/tests.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://szaghi.github.io/mosaic/coverage-badge.json)](https://szaghi.github.io/mosaic/)

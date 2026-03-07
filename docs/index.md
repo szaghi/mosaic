@@ -4,7 +4,7 @@ layout: home
 hero:
   name: MOSAIC
   text: Multi-source Scientific Article Index and Collector
-  tagline: Search, discover, and download scientific papers from multiple open databases with a single command.
+  tagline: a vivid mosaic of open scientific literature, assembled in seconds
   actions:
     - theme: brand
       text: Get Started
