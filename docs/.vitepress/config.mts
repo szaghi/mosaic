@@ -19,6 +19,7 @@ export default withMermaid({
           { text: 'NotebookLM',     link: '/guide/notebooklm' },
           { text: 'CLI Reference', link: '/guide/cli-reference' },
           { text: 'Changelog',     link: '/guide/changelog' },
+          { text: 'Contributing',  link: '/guide/contributing' },
         ],
       },
     ],
@@ -46,6 +47,7 @@ export default withMermaid({
           items: [
             { text: 'CLI Reference', link: '/guide/cli-reference' },
             { text: 'Changelog',     link: '/guide/changelog' },
+            { text: 'Contributing',  link: '/guide/contributing' },
           ],
         },
       ],

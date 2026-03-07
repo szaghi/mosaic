@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / Discussion
+    url: https://github.com/szaghi/mosaic/discussions
+    about: Use discussions for questions that are not bug reports or feature requests.
