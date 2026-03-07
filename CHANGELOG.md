@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.0] — 2026-03-07
+### Added
+- **sources**: Add generic custom source configurable via TOML
+
+
 ## [0.0.17] — 2026-03-07
 ### Fixed
 - **exporter**: Create parent directories when output path does not exist
