@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.0.17] — 2026-03-07
+### Fixed
+- **exporter**: Create parent directories when output path does not exist
+
+
 ## [0.0.16] — 2026-03-07
 ### Added
 - **cli**: Add configurable PDF filename pattern with placeholder support
