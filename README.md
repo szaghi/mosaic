@@ -9,6 +9,7 @@
 >Search, discover, and download scientific papers from multiple open databases — with a single command.
 >Send results directly to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
 
+[![Version](https://img.shields.io/github/v/release/szaghi/mosaic?label=version)](https://github.com/szaghi/mosaic/releases/latest)
 [![Tests](https://github.com/szaghi/mosaic/actions/workflows/tests.yml/badge.svg)](https://github.com/szaghi/mosaic/actions/workflows/tests.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://szaghi.github.io/mosaic/coverage-badge.json)](https://szaghi.github.io/mosaic/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
