@@ -4,7 +4,7 @@
 
 #### *a vivid mosaic of open scientific literature, assembled in seconds*
 
-### Multi-sOurce Scientific Article Index and Collector
+### Multi-sOurce Scientific Article Indexer and Collector
 
 >Search, discover, and download scientific papers from multiple open databases — with a single command.
 >Send results directly to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.

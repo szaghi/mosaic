@@ -1,2 +1,2 @@
-"""MOSAIC — Multi-source Scientific Article Index and Collector."""
+"""MOSAIC — Multi-source Scientific Article Indexer and Collector."""
 __version__ = "0.1.1"

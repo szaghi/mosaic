@@ -6,7 +6,7 @@ title: About MOSAIC
 
 #### *a vivid mosaic of open scientific literature, assembled in seconds*
 
-**MOSAIC** (Multi-sOurce Scientific Article Index and Collector) is a command-line tool for searching and downloading scientific papers from multiple open (and closed, if allowed) bibliographic databases.
+**MOSAIC** (Multi-sOurce Scientific Article Indexer and Collector) is a command-line tool for searching and downloading scientific papers from multiple open (and closed, if allowed) bibliographic databases.
 
 Instead of visiting a dozen or more different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via Unpaywall — in one shot. Results can also be sent directly to a Google NotebookLM notebook for AI-powered Q&A, audio overviews, video summaries, slide decks, mind maps, flashcards, quizzes, infographics, study guides, and more.
 

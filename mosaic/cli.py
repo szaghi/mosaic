@@ -1,4 +1,4 @@
-"""MOSAIC CLI — Multi-source Scientific Article Index and Collector."""
+"""MOSAIC CLI — Multi-source Scientific Article Indexer and Collector."""
 from __future__ import annotations
 import asyncio
 from pathlib import Path
@@ -27,7 +27,7 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-app = typer.Typer(help="MOSAIC — Multi-source Scientific Article Index and Collector")
+app = typer.Typer(help="MOSAIC — Multi-source Scientific Article Indexer and Collector")
 notebook_app = typer.Typer(help="Create and populate Google NotebookLM notebooks from search results.")
 app.add_typer(notebook_app, name="notebook")
 

@@ -2,7 +2,7 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 
 export default withMermaid({
   title: 'MOSAIC',
-  description: 'Multi-source Scientific Article Index and Collector',
+  description: 'Multi-source Scientific Article Indexer and Collector',
   base: '/mosaic/',
   themeConfig: {
     nav: [

@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: MOSAIC
-  text: Multi-source Scientific Article Index and Collector
+  text: Multi-source Scientific Article Indexer and Collector
   tagline: a vivid mosaic of open scientific literature, assembled in seconds
   actions:
     - theme: brand
