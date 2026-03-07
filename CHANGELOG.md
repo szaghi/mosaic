@@ -4,6 +4,17 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.0.16] — 2026-03-07
+### Added
+- **cli**: Add configurable PDF filename pattern with placeholder support
+
+
+### Documentation
+- Update source count wording in about page
+
+- Expand README and about page with why/design sections
+
+
 ## [0.0.15] — 2026-03-06
 ### Fixed
 - **tests**: Update notebooklm bridge tests to use artifacts set parameter
