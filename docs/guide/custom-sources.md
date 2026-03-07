@@ -4,10 +4,12 @@ title: Custom Sources
 
 # Custom Sources
 
-MOSAIC supports **user-defined search sources** configured entirely in
-`~/.config/mosaic/config.toml` — no Python required. Any REST API that
-returns JSON can be wired in as a first-class source alongside arXiv,
-Semantic Scholar, and the other built-in sources.
+MOSAIC supports **any number of user-defined search sources** configured
+entirely in `~/.config/mosaic/config.toml` — no Python required. Each
+source is one `[[custom_sources]]` block. Any REST API that returns JSON
+can be wired in as a first-class source alongside arXiv, Semantic Scholar,
+and the other built-in sources, and all of them are queried in parallel
+on every search.
 
 ## How it works
 
@@ -142,20 +144,75 @@ mosaic search "neural networks" --source "CNR Publications"
 
 ## Multiple custom sources
 
-Add as many `[[custom_sources]]` blocks as needed:
+Add as many `[[custom_sources]]` blocks as needed — each is an independent
+source queried in parallel with all others. Here is a realistic two-source
+example combining a generic institutional repository with a domain-specific
+preprint server:
+
+```toml
+# ~/.config/mosaic/config.toml
+
+# ── Source 1: HAL — French open archive (CNRS, INRIA, …) ─────────────────
+[[custom_sources]]
+name              = "HAL"
+enabled           = true
+url               = "https://api.archives-ouvertes.fr/search/"
+method            = "GET"
+query_param       = "q"
+results_path      = "response.docs"
+max_results_param = "rows"
+
+[custom_sources.fields]
+title    = "title_s"
+doi      = "doiId_s"
+year     = "publicationDateY_i"
+abstract = "abstract_s"
+journal  = "journalTitle_s"
+url      = "uri_s"
+pdf_url  = "fileMain_s"
+authors  = "authFullName_s"        # HAL returns a flat string array of author names
+
+# ── Source 2: ZENODO — general-purpose open research repository ───────────
+[[custom_sources]]
+name              = "Zenodo"
+enabled           = true
+url               = "https://zenodo.org/api/records"
+method            = "GET"
+query_param       = "q"
+results_path      = "hits.hits"
+max_results_param = "size"
+
+[custom_sources.fields]
+title    = "metadata.title"
+doi      = "doi"
+year     = "metadata.publication_date"   # ISO date → year extracted automatically
+abstract = "metadata.description"
+journal  = "metadata.journal.title"
+url      = "links.self"
+pdf_url  = "links.files"                 # first file link when present
+
+authors_path  = "metadata.creators"
+authors_field = "name"
+```
+
+With this config, `mosaic search "climate model"` queries arXiv, Semantic
+Scholar, DOAJ, Europe PMC, OpenAlex, BASE, CORE, HAL, and Zenodo
+simultaneously, then deduplicates all results by DOI.
+
+To search only your custom sources:
+
+```bash
+mosaic search "climate model" --source HAL
+mosaic search "climate model" --source Zenodo
+```
+
+To temporarily disable one without deleting its config, set `enabled = false`:
 
 ```toml
 [[custom_sources]]
-name    = "CNR Publications"
-enabled = true
-url     = "https://publications.cnr.it/api/search"
-# …
-
-[[custom_sources]]
-name    = "My University Repo"
-enabled = false           # temporarily disabled
-url     = "https://repo.myuni.edu/api/v2/search"
-# …
+name    = "Zenodo"
+enabled = false
+# … rest of config unchanged
 ```
 
 ## Worked example — CNR IRIS via OAI-REST

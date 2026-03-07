@@ -28,7 +28,7 @@ MOSAIC solves all of this in a single command.
 - **Minimal dependencies** — `httpx`, `typer`, `rich`, `tomli-w`; no heavy frameworks
 - **Offline-friendly** — local SQLite cache means repeated queries are instant
 - **Extensible** — each source is an independent class; adding a new one takes ~50 lines
-- **Custom sources** — wire any JSON REST API as a new source with a few lines of TOML, no Python needed
+- **Custom sources** — wire any number of JSON REST APIs as new sources with a few lines of TOML each, no Python needed
 - **AI-powered artifacts creation (summary, presentation, podcast, ecc...)** by [Google NotebookLM](https://notebooklm.google.com/)
 
 ## Authors
