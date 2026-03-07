@@ -9,6 +9,7 @@ from mosaic.models import Paper
 
 def export(papers: list[Paper], path: Path) -> None:
     """Dispatch to the correct exporter based on file extension."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     ext = path.suffix.lower()
     dispatch = {
         ".md":       _to_markdown,
