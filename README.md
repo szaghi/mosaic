@@ -49,6 +49,7 @@ MOSAIC solves all of this in a single command.
 - **Minimal dependencies** — `httpx`, `typer`, `rich`, `tomli-w`; no heavy frameworks
 - **Offline-friendly** — local SQLite cache means repeated queries are instant
 - **Extensible** — each source is an independent class; adding a new one takes ~50 lines
+- **Custom sources** — wire any JSON REST API as a new source with a few lines of TOML, no Python needed
 - **AI-powered artifacts creation (summary, presentation, podcast, ecc...)** by [Google NotebookLM](https://notebooklm.google.com/)
 
 ---
@@ -126,6 +127,8 @@ mosaic search "RNA velocity" --source epmc
 
 **Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc` · `oa` · `base` · `core`
 
+Custom sources defined in `config.toml` are also queried and addressable by their `name`.
+
 ### Filters
 
 ```bash
@@ -163,6 +166,29 @@ mosaic config --download-dir ~/papers
 ```
 
 Config is stored at `~/.config/mosaic/config.toml`. Downloaded PDFs go to `~/mosaic-papers/` by default.
+
+### Custom sources
+
+Any JSON REST API can be added as a new source directly in `config.toml` — no Python required:
+
+```toml
+[[custom_sources]]
+name         = "My Institution Repo"
+enabled      = true
+url          = "https://repo.myuni.edu/api/search"
+method       = "GET"
+query_param  = "q"
+results_path = "results"
+
+[custom_sources.fields]
+title    = "title"
+doi      = "doi"
+year     = "year"
+authors  = "authors"    # flat string array
+journal  = "source.title"
+```
+
+See the [Custom Sources guide](https://szaghi.github.io/mosaic/guide/custom-sources) for the full reference.
 
 ### NotebookLM
 

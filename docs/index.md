@@ -35,6 +35,9 @@ features:
   - icon: 🔓
     title: Open & Extensible
     details: Each source is a small self-contained class. Adding a new database takes fewer than 50 lines of Python.
+  - icon: 🔌
+    title: Custom Sources
+    details: Wire any JSON REST API as a new search source directly in config.toml — no Python required. Supports GET and POST, nested field paths, API keys, and author objects.
 ---
 
 ## Quick start

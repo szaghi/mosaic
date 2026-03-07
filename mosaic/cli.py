@@ -17,6 +17,7 @@ from mosaic.downloader import download as dl_paper
 from mosaic.sources import (
     ArxivSource, SemanticScholarSource, ScienceDirectSource,
     DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
+    CustomSource,
 )
 
 def _version_callback(value: bool) -> None:
@@ -65,6 +66,9 @@ def _build_sources(cfg: dict) -> list:
         sources.append(BASESource())
     if src_cfg.get("core", {}).get("enabled", True):
         sources.append(CORESource(api_key=src_cfg.get("core", {}).get("api_key", "")))
+    for custom_cfg in cfg.get("custom_sources", []):
+        if custom_cfg.get("enabled", True):
+            sources.append(CustomSource(custom_cfg))
     return sources
 
 

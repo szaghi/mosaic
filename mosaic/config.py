@@ -22,6 +22,7 @@ _DEFAULTS: dict = {
         "core": {"enabled": True, "api_key": ""},
     },
     "unpaywall": {"email": ""},
+    "custom_sources": [],
 }
 
 
