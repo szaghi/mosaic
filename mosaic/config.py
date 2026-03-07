@@ -10,6 +10,7 @@ _DEFAULTS: dict = {
     "download_dir": str(Path.home() / "mosaic-papers"),
     "db_path": str(Path.home() / ".local" / "share" / "mosaic" / "cache.db"),
     "rate_limit_delay": 1.0,
+    "filename_pattern": "{year}_{source}_{author}_{title}",
     "sources": {
         "arxiv": {"enabled": True},
         "semantic_scholar": {"enabled": True, "api_key": ""},

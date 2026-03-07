@@ -21,6 +21,9 @@ mosaic config --ss-key YOUR_KEY
 # Change where PDFs are saved
 mosaic config --download-dir ~/papers
 
+# Change the PDF filename pattern
+mosaic config --filename-pattern "{author}_{year}_{title}"
+
 # Print current config
 mosaic config --show
 ```
@@ -36,6 +39,15 @@ db_path = "/home/you/.local/share/mosaic/cache.db"
 
 # Minimum seconds between requests to the same source
 rate_limit_delay = 1.0
+
+# PDF filename pattern — available placeholders:
+#   {year}    publication year (0000 if unknown)
+#   {source}  source name (arXiv, DOAJ, …)
+#   {author}  first author last name
+#   {title}   title slug, truncated to 60 chars
+#   {doi}     DOI with special chars replaced by _
+#   {journal} journal name slug (no_journal if unknown)
+filename_pattern = "{year}_{source}_{author}_{title}"
 
 [unpaywall]
 # Required for PDF fallback. Any valid email — Unpaywall uses it

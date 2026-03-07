@@ -199,6 +199,20 @@ mosaic config [OPTIONS]
 | `--ss-key TEXT` | str | Set Semantic Scholar API key |
 | `--unpaywall-email TEXT` | str | Set Unpaywall email |
 | `--download-dir TEXT` | str | Set PDF download directory |
+| `--filename-pattern TEXT` | str | Set PDF filename pattern (see below) |
+
+**`--filename-pattern` placeholders:**
+
+| Placeholder | Value |
+|-------------|-------|
+| `{year}` | Publication year (or `0000` if unknown) |
+| `{source}` | Source name (e.g. `arXiv`, `DOAJ`) |
+| `{author}` | First author's last name |
+| `{title}` | Title slug, truncated to 60 characters |
+| `{doi}` | DOI with special characters replaced by `_` |
+| `{journal}` | Journal name slug (or `no_journal` if unknown) |
+
+The default pattern is `{year}_{source}_{author}_{title}`, which produces filenames like `2017_arXiv_Vaswani_Attention_Is_All_You_Need.pdf`.
 
 **Examples:**
 
@@ -211,6 +225,12 @@ mosaic config --unpaywall-email me@uni.edu --download-dir ~/papers
 
 # Enable ScienceDirect
 mosaic config --elsevier-key abc123def456
+
+# Change filename pattern (author first, then year and title)
+mosaic config --filename-pattern "{author}_{year}_{title}"
+
+# Include DOI in filename
+mosaic config --filename-pattern "{year}_{doi}"
 ```
 
 ---

@@ -168,7 +168,8 @@ def get(
     cache = Cache(cfg["db_path"])
     from mosaic.models import Paper
     paper = Paper(title=doi, doi=doi, source="manual")
-    path = dl_paper(paper, cfg["download_dir"], cache, cfg.get("unpaywall", {}).get("email", ""))
+    path = dl_paper(paper, cfg["download_dir"], cache, cfg.get("unpaywall", {}).get("email", ""),
+                    cfg.get("filename_pattern", "{year}_{source}_{author}_{title}"))
     if path:
         rprint(f"[green]Saved:[/green] {path}")
     else:
@@ -182,6 +183,7 @@ def config(
     ss_key: Annotated[str, typer.Option(help="Set Semantic Scholar API key")] = "",
     unpaywall_email: Annotated[str, typer.Option(help="Set Unpaywall email")] = "",
     download_dir: Annotated[str, typer.Option(help="Set download directory")] = "",
+    filename_pattern: Annotated[str, typer.Option(help="Set PDF filename pattern (placeholders: {year}, {source}, {author}, {title}, {doi})")] = "",
 ):
     """View or update MOSAIC configuration."""
     cfg = cfg_mod.load()
@@ -194,12 +196,14 @@ def config(
         cfg["unpaywall"]["email"] = unpaywall_email
     if download_dir:
         cfg["download_dir"] = download_dir
+    if filename_pattern:
+        cfg["filename_pattern"] = filename_pattern
 
-    if any([elsevier_key, ss_key, unpaywall_email, download_dir]):
+    if any([elsevier_key, ss_key, unpaywall_email, download_dir, filename_pattern]):
         cfg_mod.save(cfg)
         rprint(f"[green]Config saved to[/green] ~/.config/mosaic/config.toml")
 
-    if show or not any([elsevier_key, ss_key, unpaywall_email, download_dir]):
+    if show or not any([elsevier_key, ss_key, unpaywall_email, download_dir, filename_pattern]):
         import tomli_w
         console.print_json(data=cfg)
 
@@ -228,6 +232,7 @@ def _print_results(papers: list) -> None:
 def _download_all(papers: list, cfg: dict, cache: Cache) -> None:
     email = cfg.get("unpaywall", {}).get("email", "")
     download_dir = cfg["download_dir"]
+    pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
     ok = fail = skip = 0
 
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False) as prog:
@@ -236,7 +241,7 @@ def _download_all(papers: list, cfg: dict, cache: Cache) -> None:
                 skip += 1
                 continue
             task = prog.add_task(f"Downloading: {p.title[:50]}…")
-            path = dl_paper(p, download_dir, cache, email)
+            path = dl_paper(p, download_dir, cache, email, pattern)
             prog.remove_task(task)
             if path:
                 ok += 1
@@ -367,7 +372,8 @@ def notebook_create(
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
         for p in papers:
             task = prog.add_task(f"{p.title[:55]}…")
-            path = dl_paper(p, cfg["download_dir"], cache, email)
+            path = dl_paper(p, cfg["download_dir"], cache, email,
+                            cfg.get("filename_pattern", "{year}_{source}_{author}_{title}"))
             prog.remove_task(task)
             papers_with_paths.append((p, Path(path) if path else None))
 

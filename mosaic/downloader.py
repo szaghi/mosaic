@@ -7,7 +7,8 @@ from mosaic.sources import unpaywall
 from mosaic.db import Cache
 
 
-def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str = "") -> str | None:
+def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str = "",
+             filename_pattern: str = "{year}_{source}_{author}_{title}") -> str | None:
     """
     Download PDF for a paper. Returns local path on success, None on failure.
     Tries: 1) known pdf_url  2) Unpaywall lookup by DOI
@@ -26,7 +27,7 @@ def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str
 
     dest_dir = Path(download_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / paper.safe_filename()
+    dest = dest_dir / paper.safe_filename(filename_pattern)
 
     try:
         _fetch(pdf_url, str(dest))

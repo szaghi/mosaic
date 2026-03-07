@@ -101,12 +101,22 @@ class Paper:
             return f"{self.authors[0]} & {self.authors[1]}"
         return f"{self.authors[0]} et al."
 
-    def safe_filename(self) -> str:
+    def safe_filename(self, pattern: str = "{year}_{source}_{author}_{title}") -> str:
         import re
-        parts = [self.short_authors.split()[0] if self.authors else "Unknown"]
-        if self.year:
-            parts.append(str(self.year))
-        slug = re.sub(r"[^\w\s-]", "", self.title)[:60].strip()
-        slug = re.sub(r"\s+", "_", slug)
-        parts.append(slug)
-        return "_".join(parts) + ".pdf"
+
+        def _slug(text: str, max_len: int = 60) -> str:
+            s = re.sub(r"[^\w\s-]", "", text)[:max_len].strip()
+            return re.sub(r"\s+", "_", s)
+
+        year    = str(self.year) if self.year else "0000"
+        source  = _slug(self.source)
+        author  = _slug(self.short_authors.split()[0] if self.authors else "Unknown")
+        title   = _slug(self.title)
+        doi     = re.sub(r"[^\w.-]", "_", self.doi) if self.doi else "no_doi"
+        journal = _slug(self.journal) if self.journal else "no_journal"
+
+        name = pattern.format(year=year, source=source, author=author,
+                              title=title, doi=doi, journal=journal)
+        # strip any remaining filesystem-unsafe chars and collapse separators
+        name = re.sub(r"[^\w\s.\-_]", "", name).strip("_")
+        return name + ".pdf"
