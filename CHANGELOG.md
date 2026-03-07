@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.1] — 2026-03-07
+### Documentation
+- **custom-sources**: Clarify multi-source support and add HAL/Zenodo example
+
+
 ## [0.1.0] — 2026-03-07
 ### Added
 - **sources**: Add generic custom source configurable via TOML

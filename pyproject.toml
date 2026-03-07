@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mosaic-search"
-version = "0.1.0"
+version = "0.1.1"
 description = "Multi-source Scientific Article Index and Collector"
 readme = "README.md"
 license = { text = "GPL-3.0-or-later OR BSD-2-Clause OR BSD-3-Clause OR MIT" }
