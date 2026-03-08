@@ -296,6 +296,60 @@ mosaic notebook create "My Papers" --from-dir ~/mosaic-papers/ --slide-deck
 
 ---
 
+### `auth login`
+
+Open a browser, log in to a site, and save the session for future PDF downloads.
+
+```
+mosaic auth login [OPTIONS] NAME
+```
+
+| Argument / Option | Type | Description |
+|---|---|---|
+| `NAME` | str | Session label, e.g. `elsevier`, `springer`, `myuni` |
+| `--url` / `-u` | str | URL to open in the browser *(required)* |
+
+Requires the `[browser]` extra — see [Authenticated Access](./authenticated-access).
+
+MOSAIC tries browsers in order: Chromium → Firefox → WebKit.
+
+**Examples:**
+
+```bash
+mosaic auth login elsevier --url https://www.sciencedirect.com/user/login
+mosaic auth login myuni    --url https://library.myuni.edu/login
+```
+
+---
+
+### `auth status`
+
+List all saved browser sessions.
+
+```bash
+mosaic auth status
+```
+
+---
+
+### `auth logout`
+
+Remove a saved browser session.
+
+```
+mosaic auth logout [OPTIONS] NAME
+```
+
+| Argument | Description |
+|---|---|
+| `NAME` | Session name to remove |
+
+```bash
+mosaic auth logout elsevier
+```
+
+---
+
 ## Exit codes
 
 | Code | Meaning |

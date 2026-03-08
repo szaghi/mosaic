@@ -117,7 +117,8 @@ mosaic/
 │   ├── search.py           # search_all() — fan-out and deduplication
 │   ├── config.py           # load/save ~/.config/mosaic/config.toml
 │   ├── db.py               # SQLite cache (papers + downloads)
-│   ├── downloader.py       # PDF download with Unpaywall fallback
+│   ├── downloader.py       # PDF download — pdf_url → Unpaywall → browser session
+│   ├── auth.py             # Browser session management (Playwright)
 │   ├── exporter.py         # Export to .md / .markdown / .csv / .json / .bib
 │   ├── notebooklm_bridge.py# NotebookLM notebook creation
 │   └── sources/

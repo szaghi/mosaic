@@ -74,13 +74,43 @@ playwright install chromium                                                  # p
 notebooklm login
 ```
 
-**Step 3 — authenticate once:**
+A browser window opens for Google sign-in. After that, `mosaic notebook create` works without a browser.
+
+## Optional: browser sessions {#optional-browser-sessions}
+
+To use `mosaic auth login` for downloading PDFs from sites that require a
+login (institutional repositories, publisher portals, etc.) you need
+Playwright installed.
+
+**Step 1 — install the extra:**
 
 ```bash
-notebooklm login
+pipx inject mosaic-search "playwright>=1.40"   # pipx
+uv tool inject mosaic-search "playwright>=1.40"   # uv
+pip install 'mosaic-search[browser]'               # pip / venv
 ```
 
-A Chromium window opens for Google sign-in. After that, `mosaic notebook create` works without a browser.
+**Step 2 — install at least one browser** (Chromium is recommended):
+
+```bash
+# pipx / uv — call playwright inside the tool venv
+~/.local/share/pipx/venvs/mosaic-search/bin/playwright install chromium
+~/.local/share/uv/tools/mosaic-search/bin/playwright install chromium
+
+# pip / venv
+playwright install chromium
+```
+
+Firefox and WebKit are also supported — MOSAIC auto-detects which browser
+is available and uses the first one found (Chromium → Firefox → WebKit).
+
+**Step 3 — log in to a site once:**
+
+```bash
+mosaic auth login elsevier --url https://www.sciencedirect.com/user/login
+```
+
+See [Authenticated Access](./authenticated-access) for the full guide.
 
 ## Verify
 

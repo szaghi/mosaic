@@ -6,6 +6,8 @@ title: Configuration
 
 MOSAIC stores its configuration in `~/.config/mosaic/config.toml`. The file is created automatically with defaults on first run.
 
+Browser sessions (saved via `mosaic auth login`) are stored separately at `~/.config/mosaic/sessions/` and are not part of the main config file.
+
 ## Quick setup
 
 ```bash

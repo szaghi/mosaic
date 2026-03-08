@@ -54,6 +54,7 @@ MOSAIC solves all of this in a single command.
 - **One command, many sources** — fan-out search with transparent deduplication
 - **Legal open-access only by default** — no paywall circumvention
 - **Closed-access** — supported by users API key (if provided, e.g. Elsevier source)
+- **Authenticated access** — save a browser session once with `mosaic auth login`; the downloader reuses it silently on future runs
 - **Minimal dependencies** — `httpx`, `typer`, `rich`, `tomli-w`; no heavy frameworks
 - **Offline-friendly** — local SQLite cache means repeated queries are instant
 - **Extensible** — each source is an independent class; adding a new one takes ~50 lines
@@ -235,6 +236,8 @@ flowchart LR
     Table -->|--download| DL[Downloader]
     DL -->|no pdf_url| UPW[Unpaywall]
     UPW --> DL
+    DL -->|no OA copy| AUTH[Browser session]
+    AUTH --> DL
     DL --> Disk[(~/mosaic-papers/)]
     DL -->|mosaic notebook create| NLM[NotebookLM]
 ```

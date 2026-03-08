@@ -29,7 +29,9 @@ def _version_callback(value: bool) -> None:
 
 app = typer.Typer(help="MOSAIC — Multi-source Scientific Article Indexer and Collector")
 notebook_app = typer.Typer(help="Create and populate Google NotebookLM notebooks from search results.")
+auth_app = typer.Typer(help="Manage browser sessions for authenticated PDF access.")
 app.add_typer(notebook_app, name="notebook")
+app.add_typer(auth_app, name="auth")
 
 
 @app.callback()
@@ -391,6 +393,47 @@ def notebook_create(
     rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
     if _artifacts:
         rprint(f"[dim]{', '.join(sorted(_artifacts))} queued — check NotebookLM in a few minutes.[/dim]")
+
+
+@auth_app.command("login")
+def auth_login(
+    name: Annotated[str, typer.Argument(help="Session name, e.g. elsevier, springer, myuni")],
+    url: Annotated[str, typer.Option("--url", "-u", help="URL to open in the browser for login")],
+) -> None:
+    """Open a browser, log in to a site, and save the session for future PDF downloads."""
+    import asyncio
+    from mosaic.auth import login as do_login
+    asyncio.run(do_login(name, url))
+
+
+@auth_app.command("logout")
+def auth_logout(
+    name: Annotated[str, typer.Argument(help="Session name to remove")],
+) -> None:
+    """Remove a saved browser session."""
+    from mosaic.auth import delete_session
+    if delete_session(name):
+        rprint(f"[green]Session removed:[/green] {name}")
+    else:
+        rprint(f"[yellow]No session found for:[/yellow] {name}")
+
+
+@auth_app.command("status")
+def auth_status() -> None:
+    """List all saved browser sessions."""
+    from mosaic.auth import list_sessions
+    sessions = list_sessions()
+    if not sessions:
+        rprint("[dim]No saved sessions. Use [bold]mosaic auth login <name> --url <url>[/bold] to add one.[/dim]")
+        return
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Name", style="bold")
+    table.add_column("Domain")
+    table.add_column("Saved")
+    table.add_column("Path", style="dim")
+    for s in sessions:
+        table.add_row(s["name"], s["domain"], s["saved"], s["path"])
+    console.print(table)
 
 
 if __name__ == "__main__":
