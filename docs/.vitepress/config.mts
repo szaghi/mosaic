@@ -5,6 +5,10 @@ export default withMermaid({
   description: 'Multi-source Scientific Article Indexer and Collector',
   base: '/mosaic/',
   themeConfig: {
+    logo: {
+      light: '/mosaic-logo-alpha-black.png',
+      dark:  '/mosaic-logo-alpha-white.png',
+    },
     nav: [
       { text: 'Home', link: '/' },
       {

@@ -1,6 +1,10 @@
 <div align="center">
 
-# MOSAIC
+<picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="docs/public/mosaic-logo-alpha-white.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/public/mosaic-logo-alpha-black.png">
+  <img src="docs/public/mosaic-logo-alpha-black.png" alt="MOSAIC logo" width="480">
+</picture>
 
 #### *a vivid mosaic of open scientific literature, assembled in seconds*
 

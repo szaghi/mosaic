@@ -5,6 +5,10 @@ hero:
   name: MOSAIC
   text: Multi-source Scientific Article Indexer and Collector
   tagline: a vivid mosaic of open scientific literature, assembled in seconds
+  image:
+    light: /mosaic-logo-alpha-black.png
+    dark:  /mosaic-logo-alpha-white.png
+    alt:   MOSAIC logo
   actions:
     - theme: brand
       text: Get Started

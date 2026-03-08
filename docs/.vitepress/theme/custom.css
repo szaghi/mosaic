@@ -1,0 +1,5 @@
+.light-only { display: block; }
+.dark-only  { display: none;  }
+
+html.dark .light-only { display: none;  }
+html.dark .dark-only  { display: block; }

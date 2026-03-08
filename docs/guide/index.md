@@ -2,7 +2,8 @@
 title: About MOSAIC
 ---
 
-# About MOSAIC
+<img src="/mosaic-logo-alpha-black.png" alt="MOSAIC logo" width="480" class="light-only">
+<img src="/mosaic-logo-alpha-white.png" alt="MOSAIC logo" width="480" class="dark-only">
 
 #### *a vivid mosaic of open scientific literature, assembled in seconds*
 
