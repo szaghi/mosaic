@@ -4,6 +4,23 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.0] — 2026-03-08
+### Added
+- **auth**: Add browser session management and authenticated PDF download
+
+
+### Changed
+- Rename acronym expansion from Index to Indexer everywhere
+
+
+### Documentation
+- Add project subtitle and expand header across README and docs
+
+- Add GitHub release version badge to README
+
+- Add MOSAIC logo with dark/light theme switching to README and docs
+
+
 ## [0.1.1] — 2026-03-07
 ### Documentation
 - **custom-sources**: Clarify multi-source support and add HAL/Zenodo example
