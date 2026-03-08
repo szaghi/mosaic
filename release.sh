@@ -75,6 +75,12 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 git fetch --tags -q
 git tag | grep -qx "v${NEW}" && die "tag v${NEW} already exists"
 
+# ── confirm ────────────────────────────────────────────────────────────────────
+
+read -r -p "Proceed with release v${NEW}? [y/N] " REPLY
+[[ "${REPLY,,}" == "y" ]] || { echo "aborted."; exit 0; }
+echo ""
+
 # ── update version in files ────────────────────────────────────────────────────
 
 echo "--- updating pyproject.toml"
