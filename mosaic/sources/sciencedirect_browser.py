@@ -24,8 +24,9 @@ class ScienceDirectBrowserSource(BaseSource):
 
     def available(self) -> bool:
         try:
-            from mosaic.auth import find_session_for_url
-            return find_session_for_url(_SD_BASE) is not None
+            from mosaic.auth import find_session_for_url, session_is_valid
+            session_name = find_session_for_url(_SD_BASE)
+            return session_name is not None and session_is_valid(session_name)
         except Exception:
             return False
 
@@ -62,6 +63,7 @@ class ScienceDirectBrowserSource(BaseSource):
                 "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
             )
             try:
+                from rich import print as rprint
                 # Navigate to the search form (direct URL construction triggers
                 # a CSRF check; form submission avoids it)
                 await page.goto(
@@ -69,13 +71,40 @@ class ScienceDirectBrowserSource(BaseSource):
                     wait_until="networkidle",
                     timeout=30_000,
                 )
+                # Detect SSO redirect before even submitting the form
+                if "id.elsevier.com" in page.url:
+                    rprint(
+                        "[yellow]ScienceDirect session has expired.[/yellow] "
+                        "Run: [bold]mosaic auth login elsevier "
+                        "--url https://www.sciencedirect.com[/bold]"
+                    )
+                    return []
                 await self._fill_form(page, query, filters)
                 await page.wait_for_load_state("networkidle", timeout=30_000)
+                # Detect SSO redirect after form submission
+                if "id.elsevier.com" in page.url:
+                    rprint(
+                        "[yellow]ScienceDirect session has expired.[/yellow] "
+                        "Run: [bold]mosaic auth login elsevier "
+                        "--url https://www.sciencedirect.com[/bold]"
+                    )
+                    return []
                 try:
                     await page.wait_for_selector("li.ResultItem", timeout=12_000)
                 except Exception:
                     pass
                 papers = await self._extract_results(page, max_results)
+                if not papers:
+                    status_el = await page.query_selector(".SearchStatusMessage")
+                    status = (await status_el.inner_text()).strip() if status_el else ""
+                    if status and "could not be run" in status.lower():
+                        rprint(
+                            f"[yellow]ScienceDirect search error:[/yellow] {status}"
+                        )
+                    else:
+                        rprint(
+                            "[dim]ScienceDirect (browser): no results for this query.[/dim]"
+                        )
             except Exception:
                 pass
             finally:

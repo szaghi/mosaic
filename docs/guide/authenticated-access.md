@@ -112,7 +112,14 @@ Each file contains only browser cookies and local storage — **no passwords
 are ever stored**.
 
 Sessions expire when the website's cookies expire (typically days to weeks
-depending on the site). Re-run `mosaic auth login` to refresh.
+for most publishers, up to a year for Cloudflare-protected sites like
+ScienceDirect). Re-run `mosaic auth login` to refresh.
+
+MOSAIC checks cookie expiry timestamps when deciding whether to activate a
+browser-based search source. If all timed cookies in a session file have
+passed their expiry, the source is excluded from active sources at startup —
+you will not see it in results and no browser is launched. Run
+`mosaic auth status` to see which sessions are still valid.
 
 ## Commands
 
@@ -163,12 +170,14 @@ mosaic auth status
 ```
 
 ```
- Name       Domain               Saved             Path
- springer   link.springer.com    2026-03-09 10:14  ~/.config/mosaic/sessions/springer.json
- myuni      library.myuni.edu    2026-03-07 09:15  ~/.config/mosaic/sessions/myuni.json
+ Name       Domain               Saved             Valid  Path
+ elsevier   www.sciencedirect…   2026-03-09 11:21  ✓      ~/.config/mosaic/sessions/elsevier.json
+ springer   link.springer.com    2026-03-09 10:14  ✓      ~/.config/mosaic/sessions/springer.json
+ myuni      library.myuni.edu    2026-02-01 09:15  ✗ exp  ~/.config/mosaic/sessions/myuni.json
 ```
 
-The **Domain** column shows which URLs the session will be used for during automatic download.
+- **Domain** — which URLs the session will be tried for during automatic download.
+- **Valid** — MOSAIC inspects cookie expiry timestamps in the saved file. ✓ means at least one timed cookie is still active; ✗ expired means all timed cookies have passed their expiry date and the session will be excluded from active sources until refreshed.
 
 ### `mosaic auth logout`
 
@@ -222,12 +231,26 @@ For reliable PDF access to subscribed content, use the API key combined with
 campus IP or institutional VPN — see
 [ScienceDirect configuration](./configuration#sciencedirect-elsevier).
 
-### Refreshing the session
+### Session expiry and warnings
 
 Elsevier's Cloudflare session cookies (`cf_clearance`) typically expire after
 a year, while the shorter-lived `__cf_bm` cookie (30 minutes) is refreshed
-automatically during each browser session. If searches start returning no
-results or redirect to the login page, re-run:
+automatically during each browser session.
+
+MOSAIC detects expiry at two points:
+
+- **At startup** — cookie timestamps in the session file are checked. An
+  expired session is excluded from active sources before any browser is
+  launched. `mosaic auth status` shows a ✗ in the **Valid** column.
+- **During search** — if the headless browser is redirected to the Elsevier
+  SSO page mid-search, MOSAIC prints a clear warning and skips the source:
+
+  ```
+  ScienceDirect session has expired.
+  Run: mosaic auth login elsevier --url https://www.sciencedirect.com
+  ```
+
+To refresh the session:
 
 ```bash
 mosaic auth login elsevier --url https://www.sciencedirect.com

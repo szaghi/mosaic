@@ -444,9 +444,11 @@ def auth_status() -> None:
     table.add_column("Name", style="bold")
     table.add_column("Domain")
     table.add_column("Saved")
+    table.add_column("Valid")
     table.add_column("Path", style="dim")
     for s in sessions:
-        table.add_row(s["name"], s["domain"], s["saved"], s["path"])
+        valid_cell = "[green]✓[/green]" if s["valid"] else "[red]✗ expired[/red]"
+        table.add_row(s["name"], s["domain"], s["saved"], valid_cell, s["path"])
     console.print(table)
 
 

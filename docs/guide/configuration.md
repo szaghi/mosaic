@@ -174,6 +174,14 @@ Unpaywall (open-access copies). For reliable PDF access to subscribed content,
 use the API key with an institutional IP or VPN.
 :::
 
+::: tip Session expiry
+MOSAIC checks cookie timestamps before activating the browser session. An
+expired session is silently excluded at startup (visible as ✗ in
+`mosaic auth status`). If the session expires mid-search, MOSAIC prints a
+warning and suggests the re-login command. Re-run
+`mosaic auth login elsevier --url https://www.sciencedirect.com` to refresh.
+:::
+
 ### CORE — free API key required
 
 CORE is **disabled** until an API key is set. Registration is free for academic use.

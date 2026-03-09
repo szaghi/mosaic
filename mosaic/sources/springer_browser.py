@@ -56,12 +56,18 @@ class SpringerBrowserSource(BaseSource):
             context = await browser.new_context()
             page = await context.new_page()
             try:
+                from rich import print as rprint
                 for page_num in range(1, pages_needed + 1):
                     url = self._build_url(query, filters, page_num)
                     await page.goto(url, wait_until="networkidle", timeout=30_000)
                     try:
                         await page.wait_for_selector("li.app-card-open", timeout=10_000)
                     except Exception:
+                        if page_num == 1:
+                            rprint(
+                                "[yellow]Springer: result items not found — "
+                                "the page structure may have changed.[/yellow]"
+                            )
                         break
                     batch = await self._extract_results(page, max_results - len(papers))
                     papers.extend(batch)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -50,6 +51,28 @@ def _load_meta(name: str) -> dict:
     return {}
 
 
+def session_is_valid(name: str) -> bool:
+    """Return True if the saved session has at least one non-expired cookie.
+
+    Session cookies (expires == -1) cannot be validated from the file alone
+    and are assumed still present. The check only fails when every timed
+    cookie in the file has passed its expiry timestamp.
+    """
+    path = session_path(name)
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text())
+        now = time.time()
+        timed = [c for c in data.get("cookies", []) if c.get("expires", -1) > 0]
+        if not timed:
+            # Only session cookies — cannot determine validity from file
+            return True
+        return any(c["expires"] > now for c in timed)
+    except Exception:
+        return True  # Assume valid if file can't be parsed
+
+
 # ── session listing / deletion ────────────────────────────────────────────────
 
 def list_sessions() -> list[dict]:
@@ -66,6 +89,7 @@ def list_sessions() -> list[dict]:
             "name": f.stem,
             "saved": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
             "domain": meta.get("domain", "—"),
+            "valid": session_is_valid(f.stem),
             "path": str(f),
         })
     return sessions
