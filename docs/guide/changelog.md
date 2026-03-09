@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.8] — 2026-03-09
+### Added
+- **sources**: Add DBLP computer science bibliography source
+
+
 ## [1.2.7] — 2026-03-09
 ### Added
 - **sources**: Add IEEE Xplore search source
