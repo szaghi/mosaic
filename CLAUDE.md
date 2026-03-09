@@ -48,7 +48,7 @@ mosaic config --show
 
 - **`models.py`** — `Paper` dataclass (central data model) and `SearchFilters` (year/author/journal filtering). `Paper.uid` is the deduplication key: prefers DOI > arxiv_id > pii > title slug.
 - **`sources/base.py`** — `BaseSource` ABC with `search()` and `available()`. All sources in `sources/` implement this interface.
-- **`sources/`** — Ten sources: `arxiv`, `semantic_scholar`, `sciencedirect` (API key or browser session), `sciencedirect_browser`, `springer_browser` (Playwright required), `doaj`, `europepmc`, `openalex`, `base_search`, `core` (free API key), `nasa_ads` (free API token). `unpaywall.py` is a helper (not a search source) used by the downloader.
+- **`sources/`** — Eleven sources: `arxiv`, `semantic_scholar`, `sciencedirect` (API key or browser session), `sciencedirect_browser`, `springer_browser` (Playwright required), `doaj`, `europepmc`, `openalex`, `base_search`, `core` (free API key), `nasa_ads` (free API token), `zenodo` (no auth required). `unpaywall.py` is a helper (not a search source) used by the downloader.
 - **`db.py`** — SQLite with two tables: `papers` (upsert on uid, updates pdf_url/abstract/is_open_access) and `downloads` (tracks local file paths and status).
 - **`config.py`** — Reads/writes `~/.config/mosaic/config.toml`; deep-merges user config over defaults. DB lives at `~/.local/share/mosaic/cache.db`, downloads at `~/mosaic-papers/`.
 

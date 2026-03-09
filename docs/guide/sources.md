@@ -18,7 +18,8 @@ flowchart TD
     Q --> G[BASE]
     Q --> H[CORE]
     Q --> N[NASA ADS]
-    A & B & C & SP & D & E & F & G & H & N --> I{Deduplicate\nby DOI}
+    Q --> Z[Zenodo]
+    A & B & C & SP & D & E & F & G & H & N & Z --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -236,6 +237,42 @@ api_key = "YOUR_TOKEN"
 ::: tip CLI shorthand
 ```bash
 mosaic search "gravitational waves" --source ads
+```
+:::
+
+## Zenodo
+
+| Property | Value |
+|----------|-------|
+| Auth | None (access token optional) |
+| Content | 3 M+ open research outputs — papers, datasets, software, posters, theses |
+| PDF | Direct download link when a PDF file is attached to the record |
+| Rate limit | 60 req/min (anonymous) · higher with access token |
+| Base URL | `https://zenodo.org/api/records` |
+
+Zenodo is CERN's open-access repository, hosting research outputs from CERN and EU-funded projects across all disciplines. Every record in Zenodo is open access by definition. It is particularly strong for datasets, software, grey literature, and research outputs that are not published in traditional journals.
+
+Search results are limited to `resource_type.type=publication` to exclude datasets and software entries.
+
+When a PDF file is attached to a record, MOSAIC extracts its direct download URL from the `files` array.
+
+::: tip CLI shorthand
+```bash
+mosaic search "climate data" --source zenodo
+```
+:::
+
+::: tip Optional access token
+Anonymous requests are limited to 60 req/min. A free personal access token raises this limit:
+
+1. Sign in at [zenodo.org](https://zenodo.org)
+2. Go to **Settings → Applications → Personal access tokens** and create a token with `deposit:read` scope
+3. Add it to the config file:
+
+```toml
+# ~/.config/mosaic/config.toml
+[sources.zenodo]
+api_key = "YOUR_TOKEN"
 ```
 :::
 

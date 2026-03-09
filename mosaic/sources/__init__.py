@@ -9,6 +9,7 @@ from mosaic.sources.openalex import OpenAlexSource
 from mosaic.sources.base_search import BASESource
 from mosaic.sources.core import CORESource
 from mosaic.sources.nasa_ads import NASAADSSource
+from mosaic.sources.zenodo import ZenodoSource
 from mosaic.sources.custom import CustomSource
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "BASESource",
     "CORESource",
     "NASAADSSource",
+    "ZenodoSource",
     "CustomSource",
 ]

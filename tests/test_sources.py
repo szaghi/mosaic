@@ -787,6 +787,78 @@ class TestNASAADSSource:
         assert "year:2015-2020" in params["q"]
 
 
+# ── Zenodo ────────────────────────────────────────────────────────────────────
+
+_ZENODO_JSON = {
+    "hits": {
+        "hits": [{
+            "metadata": {
+                "title": "Attention Is All You Need",
+                "creators": [{"name": "Vaswani, Ashish"}, {"name": "Shazeer, Noam"}],
+                "publication_date": "2017-06-12",
+                "doi": "10.5281/zenodo.12345",
+                "description": "<p>We propose a new network architecture.</p>",
+                "journal": {"title": "arXiv"},
+            },
+            "links": {"html": "https://zenodo.org/records/12345"},
+            "files": [
+                {"key": "paper.pdf", "links": {"self": "https://zenodo.org/records/12345/files/paper.pdf"}},
+            ],
+        }]
+    }
+}
+
+
+class TestZenodoSource:
+    def _source(self):
+        from mosaic.sources.zenodo import ZenodoSource
+        return ZenodoSource()
+
+    def test_always_available(self):
+        assert self._source().available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_ZENODO_JSON)):
+            papers = self._source().search("attention")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert "Vaswani, Ashish" in p.authors
+        assert p.year == 2017
+        assert p.doi == "10.5281/zenodo.12345"
+        assert "new network architecture" in p.abstract
+        assert p.url == "https://zenodo.org/records/12345"
+        assert p.pdf_url == "https://zenodo.org/records/12345/files/paper.pdf"
+        assert p.is_open_access is True
+        assert p.source == "Zenodo"
+
+    def test_field_title_uses_title_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"hits": {"hits": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].startswith("title:")
+
+    def test_field_abstract_uses_description_prefix(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(json_data={"hits": {"hits": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].startswith("description:")
+
+    def test_year_filter_appended(self):
+        f = SearchFilters(year_from=2017, year_to=2020)
+        with patch("httpx.get", return_value=_mock_get(json_data={"hits": {"hits": []}})) as mock:
+            self._source().search("transformers", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "publication_date:[2017-01-01 TO 2020-12-31]" in params["q"]
+
+    def test_html_stripped_from_abstract(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_ZENODO_JSON)):
+            papers = self._source().search("attention")
+        assert "<p>" not in papers[0].abstract
+
+
 # ── Unpaywall ─────────────────────────────────────────────────────────────────
 
 class TestUnpaywall:

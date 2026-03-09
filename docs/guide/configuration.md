@@ -99,6 +99,12 @@ api_key = ""
 enabled = true
 # Required. Register free at https://ui.adsabs.harvard.edu/user/settings/token
 api_key = ""
+
+[sources.zenodo]
+enabled = true
+# Optional. Create a personal access token at https://zenodo.org/account/settings/applications/
+# Anonymous access works without a token (60 req/min limit).
+api_key = ""
 ```
 
 ## Source credentials
@@ -238,6 +244,15 @@ To disable the source entirely:
 ```toml
 [sources.springer]
 enabled = false
+```
+
+### Zenodo — optional access token
+
+Zenodo works without any credentials (60 req/min anonymous limit). A free personal access token raises this limit. Create one at [zenodo.org/account/settings/applications](https://zenodo.org/account/settings/applications/tokens/new/) and add it to the config file:
+
+```toml
+[sources.zenodo]
+api_key = "YOUR_TOKEN"
 ```
 
 ### arXiv, DOAJ, Europe PMC, BASE

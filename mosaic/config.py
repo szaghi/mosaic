@@ -20,6 +20,8 @@ _DEFAULTS: dict = {
         "openalex": {"enabled": True},
         "base": {"enabled": True},
         "core": {"enabled": True, "api_key": ""},
+        "nasa_ads": {"enabled": True, "api_key": ""},
+        "zenodo": {"enabled": True, "api_key": ""},
     },
     "unpaywall": {"email": ""},
     "custom_sources": [],

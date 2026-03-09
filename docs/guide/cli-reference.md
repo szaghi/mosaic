@@ -59,6 +59,7 @@ mosaic search [OPTIONS] QUERY
 | `base` | BASE | — |
 | `core` | CORE | Free API key |
 | `ads` | NASA ADS | Free API token |
+| `zenodo` | Zenodo | — (access token optional) |
 
 **`--year` / `-y` formats:**
 
