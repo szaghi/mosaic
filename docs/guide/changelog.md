@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.3] — 2026-03-09
+### Added
+- **sources**: Add NASA ADS search source
+
+
 ## [1.2.2] — 2026-03-09
 ### Documentation
 - **sources**: Add Google-style docstrings to all source modules
