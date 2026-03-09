@@ -22,7 +22,8 @@ flowchart TD
     Q --> IEEE[IEEE Xplore]
     Q --> Z[Zenodo]
     Q --> CR[Crossref]
-    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR --> I{Deduplicate\nby DOI}
+    Q --> DBLP[DBLP]
+    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -364,6 +365,30 @@ api_key = "YOUR_KEY"
 ::: tip CLI shorthand
 ```bash
 mosaic search "deep learning hardware" --source ieee --field title --year 2020-2025
+```
+:::
+
+## DBLP
+
+| Property | Value |
+|----------|-------|
+| Auth | None |
+| Content | 6 M+ CS publications — journals, conferences, workshops |
+| PDF | Via `ee` field when it links to arXiv or a direct PDF |
+| Rate limit | No documented hard limit — use responsibly |
+| Base URL | `https://dblp.org/search/publ/api` |
+
+DBLP (Digital Bibliography & Library Project) is the reference bibliography for computer science, maintained by Schloss Dagstuhl. It covers all major CS venues including IEEE, ACM, Springer LNCS, and arXiv CS preprints. DBLP provides no abstracts — results include title, authors, venue, year, DOI, and an electronic edition link (`ee`) that often points to an arXiv copy or an open publisher page.
+
+Field scoping: `--field title` appends a `$` to the query string (DBLP title-only search convention). Year, author, and journal filters are applied as post-processing only.
+
+::: info No abstract field
+DBLP does not expose abstracts through its search API. The `abstract` field is always `None` for DBLP results. For CS papers with abstracts, combine with arXiv or Semantic Scholar — duplicates are merged by DOI.
+:::
+
+::: tip CLI shorthand
+```bash
+mosaic search "graph neural networks" --source dblp --field title --year 2020-2024
 ```
 :::
 

@@ -1070,6 +1070,102 @@ class TestIEEEXploreSource:
         assert papers[0].is_open_access is False
 
 
+# ── DBLP ──────────────────────────────────────────────────────────────────────
+
+_DBLP_JSON = {
+    "result": {
+        "hits": {
+            "hit": [
+                {
+                    "info": {
+                        "title": "Attention Is All You Need",
+                        "authors": {
+                            "author": [
+                                {"text": "Ashish Vaswani"},
+                                {"text": "Noam Shazeer"},
+                            ]
+                        },
+                        "year": "2017",
+                        "doi": "10.48550/arXiv.1706.03762",
+                        "url": "https://dblp.org/rec/conf/nips/VaswaniSPUJGKP17",
+                        "venue": "NeurIPS",
+                        "ee": "https://proceedings.neurips.cc/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html",
+                    }
+                }
+            ]
+        }
+    }
+}
+
+
+class TestDBLPSource:
+    def _source(self):
+        from mosaic.sources.dblp import DBLPSource
+        return DBLPSource()
+
+    def test_always_available(self):
+        assert self._source().available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_DBLP_JSON)):
+            papers = self._source().search("attention")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert "Ashish Vaswani" in p.authors
+        assert "Noam Shazeer" in p.authors
+        assert p.year == 2017
+        assert p.doi == "10.48550/arXiv.1706.03762"
+        assert p.abstract is None
+        assert p.journal == "NeurIPS"
+        assert p.url == "https://dblp.org/rec/conf/nips/VaswaniSPUJGKP17"
+        assert p.source == "DBLP"
+
+    def test_single_author_parsed_as_list(self):
+        hit = {
+            "info": {
+                "title": "Single Author Paper",
+                "authors": {"author": {"text": "Alice"}},
+                "year": "2021",
+            }
+        }
+        data = {"result": {"hits": {"hit": [hit]}}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("single")
+        assert papers[0].authors == ["Alice"]
+
+    def test_ee_list_takes_first(self):
+        hit = {
+            "info": {
+                "title": "Multi EE Paper",
+                "authors": {"author": [{"text": "Bob"}]},
+                "year": "2020",
+                "ee": [
+                    "https://arxiv.org/pdf/2001.00001",
+                    "https://example.com/paper",
+                ],
+            }
+        }
+        data = {"result": {"hits": {"hit": [hit]}}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("test")
+        assert papers[0].pdf_url == "https://arxiv.org/pdf/2001.00001"
+
+    def test_field_title_appends_dollar(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"result": {"hits": {}}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].endswith("$")
+        assert "attention" in params["q"]
+
+    def test_empty_hits_returns_empty_list(self):
+        data = {"result": {"hits": {}}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("nothing")
+        assert papers == []
+
+
 # ── Unpaywall ─────────────────────────────────────────────────────────────────
 
 class TestUnpaywall:

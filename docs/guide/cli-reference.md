@@ -63,6 +63,7 @@ mosaic search [OPTIONS] QUERY
 | `ieee` | IEEE Xplore | Free API key |
 | `zenodo` | Zenodo | — (access token optional) |
 | `crossref` | Crossref | — (email optional) |
+| `dblp` | DBLP | — |
 
 **`--year` / `-y` formats:**
 

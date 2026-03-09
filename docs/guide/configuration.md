@@ -123,6 +123,10 @@ api_key = ""
 [sources.crossref]
 enabled = true
 # No credentials required. Reuses the unpaywall.email for the polite pool (50 req/s).
+
+[sources.dblp]
+enabled = true
+# No credentials required. CS bibliography — journals, conferences, workshops.
 ```
 
 ## Source credentials
@@ -312,6 +316,6 @@ To disable the source entirely:
 enabled = false
 ```
 
-### arXiv, DOAJ, Europe PMC, BASE
+### arXiv, DOAJ, Europe PMC, BASE, DBLP
 
-These sources require no credentials and are ready to use out of the box.
+These sources require no credentials and are ready to use out of the box. DBLP is particularly useful for computer science conference and journal papers; note that it does not provide abstracts.

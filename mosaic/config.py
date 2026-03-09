@@ -25,6 +25,7 @@ _DEFAULTS: dict = {
         "ieee": {"enabled": True, "api_key": ""},
         "zenodo": {"enabled": True, "api_key": ""},
         "crossref": {"enabled": True},
+        "dblp": {"enabled": True},
     },
     "unpaywall": {"email": ""},
     "custom_sources": [],

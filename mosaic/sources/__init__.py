@@ -14,6 +14,7 @@ from mosaic.sources.ieee import IEEEXploreSource
 from mosaic.sources.zenodo import ZenodoSource
 from mosaic.sources.crossref import CrossrefSource
 from mosaic.sources.custom import CustomSource
+from mosaic.sources.dblp import DBLPSource
 
 __all__ = [
     "ArxivSource",
@@ -32,4 +33,5 @@ __all__ = [
     "ZenodoSource",
     "CrossrefSource",
     "CustomSource",
+    "DBLPSource",
 ]
