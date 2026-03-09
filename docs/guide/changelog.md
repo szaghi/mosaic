@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.7] — 2026-03-09
+### Added
+- **sources**: Add IEEE Xplore search source
+
+
 ## [1.2.6] — 2026-03-09
 ### Added
 - **sources**: Add Springer Nature Open Access API source
