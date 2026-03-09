@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.1] — 2026-03-09
+### Added
+- **auth**: Add session validity check and browser source warnings
+
+
 ## [1.2.0] — 2026-03-09
 ### Added
 - **sources**: Add Springer Nature browser-based search source
