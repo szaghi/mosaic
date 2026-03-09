@@ -73,6 +73,13 @@ enabled = true
 # returns only open-access content.
 api_key = ""
 
+[sources.springer_api]
+enabled = true
+# Optional. Register free at https://dev.springernature.com
+# Returns only open-access articles with direct PDF links.
+# Disabled automatically when api_key is empty.
+api_key = ""
+
 [sources.springer]
 enabled = true
 # No credentials required. Requires the [browser] optional extra.
@@ -236,15 +243,28 @@ mosaic config --unpaywall-email you@example.com
 
 OpenAlex works without any credentials. Providing your email opts you into the [polite pool](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication), which grants significantly higher rate limits. MOSAIC reuses the Unpaywall email automatically — no separate step needed once `--unpaywall-email` is set.
 
-### Springer Nature — no credentials required
+### Springer Nature API — free API key
 
-Springer Nature search is publicly accessible. The source activates
+The Springer Nature API source (`springer`) returns only open-access articles and includes direct PDF links. Register for a free key at [dev.springernature.com](https://dev.springernature.com) and add it to the config:
+
+```toml
+[sources.springer_api]
+api_key = "YOUR_KEY"
+```
+
+The source is disabled automatically when `api_key` is empty.
+
+### Springer Nature browser — no credentials required
+
+The browser-based Springer source (`sp`) is publicly accessible. It activates
 automatically when Playwright is installed (`pip install 'mosaic-search[browser]'`).
 No API key or browser session is needed for searching. A saved session is
 used only for PDF downloads of subscribed articles — see
 [Authenticated Access](./authenticated-access).
 
-To disable the source entirely:
+Both Springer sources can run simultaneously; results are deduplicated by DOI.
+
+To disable the browser source:
 ```toml
 [sources.springer]
 enabled = false

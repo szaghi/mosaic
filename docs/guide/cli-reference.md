@@ -52,7 +52,8 @@ mosaic search [OPTIONS] QUERY
 | `arxiv` | arXiv | — |
 | `ss` | Semantic Scholar | — (API key optional) |
 | `sd` | ScienceDirect | API key or browser session |
-| `sp` | Springer Nature | Playwright (`[browser]` extra) |
+| `sp` | Springer Nature (browser) | Playwright (`[browser]` extra) |
+| `springer` | Springer Nature (API) | Free API key |
 | `doaj` | DOAJ | — |
 | `epmc` | Europe PMC | — |
 | `oa` | OpenAlex | — (email optional) |

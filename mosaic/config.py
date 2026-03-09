@@ -19,6 +19,7 @@ _DEFAULTS: dict = {
         "europepmc": {"enabled": True},
         "openalex": {"enabled": True},
         "base": {"enabled": True},
+        "springer_api": {"enabled": True, "api_key": ""},
         "core": {"enabled": True, "api_key": ""},
         "nasa_ads": {"enabled": True, "api_key": ""},
         "zenodo": {"enabled": True, "api_key": ""},

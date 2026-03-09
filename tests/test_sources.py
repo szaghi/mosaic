@@ -787,6 +787,69 @@ class TestNASAADSSource:
         assert "year:2015-2020" in params["q"]
 
 
+# ── Springer Nature API ───────────────────────────────────────────────────────
+
+_SPRINGER_API_JSON = {
+    "records": [{
+        "title": "Attention Is All You Need",
+        "creators": [{"creator": "Vaswani, Ashish"}, {"creator": "Shazeer, Noam"}],
+        "publicationDate": "2017-06-12",
+        "doi": "10.1007/s10462-023-10466-6",
+        "abstract": "We propose the Transformer, a model architecture eschewing recurrence.",
+        "publicationName": "Artificial Intelligence Review",
+        "openaccess": "true",
+        "url": [
+            {"format": "html", "platform": "web", "value": "https://link.springer.com/article/10.1007/s10462-023-10466-6"},
+            {"format": "pdf",  "platform": "web", "value": "https://link.springer.com/content/pdf/10.1007/s10462-023-10466-6.pdf"},
+        ],
+    }]
+}
+
+
+class TestSpringerAPISource:
+    def _source(self, api_key="test-key"):
+        from mosaic.sources.springer_api import SpringerAPISource
+        return SpringerAPISource(api_key=api_key)
+
+    def test_unavailable_without_api_key(self):
+        from mosaic.sources.springer_api import SpringerAPISource
+        assert not SpringerAPISource(api_key="").available()
+
+    def test_available_with_api_key(self):
+        assert self._source().available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_SPRINGER_API_JSON)):
+            papers = self._source().search("attention")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert "Vaswani, Ashish" in p.authors
+        assert "Shazeer, Noam" in p.authors
+        assert p.year == 2017
+        assert p.doi == "10.1007/s10462-023-10466-6"
+        assert "Transformer" in p.abstract
+        assert p.journal == "Artificial Intelligence Review"
+        assert p.url == "https://link.springer.com/article/10.1007/s10462-023-10466-6"
+        assert p.pdf_url == "https://link.springer.com/content/pdf/10.1007/s10462-023-10466-6.pdf"
+        assert p.is_open_access is True
+        assert p.source == "Springer Nature"
+
+    def test_field_title_uses_title_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"records": []})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].startswith('title:"')
+
+    def test_year_filter_appended(self):
+        f = SearchFilters(year_from=2017, year_to=2020)
+        with patch("httpx.get", return_value=_mock_get(json_data={"records": []})) as mock:
+            self._source().search("transformers", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "date:2017-2020" in params["q"]
+
+
 # ── Zenodo ────────────────────────────────────────────────────────────────────
 
 _ZENODO_JSON = {

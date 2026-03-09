@@ -11,7 +11,8 @@ flowchart TD
     Q([Your query]) --> A[arXiv]
     Q --> B[Semantic Scholar]
     Q --> C[ScienceDirect]
-    Q --> SP[Springer Nature]
+    Q --> SP[Springer Nature browser]
+    Q --> SPN[Springer Nature API]
     Q --> D[DOAJ]
     Q --> E[Europe PMC]
     Q --> F[OpenAlex]
@@ -20,7 +21,7 @@ flowchart TD
     Q --> N[NASA ADS]
     Q --> Z[Zenodo]
     Q --> CR[Crossref]
-    A & B & C & SP & D & E & F & G & H & N & Z & CR --> I{Deduplicate\nby DOI}
+    A & B & C & SP & SPN & D & E & F & G & H & N & Z & CR --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -81,7 +82,7 @@ MOSAIC selects the access mode automatically:
 - Browser session: see [Authenticated Access → ScienceDirect](./authenticated-access#sciencedirect-elsevier)
 :::
 
-## Springer Nature
+## Springer Nature (browser) — shorthand `sp`
 
 | Property | Value |
 |----------|-------|
@@ -109,6 +110,38 @@ mosaic search "adaptive mesh refinement" --source sp --field title --year 2020-2
 For open-access articles, Unpaywall resolves a direct PDF link. For
 subscribed content, a saved Springer browser session is used as a download
 fallback — see [Authenticated Access](./authenticated-access).
+:::
+
+## Springer Nature (API) — shorthand `springer`
+
+| Property | Value |
+|----------|-------|
+| Auth | API key required (free — register at [dev.springernature.com](https://dev.springernature.com)) |
+| Content | Open-access articles from Springer, Nature, and affiliated journals |
+| PDF | Direct PDF link from the `url` array when deposited |
+| Rate limit | 5 000 req/day (free tier) |
+| Base URL | `https://api.springernature.com/openaccess/json` |
+
+The official Springer Nature Open Access API returns only freely accessible articles and includes direct PDF links when the publisher has deposited them. This source is faster and more reliable than the browser source but requires a free API key and is limited to OA content.
+
+Supports `--field title` (uses the native `title:` query prefix), `--year` (appended as `date:YYYY-YYYY`), and `--max` (capped at 100 per request). Author and journal filters are applied as post-processing.
+
+Both Springer sources can be active simultaneously; results are deduplicated by DOI.
+
+::: tip Setup
+Register for a free API key at [dev.springernature.com](https://dev.springernature.com), then add it to the config:
+
+```toml
+# ~/.config/mosaic/config.toml
+[sources.springer_api]
+api_key = "YOUR_KEY"
+```
+:::
+
+::: tip CLI shorthand
+```bash
+mosaic search "protein folding" --source springer --field title --year 2020-2025
+```
 :::
 
 ## DOAJ
