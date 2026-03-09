@@ -19,6 +19,23 @@ class OpenAlexSource(BaseSource):
         self._email = email
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+        """Search the OpenAlex works endpoint.
+
+        Uses the ``search`` parameter for full-text queries and the ``filter``
+        parameter for field-scoped (title/abstract) or year-constrained
+        queries. Optionally adds an email address via ``mailto`` for the
+        polite pool.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results to request (capped at 200).
+            filters: Optional filters for field scoping, year range, and
+                ``raw_query`` override. Year constraints are merged into the
+                ``filter`` parameter alongside any field filters.
+
+        Returns:
+            A list of Paper objects parsed from the ``results`` array.
+        """
         params: dict = {"per_page": min(max_results, 200), "select": _SELECT}
         if self._email:
             params["mailto"] = self._email
@@ -50,6 +67,21 @@ class OpenAlexSource(BaseSource):
         return [self._parse(item) for item in resp.json().get("results", [])]
 
     def _parse(self, item: dict) -> Paper:
+        """Parse a single OpenAlex work dict into a Paper.
+
+        Reconstructs the abstract from the inverted-index format, strips the
+        ``https://doi.org/`` prefix from DOIs, and resolves the best available
+        open-access PDF URL.
+
+        Args:
+            item: A dict from the OpenAlex ``results`` array, containing
+                fields selected by ``_SELECT`` (title, authorships,
+                publication_year, doi, ids, abstract_inverted_index,
+                primary_location, best_oa_location, open_access, biblio).
+
+        Returns:
+            A Paper populated with available bibliographic metadata.
+        """
         authors = [
             a.get("author", {}).get("display_name", "")
             for a in item.get("authorships", [])
@@ -105,6 +137,16 @@ def _reconstruct_abstract(inverted_index: dict | None) -> str | None:
 
 
 def _pages(biblio: dict) -> str | None:
+    """Build a page-range string from an OpenAlex biblio dict.
+
+    Args:
+        biblio: The ``biblio`` sub-dict from an OpenAlex work, potentially
+            containing ``first_page`` and ``last_page`` keys.
+
+    Returns:
+        A string like ``"123-130"``, a single page number string, or ``None``
+        when neither key is present.
+    """
     first = biblio.get("first_page")
     last  = biblio.get("last_page")
     if first and last:

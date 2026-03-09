@@ -11,6 +11,22 @@ class BASESource(BaseSource):
     name = "BASE"
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+        """Search the BASE (Bielefeld Academic Search Engine) API.
+
+        Translates the query into BASE Lucene syntax, scoping to
+        ``dctitle`` or ``dcabstract`` when a field filter is set. Author,
+        journal, and year constraints are appended as Lucene clauses.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results to request (capped at 100).
+            filters: Optional filters for field scoping, authors, journal, and
+                year range or specific years. ``raw_query`` overrides the
+                default mapping if set.
+
+        Returns:
+            A list of Paper objects parsed from the ``response.docs`` array.
+        """
         if filters and filters.raw_query:
             base_query = filters.raw_query
         elif filters and filters.field == "title":
@@ -45,6 +61,18 @@ class BASESource(BaseSource):
         return [self._parse(doc) for doc in docs]
 
     def _parse(self, doc: dict) -> Paper:
+        """Parse a single BASE result document dict into a Paper.
+
+        Args:
+            doc: A dict from the BASE ``response.docs`` array, containing
+                Dublin Core fields such as ``dctitle``, ``dccreator``,
+                ``dcyear``, ``dcdoi``, ``dcdescription``, ``dcsource``,
+                ``dclink``, ``dcoa``, and ``dcformat``.
+
+        Returns:
+            A Paper with a PDF URL set when the article is open access and
+            its format indicates a PDF.
+        """
         title = _first(doc.get("dctitle")) or ""
         authors = doc.get("dccreator") or []
         if isinstance(authors, str):

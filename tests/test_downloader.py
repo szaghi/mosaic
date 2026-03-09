@@ -74,6 +74,7 @@ class TestDownload:
         p.url = "https://nature.com/articles/123"
         with patch("mosaic.sources.unpaywall.resolve", return_value=None), \
              patch("mosaic.auth.find_session_for_url", return_value=None), \
+             patch("mosaic.auth.list_sessions", return_value=[]), \
              patch("mosaic.auth.browser_download") as mock_bd:
             download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         mock_bd.assert_not_called()

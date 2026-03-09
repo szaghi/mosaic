@@ -23,6 +23,12 @@ class ScienceDirectBrowserSource(BaseSource):
     name = "ScienceDirect"
 
     def available(self) -> bool:
+        """Return True when a valid saved Playwright session exists for ScienceDirect.
+
+        Returns:
+            True if a session file is found and has not expired; False otherwise
+            or if the ``mosaic.auth`` module is unavailable.
+        """
         try:
             from mosaic.auth import find_session_for_url, session_is_valid
             session_name = find_session_for_url(_SD_BASE)
@@ -32,6 +38,23 @@ class ScienceDirectBrowserSource(BaseSource):
 
     def search(self, query: str, max_results: int = 25,
                filters: SearchFilters | None = None) -> list[Paper]:
+        """Search ScienceDirect using a headless browser with a saved session.
+
+        Loads the saved Playwright session and runs an async browser search.
+        Returns an empty list on any error (missing session, expired login, or
+        unexpected page structure).
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results to collect from the page.
+            filters: Optional filters for field scoping (title/all/abstract)
+                and year range. Author and journal filters are not applied
+                via the form in this implementation.
+
+        Returns:
+            A list of Paper objects scraped from the results page, or an empty
+            list if the session is invalid or the search fails.
+        """
         try:
             from mosaic.auth import find_session_for_url, _require_playwright
             _require_playwright()
@@ -49,6 +72,21 @@ class ScienceDirectBrowserSource(BaseSource):
     async def _browser_search(self, query: str, max_results: int,
                                session_name: str,
                                filters: SearchFilters | None) -> list[Paper]:
+        """Async implementation of the ScienceDirect browser search.
+
+        Navigates to the ScienceDirect search form, fills the query fields,
+        submits the form, and extracts result items. Detects SSO redirects
+        that indicate an expired session and prints a helpful message.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of result items to parse.
+            session_name: Name of the saved Playwright session to load.
+            filters: Optional filters forwarded to ``_fill_form``.
+
+        Returns:
+            A list of Paper objects extracted from the results page.
+        """
         from mosaic.auth import session_path, _launch_browser
         from playwright.async_api import async_playwright
 
@@ -136,6 +174,15 @@ class ScienceDirectBrowserSource(BaseSource):
         await page.press(submit_field, "Enter")
 
     async def _extract_results(self, page, max_results: int) -> list[Paper]:
+        """Extract up to ``max_results`` Paper objects from the loaded results page.
+
+        Args:
+            page: A Playwright ``Page`` object with results already loaded.
+            max_results: Maximum number of ``li.ResultItem`` elements to parse.
+
+        Returns:
+            A list of Paper objects; items that fail to parse are silently skipped.
+        """
         items = await page.query_selector_all("li.ResultItem")
         papers = []
         for item in items[:max_results]:
@@ -148,6 +195,17 @@ class ScienceDirectBrowserSource(BaseSource):
         return papers
 
     async def _parse_item(self, item) -> Paper | None:
+        """Parse a single ``li.ResultItem`` Playwright element into a Paper.
+
+        Extracts title, article URL, PII, authors, journal, year, open-access
+        status, and PDF link by querying child elements of the result card.
+
+        Args:
+            item: A Playwright ``ElementHandle`` for a ``li.ResultItem`` node.
+
+        Returns:
+            A Paper if a non-empty title can be found, otherwise ``None``.
+        """
         # ── title + article URL ───────────────────────────────────────────────
         title_el = await item.query_selector("a.result-list-title-link")
         if not title_el:

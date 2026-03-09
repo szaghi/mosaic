@@ -21,6 +21,23 @@ class ArxivSource(BaseSource):
         self._last_call = 0.0
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+        """Query the arXiv Atom API and return matching papers.
+
+        Enforces a minimum inter-request delay to comply with arXiv rate-limit
+        guidelines. Applies field-specific prefixes (``ti:``, ``abs:``,
+        ``all:``) and optional author/journal/date range filters before
+        submitting the query.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results to request from the API.
+            filters: Optional filters for field scoping, authors, journal,
+                and year range. ``filters.raw_query`` overrides ``query``
+                entirely if set.
+
+        Returns:
+            A list of Paper objects parsed from the Atom feed.
+        """
         elapsed = time.time() - self._last_call
         if elapsed < self._delay:
             time.sleep(self._delay - elapsed)
@@ -62,6 +79,16 @@ class ArxivSource(BaseSource):
         return papers
 
     def _parse(self, entry: ET.Element) -> Paper:
+        """Parse a single Atom ``<entry>`` element into a Paper.
+
+        Args:
+            entry: An ``xml.etree.ElementTree.Element`` representing one arXiv
+                result entry from the Atom feed.
+
+        Returns:
+            A Paper populated with title, authors, year, DOI, arXiv ID,
+            abstract, journal reference, PDF URL, and open-access flag.
+        """
         def txt(tag: str) -> str | None:
             el = entry.find(tag, _NS)
             return el.text.strip() if el is not None and el.text else None

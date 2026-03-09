@@ -66,6 +66,7 @@ class CustomSource(BaseSource):
         self._authors_field   = cfg.get("authors_field", "")
 
     def available(self) -> bool:
+        """Return True only when a non-empty endpoint URL has been configured."""
         return bool(self._url)
 
     def search(
@@ -74,6 +75,24 @@ class CustomSource(BaseSource):
         max_results: int = 25,
         filters: SearchFilters | None = None,
     ) -> list[Paper]:
+        """Execute a GET or POST request against the configured endpoint.
+
+        Sends the query (or ``filters.raw_query`` if set) to the configured
+        API endpoint. Optionally includes an API key header and a page-size
+        parameter. Navigates the response JSON via ``results_path`` to locate
+        the results array.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results to return (capped at 100
+                for the API request; final list is also capped at this value).
+            filters: Optional filters; only ``raw_query`` is honoured by this
+                generic implementation.
+
+        Returns:
+            A list of Paper objects parsed from the results array, or an empty
+            list if the results path resolves to a non-list value.
+        """
         q = filters.raw_query if (filters and filters.raw_query) else query
 
         headers: dict = {"Accept": "application/json"}
@@ -103,6 +122,19 @@ class CustomSource(BaseSource):
         return [self._parse(item) for item in results[:max_results]]
 
     def _parse(self, item: dict) -> Paper:
+        """Parse a single result dict into a Paper using the configured field mappings.
+
+        Resolves each Paper field by following the dot-notation path defined in
+        the ``[fields]`` config table. Authors are resolved via either
+        ``authors_path`` + ``authors_field`` (object array) or the ``authors``
+        field path (flat string array).
+
+        Args:
+            item: A dict representing one result item from the API response.
+
+        Returns:
+            A Paper populated with whatever fields the config mapping resolves.
+        """
         def field(key: str):
             path = self._fields.get(key, "")
             return _get_nested(item, path) if path else None

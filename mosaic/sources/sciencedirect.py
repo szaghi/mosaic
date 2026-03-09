@@ -17,9 +17,27 @@ class ScienceDirectSource(BaseSource):
         self._oa_only = open_access_only
 
     def available(self) -> bool:
+        """Return True only when an Elsevier API key has been configured."""
         return bool(self._api_key)
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+        """Search the Elsevier ScienceDirect full-text API.
+
+        Builds a PUT request with a JSON body using Elsevier's query syntax
+        (``TITLE(...)``, ``ABS(...)``). Optionally restricts to open-access
+        articles. Author, journal, and date range filters are applied when
+        present in ``filters``.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results (capped at 100).
+            filters: Optional filters for field scoping (title/abstract),
+                authors, journal, and year range. ``raw_query`` overrides
+                the default field mapping if set.
+
+        Returns:
+            A list of Paper objects parsed from the ``results`` array.
+        """
         headers = {
             "X-ELS-APIKey": self._api_key,
             "Accept": "application/json",
@@ -58,6 +76,19 @@ class ScienceDirectSource(BaseSource):
         return [self._parse(item) for item in data.get("results", [])]
 
     def _parse(self, item: dict) -> Paper:
+        """Parse a single ScienceDirect result dict into a Paper.
+
+        Args:
+            item: A dict from the ScienceDirect ``results`` array, containing
+                fields such as ``title``, ``authors``, ``doi``, ``pii``,
+                ``publicationDate``, ``sourceTitle``, ``openAccess``, and
+                ``uri``.
+
+        Returns:
+            A Paper populated with available bibliographic metadata. The
+            ``pdf_url`` is set to the Elsevier article endpoint only when the
+            article is marked open access.
+        """
         pages = item.get("pages") or {}
         first = pages.get("first", "")
         last = pages.get("last", "")
@@ -89,7 +120,15 @@ class ScienceDirectSource(BaseSource):
         )
 
     def download_pdf(self, doi: str, dest: str) -> None:
-        """Download PDF for an OA article by DOI."""
+        """Download the PDF for an open-access article by DOI.
+
+        Streams the PDF from the Elsevier article endpoint and writes it to
+        the local filesystem.
+
+        Args:
+            doi: The article DOI (used to construct the Elsevier article URL).
+            dest: Absolute or relative path to the destination file.
+        """
         headers = {
             "X-ELS-APIKey": self._api_key,
             "Accept": "application/pdf",

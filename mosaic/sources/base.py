@@ -9,7 +9,17 @@ class BaseSource(ABC):
 
     @abstractmethod
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
-        """Search for papers matching query. Returns list of Paper objects."""
+        """Search for papers matching a query string.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of Paper objects to return.
+            filters: Optional structured filters (year, author, journal, field,
+                raw_query) that narrow or override the query.
+
+        Returns:
+            A list of Paper objects matching the query.
+        """
         ...
 
     def available(self) -> bool:

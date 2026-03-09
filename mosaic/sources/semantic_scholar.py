@@ -15,6 +15,21 @@ class SemanticScholarSource(BaseSource):
         self._headers = {"x-api-key": api_key} if api_key else {}
 
     def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+        """Search the Semantic Scholar paper search endpoint.
+
+        Translates the query and optional year filters into Semantic Scholar
+        API parameters. Supports optional API key for higher rate limits.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results to request (capped at 100).
+            filters: Optional filters; ``raw_query`` overrides ``query``.
+                Year constraints are forwarded as Semantic Scholar's
+                ``year`` parameter (e.g. ``"2020-2023"``).
+
+        Returns:
+            A list of Paper objects from the ``data`` array in the response.
+        """
         q = (filters.raw_query if filters and filters.raw_query else query)
         params: dict = {"query": q, "limit": min(max_results, 100), "fields": _FIELDS}
         if filters:
@@ -36,6 +51,17 @@ class SemanticScholarSource(BaseSource):
         return [self._parse(item) for item in data.get("data", [])]
 
     def _parse(self, item: dict) -> Paper:
+        """Parse a single Semantic Scholar result dict into a Paper.
+
+        Args:
+            item: A dict representing one paper from the Semantic Scholar
+                ``data`` array, containing fields such as ``title``,
+                ``authors``, ``year``, ``externalIds``, ``openAccessPdf``,
+                ``publicationVenue``, ``journal``, and ``isOpenAccess``.
+
+        Returns:
+            A Paper populated with available bibliographic metadata.
+        """
         ext = item.get("externalIds") or {}
         oa_pdf = item.get("openAccessPdf") or {}
         venue = item.get("publicationVenue") or {}

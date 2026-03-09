@@ -26,6 +26,11 @@ class SpringerBrowserSource(BaseSource):
     name = "Springer"
 
     def available(self) -> bool:
+        """Return True if the ``playwright`` package is installed.
+
+        Returns:
+            True when Playwright is importable; False if it is not installed.
+        """
         try:
             import playwright  # noqa: F401
             return True
@@ -34,6 +39,21 @@ class SpringerBrowserSource(BaseSource):
 
     def search(self, query: str, max_results: int = 25,
                filters: SearchFilters | None = None) -> list[Paper]:
+        """Search Springer Nature via a headless browser.
+
+        Fetches one or more paginated result pages (20 results per page) and
+        stops early when sufficient results are collected. Returns an empty
+        list on any error.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results to collect across pages.
+            filters: Optional filters for field scoping (title/all), year
+                range, and journal (appended to the query string).
+
+        Returns:
+            A list of Paper objects scraped from Springer search results.
+        """
         try:
             from mosaic.auth import _require_playwright
             _require_playwright()
@@ -45,6 +65,20 @@ class SpringerBrowserSource(BaseSource):
 
     async def _browser_search(self, query: str, max_results: int,
                                filters: SearchFilters | None) -> list[Paper]:
+        """Async implementation of the Springer browser search.
+
+        Iterates over paginated Springer result pages, extracting up to
+        ``max_results`` papers across all pages. Stops when a page contains
+        fewer items than the page size or enough results have been collected.
+
+        Args:
+            query: Free-text search query.
+            max_results: Maximum number of results to collect.
+            filters: Optional filters forwarded to ``_build_url``.
+
+        Returns:
+            A list of Paper objects extracted from the result pages.
+        """
         from mosaic.auth import _launch_browser
         from playwright.async_api import async_playwright
 
@@ -81,6 +115,20 @@ class SpringerBrowserSource(BaseSource):
 
     def _build_url(self, query: str, filters: SearchFilters | None,
                    page: int) -> str:
+        """Build the Springer search URL for the given query, filters, and page.
+
+        Uses ``title`` param for title-scoped searches and ``query`` otherwise.
+        Appends ``dateFrom``/``dateTo`` for year constraints and appends the
+        journal name to the query string if provided.
+
+        Args:
+            query: Free-text search query.
+            filters: Optional filters for field, year range, and journal.
+            page: 1-based page number; pages beyond 1 add a ``page`` param.
+
+        Returns:
+            A fully-encoded URL string for the Springer search endpoint.
+        """
         field = (filters.field or "all") if filters else "all"
 
         params: dict = {
@@ -108,6 +156,15 @@ class SpringerBrowserSource(BaseSource):
         return f"{_SEARCH_URL}?{urlencode(params)}"
 
     async def _extract_results(self, page, max_results: int) -> list[Paper]:
+        """Extract up to ``max_results`` Paper objects from the loaded results page.
+
+        Args:
+            page: A Playwright ``Page`` with Springer results loaded.
+            max_results: Maximum number of ``li.app-card-open`` elements to parse.
+
+        Returns:
+            A list of Paper objects; items that fail to parse are silently skipped.
+        """
         items = await page.query_selector_all("li.app-card-open")
         papers = []
         for item in items[:max_results]:
@@ -120,6 +177,17 @@ class SpringerBrowserSource(BaseSource):
         return papers
 
     async def _parse_item(self, item) -> Paper | None:
+        """Parse a single ``li.app-card-open`` Playwright element into a Paper.
+
+        Extracts title, article URL, DOI (from the URL path), authors, journal,
+        year, and abstract snippet from the data-test attributes of the card.
+
+        Args:
+            item: A Playwright ``ElementHandle`` for an ``li.app-card-open`` node.
+
+        Returns:
+            A Paper if a non-empty title can be found, otherwise ``None``.
+        """
         # ── title + URL ───────────────────────────────────────────────────────
         title_el = await item.query_selector("[data-test=title] a")
         if not title_el:
