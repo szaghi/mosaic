@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.0] — 2026-03-09
+### Added
+- **sources**: Add Springer Nature browser-based search source
+
+
 ## [1.1.0] — 2026-03-09
 ### Added
 - **sources**: Add ScienceDirect browser-based search via saved session

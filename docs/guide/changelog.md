@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.0] — 2026-03-09
+### Added
+- **sources**: Add Springer Nature browser-based search source
+
+
 ## [1.1.0] — 2026-03-09
 ### Added
 - **sources**: Add ScienceDirect browser-based search via saved session
