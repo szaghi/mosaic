@@ -999,6 +999,77 @@ class TestCrossrefSource:
         assert papers[0].is_open_access is False
 
 
+# ── IEEE Xplore ───────────────────────────────────────────────────────────────
+
+_IEEE_JSON = {
+    "articles": [{
+        "title": "Deep Learning for Wireless Communications",
+        "authors": {"authors": [{"full_name": "John Smith"}, {"full_name": "Jane Doe"}]},
+        "publication_year": 2022,
+        "doi": "10.1109/TCOMM.2022.1234567",
+        "abstract": "We survey deep learning applications in wireless communications.",
+        "publication_title": "IEEE Transactions on Communications",
+        "access_type": "OPEN_ACCESS",
+        "pdf_url": "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9876543",
+        "html_url": "https://ieeexplore.ieee.org/document/9876543",
+    }],
+    "total_records": 1,
+}
+
+
+class TestIEEEXploreSource:
+    def _source(self, api_key="test-key"):
+        from mosaic.sources.ieee import IEEEXploreSource
+        return IEEEXploreSource(api_key=api_key)
+
+    def test_unavailable_without_api_key(self):
+        from mosaic.sources.ieee import IEEEXploreSource
+        assert not IEEEXploreSource(api_key="").available()
+
+    def test_available_with_api_key(self):
+        assert self._source().available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_IEEE_JSON)):
+            papers = self._source().search("deep learning wireless")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Deep Learning for Wireless Communications"
+        assert "John Smith" in p.authors
+        assert "Jane Doe" in p.authors
+        assert p.year == 2022
+        assert p.doi == "10.1109/TCOMM.2022.1234567"
+        assert p.abstract == "We survey deep learning applications in wireless communications."
+        assert p.journal == "IEEE Transactions on Communications"
+        assert p.url == "https://ieeexplore.ieee.org/document/9876543"
+        assert p.pdf_url == "https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9876543"
+        assert p.source == "IEEE Xplore"
+        assert p.is_open_access is True
+
+    def test_field_title_uses_title_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"articles": []})) as mock:
+            self._source().search("deep learning", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["querytext"].startswith('title:"')
+
+    def test_year_filter_uses_start_end_year_params(self):
+        f = SearchFilters(year_from=2018, year_to=2022)
+        with patch("httpx.get", return_value=_mock_get(json_data={"articles": []})) as mock:
+            self._source().search("neural networks", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["start_year"] == 2018
+        assert params["end_year"] == 2022
+
+    def test_no_pdf_when_not_open_access(self):
+        item = {**_IEEE_JSON["articles"][0], "access_type": "LOCKED"}
+        data = {"articles": [item], "total_records": 1}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("deep learning wireless")
+        assert papers[0].pdf_url is None
+        assert papers[0].is_open_access is False
+
+
 # ── Unpaywall ─────────────────────────────────────────────────────────────────
 
 class TestUnpaywall:

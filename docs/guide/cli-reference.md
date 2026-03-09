@@ -60,6 +60,7 @@ mosaic search [OPTIONS] QUERY
 | `base` | BASE | — |
 | `core` | CORE | Free API key |
 | `ads` | NASA ADS | Free API token |
+| `ieee` | IEEE Xplore | Free API key |
 | `zenodo` | Zenodo | — (access token optional) |
 | `crossref` | Crossref | — (email optional) |
 

@@ -18,7 +18,8 @@ from mosaic.sources import (
     ArxivSource, SemanticScholarSource, ScienceDirectSource,
     ScienceDirectBrowserSource, SpringerBrowserSource,
     DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
-    NASAADSSource, ZenodoSource, CrossrefSource, SpringerAPISource, CustomSource,
+    NASAADSSource, IEEEXploreSource, ZenodoSource, CrossrefSource,
+    SpringerAPISource, CustomSource,
 )
 
 def _version_callback(value: bool) -> None:
@@ -75,6 +76,8 @@ def _build_sources(cfg: dict) -> list:
         sources.append(CORESource(api_key=src_cfg.get("core", {}).get("api_key", "")))
     if src_cfg.get("nasa_ads", {}).get("enabled", True):
         sources.append(NASAADSSource(api_key=src_cfg.get("nasa_ads", {}).get("api_key", "")))
+    if src_cfg.get("ieee", {}).get("enabled", True):
+        sources.append(IEEEXploreSource(api_key=src_cfg.get("ieee", {}).get("api_key", "")))
     if src_cfg.get("zenodo", {}).get("enabled", True):
         sources.append(ZenodoSource(api_key=src_cfg.get("zenodo", {}).get("api_key", "")))
     if src_cfg.get("crossref", {}).get("enabled", True):
@@ -98,7 +101,7 @@ def search(
     download: Annotated[bool, typer.Option("--download", "-d", help="Download available PDFs")] = False,
     oa_only: Annotated[bool, typer.Option("--oa-only", help="Show only open access papers")] = False,
     pdf_only: Annotated[bool, typer.Option("--pdf-only", help="Show only papers with a downloadable PDF")] = False,
-    source: Annotated[str, typer.Option("--source", "-s", help="Limit to one source (arxiv, ss, sd, sp, springer, doaj, epmc, oa, base, core, ads, zenodo, crossref)")] = "",
+    source: Annotated[str, typer.Option("--source", "-s", help="Limit to one source (arxiv, ss, sd, sp, springer, doaj, epmc, oa, base, core, ads, ieee, zenodo, crossref)")] = "",
     year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
     author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
     journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
@@ -120,7 +123,8 @@ def search(
         "sd": "ScienceDirect", "doaj": "DOAJ", "epmc": "Europe PMC",
         "oa": "OpenAlex", "base": "BASE", "core": "CORE",
         "sp": "Springer", "springer": "Springer Nature",
-        "ads": "NASA ADS", "zenodo": "Zenodo", "crossref": "Crossref",
+        "ads": "NASA ADS", "ieee": "IEEE Xplore",
+        "zenodo": "Zenodo", "crossref": "Crossref",
     }
     if source:
         key = source.lower()

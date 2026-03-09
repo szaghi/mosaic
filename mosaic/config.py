@@ -22,6 +22,7 @@ _DEFAULTS: dict = {
         "springer_api": {"enabled": True, "api_key": ""},
         "core": {"enabled": True, "api_key": ""},
         "nasa_ads": {"enabled": True, "api_key": ""},
+        "ieee": {"enabled": True, "api_key": ""},
         "zenodo": {"enabled": True, "api_key": ""},
         "crossref": {"enabled": True},
     },

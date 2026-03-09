@@ -107,6 +107,13 @@ enabled = true
 # Required. Register free at https://ui.adsabs.harvard.edu/user/settings/token
 api_key = ""
 
+[sources.ieee]
+enabled = true
+# Required. Register free at https://developer.ieee.org
+# Returns IEEE journals, transactions, and conference proceedings.
+# Disabled automatically when api_key is empty. Free tier: 200 req/day.
+api_key = ""
+
 [sources.zenodo]
 enabled = true
 # Optional. Create a personal access token at https://zenodo.org/account/settings/applications/
@@ -269,6 +276,22 @@ To disable the browser source:
 [sources.springer]
 enabled = false
 ```
+
+### IEEE Xplore — free API key required
+
+IEEE Xplore is **disabled** until an API key is set. Registration is free.
+
+1. Sign up at [developer.ieee.org](https://developer.ieee.org)
+2. Create an application to receive an API key
+3. Add it to the config file:
+
+```toml
+# ~/.config/mosaic/config.toml
+[sources.ieee]
+api_key = "YOUR_KEY"
+```
+
+The free tier allows 200 requests per day.
 
 ### Zenodo — optional access token
 

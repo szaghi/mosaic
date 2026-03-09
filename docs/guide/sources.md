@@ -19,9 +19,10 @@ flowchart TD
     Q --> G[BASE]
     Q --> H[CORE]
     Q --> N[NASA ADS]
+    Q --> IEEE[IEEE Xplore]
     Q --> Z[Zenodo]
     Q --> CR[Crossref]
-    A & B & C & SP & SPN & D & E & F & G & H & N & Z & CR --> I{Deduplicate\nby DOI}
+    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -329,6 +330,40 @@ When you set an Unpaywall email in the config, MOSAIC reuses it as the Crossref 
 ::: tip CLI shorthand
 ```bash
 mosaic search "transformer attention" --source crossref
+```
+:::
+
+## IEEE Xplore
+
+| Property | Value |
+|----------|-------|
+| Auth | API key required (free — register at [developer.ieee.org](https://developer.ieee.org)) |
+| Content | 5 M+ IEEE journals, transactions, magazines, and conference proceedings |
+| PDF | Direct `pdf_url` field for open-access articles |
+| Rate limit | 200 req/day (free tier) |
+| Base URL | `https://ieeexploreapi.ieee.org/api/v1/search/articles` |
+
+IEEE Xplore is the primary source for electrical engineering, computer science, and electronics literature published by IEEE. It covers decades of IEEE Transactions, conference proceedings, and standards documents.
+
+Supports `--field title` (uses the native `title:` query prefix), `--field abstract` (uses `abstract:` prefix), and `--year` (sent as native `start_year` / `end_year` parameters). Author and journal filters are applied as post-processing.
+
+::: warning API key required
+IEEE Xplore is disabled until you set an API key. Registration is free:
+
+1. Sign up at [developer.ieee.org](https://developer.ieee.org)
+2. Create an application to obtain an API key
+3. Add it to the config file:
+
+```toml
+# ~/.config/mosaic/config.toml
+[sources.ieee]
+api_key = "YOUR_KEY"
+```
+:::
+
+::: tip CLI shorthand
+```bash
+mosaic search "deep learning hardware" --source ieee --field title --year 2020-2025
 ```
 :::
 
