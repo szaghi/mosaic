@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.2] — 2026-03-09
+### Documentation
+- **sources**: Add Google-style docstrings to all source modules
+
+
 ## [1.2.1] — 2026-03-09
 ### Added
 - **auth**: Add session validity check and browser source warnings
