@@ -4,6 +4,15 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.4] — 2026-03-09
+### Added
+- **sources**: Add Zenodo research repository source
+
+
+### Documentation
+- Sync source lists in README, docs/index.md, and CLAUDE.md
+
+
 ## [1.2.3] — 2026-03-09
 ### Added
 - **sources**: Add NASA ADS search source
