@@ -19,7 +19,8 @@ flowchart TD
     Q --> H[CORE]
     Q --> N[NASA ADS]
     Q --> Z[Zenodo]
-    A & B & C & SP & D & E & F & G & H & N & Z --> I{Deduplicate\nby DOI}
+    Q --> CR[Crossref]
+    A & B & C & SP & D & E & F & G & H & N & Z & CR --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -273,6 +274,28 @@ Anonymous requests are limited to 60 req/min. A free personal access token raise
 # ~/.config/mosaic/config.toml
 [sources.zenodo]
 api_key = "YOUR_TOKEN"
+```
+:::
+
+## Crossref
+
+| Property | Value |
+|----------|-------|
+| Auth | None (email optional) |
+| Content | 150 M+ scholarly works — journal articles, conference papers, books, datasets |
+| PDF | Direct PDF link when deposited by the publisher in the `link` array |
+| Rate limit | 50 req/s with polite-pool email |
+| Base URL | `https://api.crossref.org/works` |
+
+Crossref is the primary DOI registration agency for scholarly publishing. Its REST API exposes rich metadata for works deposited by member publishers, including title, authors, publication date, abstract (when provided), journal name, and publisher-deposited PDF links. Abstract coverage varies widely by publisher; many records have no abstract at all.
+
+Field scoping: `--field title` uses the `query.title` parameter; `--field abstract` uses `query.bibliographic` (the closest available equivalent). Year, author, and journal filters are applied as post-processing.
+
+When you set an Unpaywall email in the config, MOSAIC reuses it as the Crossref polite-pool identifier — no separate key is needed.
+
+::: tip CLI shorthand
+```bash
+mosaic search "transformer attention" --source crossref
 ```
 :::
 

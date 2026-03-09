@@ -60,6 +60,7 @@ mosaic search [OPTIONS] QUERY
 | `core` | CORE | Free API key |
 | `ads` | NASA ADS | Free API token |
 | `zenodo` | Zenodo | — (access token optional) |
+| `crossref` | Crossref | — (email optional) |
 
 **`--year` / `-y` formats:**
 

@@ -78,6 +78,7 @@ MOSAIC solves all of this in a single command.
 | **CORE** | `core` | 200 M+ OA full-text from repos | Free API key | `downloadUrl` field |
 | **NASA ADS** | `ads` | 15 M+ astronomy & astrophysics records | Free API token | OA articles |
 | **Zenodo** | `zenodo` | 3 M+ OA research outputs (papers, datasets, software) | None (token optional) | Attached PDF files |
+| **Crossref** | `crossref` | 150 M+ scholarly works (DOI registry) | None (email optional) | When deposited by publisher |
 | **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
 
 ---
@@ -232,8 +233,8 @@ MOSAIC uploads local PDFs when available, falls back to URLs otherwise, and resp
 ```mermaid
 flowchart LR
     CLI -->|query + filters| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer Nature] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & ZEN[Zenodo]
-    arXiv & SS & SD & SP & DOAJ & EPMC & OA & BASE & CORE & ADS & ZEN -->|Paper list| Dedup{Deduplicate\nby DOI}
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer Nature] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & ZEN[Zenodo] & CR[Crossref]
+    arXiv & SS & SD & SP & DOAJ & EPMC & OA & BASE & CORE & ADS & ZEN & CR -->|Paper list| Dedup{Deduplicate\nby DOI}
     Dedup --> Cache[(SQLite\ncache)]
     Dedup --> Table[Rich table]
     Table -->|--download| DL[Downloader]

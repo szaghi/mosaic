@@ -105,6 +105,10 @@ enabled = true
 # Optional. Create a personal access token at https://zenodo.org/account/settings/applications/
 # Anonymous access works without a token (60 req/min limit).
 api_key = ""
+
+[sources.crossref]
+enabled = true
+# No credentials required. Reuses the unpaywall.email for the polite pool (50 req/s).
 ```
 
 ## Source credentials
@@ -253,6 +257,16 @@ Zenodo works without any credentials (60 req/min anonymous limit). A free person
 ```toml
 [sources.zenodo]
 api_key = "YOUR_TOKEN"
+```
+
+### Crossref — email optional
+
+Crossref works without any credentials. Providing your email opts the client into the [polite pool](https://api.crossref.org/swagger-ui/index.html), granting up to 50 requests per second. MOSAIC reuses the Unpaywall email automatically — no separate step needed once `--unpaywall-email` is set.
+
+To disable the source entirely:
+```toml
+[sources.crossref]
+enabled = false
 ```
 
 ### arXiv, DOAJ, Europe PMC, BASE

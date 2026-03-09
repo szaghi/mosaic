@@ -23,7 +23,7 @@ hero:
 features:
   - icon: 🔍
     title: Multi-source Search
-    details: Query arXiv, Semantic Scholar, ScienceDirect, Springer Nature, DOAJ, Europe PMC, OpenAlex, BASE, CORE, NASA ADS, and Zenodo simultaneously. Results are deduplicated by DOI so you never see the same paper twice.
+    details: Query arXiv, Semantic Scholar, ScienceDirect, Springer Nature, DOAJ, Europe PMC, OpenAlex, BASE, CORE, NASA ADS, Zenodo, and Crossref simultaneously. Results are deduplicated by DOI so you never see the same paper twice.
   - icon: 📄
     title: PDF Download
     details: Download open-access PDFs directly. When no PDF link is known, MOSAIC queries Unpaywall to find a legal open-access copy automatically.
@@ -57,8 +57,8 @@ mosaic search "attention is all you need" --oa-only --download
 ```mermaid
 flowchart LR
     CLI -->|query| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer Nature] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & ZEN[Zenodo]
-    arXiv & SS & SD & SP & DOAJ & EPMC & OA & BASE & CORE & ADS & ZEN -->|Paper list| Dedup
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer Nature] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & ZEN[Zenodo] & CR[Crossref]
+    arXiv & SS & SD & SP & DOAJ & EPMC & OA & BASE & CORE & ADS & ZEN & CR -->|Paper list| Dedup
     Dedup -->|unique papers| Cache[(SQLite)]
     Dedup --> Table[Rich table]
     Table -->|download flag| DL[Downloader]

@@ -859,6 +859,83 @@ class TestZenodoSource:
         assert "<p>" not in papers[0].abstract
 
 
+# ── Crossref ──────────────────────────────────────────────────────────────────
+
+_CROSSREF_JSON = {
+    "message": {
+        "items": [{
+            "title": ["Attention Is All You Need"],
+            "author": [
+                {"given": "Ashish", "family": "Vaswani"},
+                {"given": "Noam", "family": "Shazeer"},
+            ],
+            "published": {"date-parts": [[2017, 6, 12]]},
+            "DOI": "10.48550/arxiv.1706.03762",
+            "abstract": "<jats:p>We propose the Transformer.</jats:p>",
+            "container-title": ["Advances in Neural Information Processing Systems"],
+            "URL": "https://doi.org/10.48550/arxiv.1706.03762",
+            "link": [
+                {"URL": "https://arxiv.org/pdf/1706.03762", "content-type": "application/pdf"},
+            ],
+        }]
+    }
+}
+
+
+class TestCrossrefSource:
+    def _source(self, email=""):
+        from mosaic.sources.crossref import CrossrefSource
+        return CrossrefSource(email=email)
+
+    def test_always_available(self):
+        assert self._source().available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_CROSSREF_JSON)):
+            papers = self._source().search("attention")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert "Vaswani, Ashish" in p.authors
+        assert "Shazeer, Noam" in p.authors
+        assert p.year == 2017
+        assert p.doi == "10.48550/arxiv.1706.03762"
+        assert p.abstract == "We propose the Transformer."
+        assert p.journal == "Advances in Neural Information Processing Systems"
+        assert p.url == "https://doi.org/10.48550/arxiv.1706.03762"
+        assert p.pdf_url == "https://arxiv.org/pdf/1706.03762"
+        assert p.source == "Crossref"
+        assert p.is_open_access is True
+
+    def test_field_title_uses_query_title_param(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"message": {"items": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "query.title" in params
+        assert params["query.title"] == "attention"
+        assert "query" not in params
+
+    def test_field_abstract_uses_query_bibliographic_param(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(json_data={"message": {"items": []}})) as mock:
+            self._source().search("attention", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "query.bibliographic" in params
+        assert params["query.bibliographic"] == "attention"
+        assert "query" not in params
+
+    def test_no_pdf_when_no_pdf_link(self):
+        item = {**_CROSSREF_JSON["message"]["items"][0], "link": [
+            {"URL": "https://example.com/article", "content-type": "text/html"},
+        ]}
+        data = {"message": {"items": [item]}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("attention")
+        assert papers[0].pdf_url is None
+        assert papers[0].is_open_access is False
+
+
 # ── Unpaywall ─────────────────────────────────────────────────────────────────
 
 class TestUnpaywall:

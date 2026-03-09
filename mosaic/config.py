@@ -22,6 +22,7 @@ _DEFAULTS: dict = {
         "core": {"enabled": True, "api_key": ""},
         "nasa_ads": {"enabled": True, "api_key": ""},
         "zenodo": {"enabled": True, "api_key": ""},
+        "crossref": {"enabled": True},
     },
     "unpaywall": {"email": ""},
     "custom_sources": [],
