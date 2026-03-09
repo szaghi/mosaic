@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.1.0] — 2026-03-09
+### Added
+- **sources**: Add ScienceDirect browser-based search via saved session
+
+
 ## [1.0.0] — 2026-03-08
 ### Added
 - **auth**: Add browser session management and authenticated PDF download
