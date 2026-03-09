@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.6] — 2026-03-09
+### Added
+- **sources**: Add Springer Nature Open Access API source
+
+
 ## [1.2.5] — 2026-03-09
 ### Added
 - **sources**: Add Crossref metadata source
