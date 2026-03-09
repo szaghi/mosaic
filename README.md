@@ -69,12 +69,14 @@ MOSAIC solves all of this in a single command.
 |---|---|---|---|---|
 | **arXiv** | `arxiv` | Physics, CS, Math, Biology… | None | Always |
 | **Semantic Scholar** | `ss` | 214 M papers, all disciplines | Optional key | When indexed |
-| **ScienceDirect** | `sd` | Elsevier journals & books | API key required | OA articles |
+| **ScienceDirect** | `sd` | Elsevier journals & books | API key or browser session | OA articles |
+| **Springer Nature** | `sp` | Springer, Nature & affiliated journals | None (`[browser]` extra) | Via Unpaywall |
 | **DOAJ** | `doaj` | 8 M+ fully open-access articles | None | Always |
 | **Europe PMC** | `epmc` | 45 M biomedical papers | None | PMC articles |
 | **OpenAlex** | `oa` | 250 M+ works, all disciplines | None | When available |
 | **BASE** | `base` | 300 M+ docs from 10 000+ repos | None | When OA + PDF format |
 | **CORE** | `core` | 200 M+ OA full-text from repos | Free API key | `downloadUrl` field |
+| **NASA ADS** | `ads` | 15 M+ astronomy & astrophysics records | Free API token | OA articles |
 | **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
 
 ---
@@ -229,8 +231,8 @@ MOSAIC uploads local PDFs when available, falls back to URLs otherwise, and resp
 ```mermaid
 flowchart LR
     CLI -->|query + filters| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE
-    arXiv & SS & SD & DOAJ & EPMC & OA & BASE & CORE -->|Paper list| Dedup{Deduplicate\nby DOI}
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer Nature] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS]
+    arXiv & SS & SD & SP & DOAJ & EPMC & OA & BASE & CORE & ADS -->|Paper list| Dedup{Deduplicate\nby DOI}
     Dedup --> Cache[(SQLite\ncache)]
     Dedup --> Table[Rich table]
     Table -->|--download| DL[Downloader]
