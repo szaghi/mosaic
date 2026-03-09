@@ -14,7 +14,7 @@ Browser sessions (saved via `mosaic auth login`) are stored separately at `~/.co
 # Set your Unpaywall email (enables PDF fallback for any DOI)
 mosaic config --unpaywall-email you@example.com
 
-# Set an Elsevier API key (enables ScienceDirect source)
+# Set an Elsevier API key (enables ScienceDirect API search)
 mosaic config --elsevier-key YOUR_KEY
 
 # Set a Semantic Scholar API key (optional — higher rate limit)
@@ -67,8 +67,10 @@ api_key = ""
 
 [sources.sciencedirect]
 enabled = true
-# Required to use this source. Register free at https://dev.elsevier.com
-# Without an institutional token, only open-access content is returned.
+# Optional. Register free at https://dev.elsevier.com
+# If omitted, MOSAIC falls back to a saved browser session for search
+# (see Authenticated Access). Without an institutional token the API
+# returns only open-access content.
 api_key = ""
 
 [sources.doaj]
@@ -91,9 +93,24 @@ api_key = ""
 
 ## Source credentials
 
-### ScienceDirect (Elsevier) — API key required
+### ScienceDirect (Elsevier)
 
-ScienceDirect is **disabled** until an Elsevier API key is set. Without it MOSAIC simply skips the source.
+MOSAIC supports two access modes for ScienceDirect. The active mode is chosen
+automatically based on what credentials you have configured:
+
+| Credentials | Search | PDF download |
+|---|---|---|
+| **Elsevier API key** (recommended) | ✅ Full API search | ✅ via Unpaywall / direct URL |
+| **Browser session** (institutional login) | ✅ Browser-based search | ⚠️ Blocked by Cloudflare on PDF endpoint |
+| **Neither** | — source skipped — | — |
+
+::: tip Which mode is right for me?
+- Use the **API key** if you primarily want reliable, scriptable access to metadata and open-access PDFs.
+- Use the **browser session** if you have institutional credentials but no API key — you still get full search results for subscribed content. PDF download via the session is limited (see note below).
+- Both can coexist: if an API key is set it always takes priority; the browser session is the fallback.
+:::
+
+#### API key setup
 
 **Step 1 — create an Elsevier developer account:**
 
@@ -103,11 +120,9 @@ ScienceDirect is **disabled** until an Elsevier API key is set. Without it MOSAI
 
 **Step 2 — create an API key:**
 
-1. Once logged in, click your name in the top-right corner → **Manage API Keys** (or go directly to [dev.elsevier.com/apikey/manage](https://dev.elsevier.com/apikey/manage))
-2. Click **Create API Key**
-3. Enter a label (e.g. `MOSAIC`) and optionally a website URL (can be left blank)
-4. Click **Submit** — the key appears immediately in your key list
-5. Copy the key string (a 32-character hex string)
+1. Once logged in, click your name → **Manage API Keys** (or go to [dev.elsevier.com/apikey/manage](https://dev.elsevier.com/apikey/manage))
+2. Click **Create API Key**, enter a label (e.g. `MOSAIC`), click **Submit**
+3. Copy the 32-character hex key
 
 **Step 3 — add the key to MOSAIC:**
 
@@ -119,8 +134,39 @@ Newly created Elsevier API keys can take up to **15 minutes** to activate. If yo
 mosaic config --elsevier-key YOUR_KEY
 ```
 
-::: tip Institutional access
-Without an institutional token, only open-access articles are returned. For full-text access to subscribed content, your institution's library must request an **Institution Token** from Elsevier. Running MOSAIC from campus or via your institution's VPN grants the same access as a browser login through IP-based authentication — no extra config needed.
+::: tip Institutional access via API
+Without an institutional token, the API returns only open-access articles. For subscribed content, your institution's library must request an **Institution Token** from Elsevier. Running MOSAIC from campus or via your institution's VPN activates IP-based authentication automatically — no extra config needed.
+:::
+
+#### Browser session setup
+
+If you have institutional credentials but no API key, save a browser session
+instead. See [Authenticated Access](./authenticated-access) for the general
+workflow. The ScienceDirect-specific steps are:
+
+```bash
+mosaic auth login elsevier --url https://www.sciencedirect.com
+```
+
+In the browser window, complete the full institutional SSO flow until
+ScienceDirect shows your name or a "Sign out" link, then press **Enter** in
+the terminal.
+
+::: warning Use Firefox for ScienceDirect
+MOSAIC uses Firefox for both login and headless search by default. The
+Cloudflare session cookie (`cf_clearance`) is bound to the browser's TLS
+fingerprint — mixing browsers (e.g. logging in with Chromium then searching
+with Firefox) causes the session to be rejected. If Firefox is not installed,
+run `playwright install firefox`.
+:::
+
+::: info PDF download limitation
+ScienceDirect's PDF download endpoint (`/pdfft/`) applies stricter Cloudflare
+Bot Management rules than article pages. Even with a valid institutional
+session the download is blocked by Cloudflare regardless of credentials. The
+browser session therefore enables **search only**; PDF retrieval falls back to
+Unpaywall (open-access copies). For reliable PDF access to subscribed content,
+use the API key with an institutional IP or VPN.
 :::
 
 ### CORE — free API key required

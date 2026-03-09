@@ -46,11 +46,18 @@ def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str
     landing_url = paper.url or (f"https://doi.org/{paper.doi}" if paper.doi else None)
     if landing_url:
         try:
-            from mosaic.auth import find_session_for_url, browser_download
+            from mosaic.auth import find_session_for_url, browser_download, list_sessions
             import asyncio
-            session = find_session_for_url(landing_url)
-            if session:
-                ok = asyncio.run(browser_download(landing_url, str(dest), session))
+            # Resolve HTTP redirects so domain matching works for known publisher
+            # URLs. For doi.org → linkinghub → sciencedirect chains the final JS
+            # redirect is only followable by a real browser, so when direct
+            # matching still fails we fall back to trying every saved session —
+            # the browser will follow the full chain including JS redirects.
+            resolved_url = _resolve_redirect(landing_url)
+            session = find_session_for_url(resolved_url)
+            sessions_to_try = [session] if session else [s["name"] for s in list_sessions()]
+            for s in sessions_to_try:
+                ok = asyncio.run(browser_download(resolved_url, str(dest), s))
                 if ok:
                     cache.set_download(paper.uid, str(dest), "ok")
                     return str(dest)
@@ -59,6 +66,16 @@ def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str
 
     cache.set_download(paper.uid, "", "error: no pdf found")
     return None
+
+
+def _resolve_redirect(url: str) -> str:
+    """Follow HTTP redirects and return the final URL (e.g. doi.org → publisher)."""
+    try:
+        with httpx.Client(follow_redirects=True, timeout=10) as client:
+            r = client.head(url)
+            return str(r.url)
+    except Exception:
+        return url
 
 
 def _fetch(url: str, dest: str) -> None:

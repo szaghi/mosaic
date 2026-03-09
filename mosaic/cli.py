@@ -16,6 +16,7 @@ from mosaic.search import search_all
 from mosaic.downloader import download as dl_paper
 from mosaic.sources import (
     ArxivSource, SemanticScholarSource, ScienceDirectSource,
+    ScienceDirectBrowserSource,
     DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
     CustomSource,
 )
@@ -58,6 +59,10 @@ def _build_sources(cfg: dict) -> list:
         api_key = src_cfg.get("sciencedirect", {}).get("api_key", "")
         if api_key:
             sources.append(ScienceDirectSource(api_key=api_key, open_access_only=True))
+        else:
+            browser_src = ScienceDirectBrowserSource()
+            if browser_src.available():
+                sources.append(browser_src)
     if src_cfg.get("doaj", {}).get("enabled", True):
         sources.append(DoajSource())
     if src_cfg.get("europepmc", {}).get("enabled", True):
@@ -104,10 +109,14 @@ def search(
         "oa": "OpenAlex", "base": "BASE", "core": "CORE",
     }
     if source:
-        name = _src_map.get(source.lower(), source)
+        key = source.lower()
+        if key not in _src_map:
+            rprint(f"[red]Unknown source '{source}'. Use: {', '.join(_src_map.keys())}[/red]")
+            raise typer.Exit(1)
+        name = _src_map[key]
         sources = [s for s in sources if s.name == name]
         if not sources:
-            rprint(f"[red]Unknown source '{source}'. Use: {', '.join(_src_map.keys())}[/red]")
+            rprint(f"[yellow]Source '{source}' is not active (missing API key or disabled in config).[/yellow]")
             raise typer.Exit(1)
 
     if field not in ("all", "title", "abstract"):

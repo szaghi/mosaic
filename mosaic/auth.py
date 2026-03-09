@@ -102,13 +102,19 @@ def find_session_for_url(url: str) -> str | None:
 
 # ── browser helpers ───────────────────────────────────────────────────────────
 
-_BROWSER_PREFERENCE = ("chromium", "firefox", "webkit")
+# Firefox is preferred for both headed and headless operations: its TLS
+# fingerprint passes Cloudflare Bot Management where headless Chromium is
+# blocked, and using the same browser for login and headless reuse ensures
+# the cf_clearance cookie (which is fingerprint-bound) remains valid.
+_BROWSER_PREFERENCE = ("firefox", "chromium", "webkit")
+_HEADLESS_PREFERENCE = ("firefox", "chromium", "webkit")
 
 
 async def _launch_browser(p, *, headless: bool = False):
     """Try browsers in order and return the first one that launches successfully."""
     from rich import print as rprint
-    for name in _BROWSER_PREFERENCE:
+    order = _HEADLESS_PREFERENCE if headless else _BROWSER_PREFERENCE
+    for name in order:
         try:
             browser = await getattr(p, name).launch(headless=headless)
             if not headless:
