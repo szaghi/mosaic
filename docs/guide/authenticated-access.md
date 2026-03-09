@@ -76,20 +76,24 @@ publishers that use standard cookie-based session management.
 
 | Publisher | Search | PDF download | Notes |
 |---|---|---|---|
-| **Springer Nature** | — | ✅ | Reliable with institutional SSO |
+| **Springer Nature** | ✅ | ✅ | Search is public (no login needed); session used for PDF download of subscribed content |
 | **Wiley** | — | ✅ | Standard cookie session |
 | **Taylor & Francis** | — | ✅ | Standard cookie session |
 | **Cambridge University Press** | — | ✅ | Standard cookie session |
-| **ScienceDirect (Elsevier)** | ✅ | ⚠️ | Search works via browser session. PDF download blocked by Cloudflare on the `/pdfft/` endpoint regardless of credentials — falls back to Unpaywall. See [ScienceDirect notes](#sciencedirect-elsevier) below. |
+| **ScienceDirect (Elsevier)** | ✅ | ⚠️ | Search works via browser session. PDF download blocked by Cloudflare on the `/pdfft/` endpoint — falls back to Unpaywall. See [ScienceDirect notes](#sciencedirect-elsevier) below. |
 
-::: info Springer, Wiley, Taylor & Francis, Cambridge
+::: info Wiley, Taylor & Francis, Cambridge
 These publishers do not yet have a dedicated browser-based search source.
 The saved session is used only for PDF downloading of papers found via other
-sources (arXiv, Semantic Scholar, OpenAlex, etc.).
+sources (arXiv, Semantic Scholar, OpenAlex, Springer, etc.).
 :::
 
-::: tip Springer login URL
-Use `https://link.springer.com` (the homepage), not `/login`. Click
+::: tip Springer Nature
+Springer search works **without** a saved session — the search interface is
+publicly accessible and MOSAIC uses headless Firefox automatically. A session
+is only needed to download PDFs of subscribed articles.
+
+Login URL: `https://link.springer.com` (homepage). Click
 **Log in → Log in via Institution** from there.
 :::
 

@@ -4,19 +4,20 @@ title: Sources
 
 # Sources
 
-MOSAIC aggregates results from five bibliographic databases plus one PDF resolver.
+MOSAIC aggregates results from multiple bibliographic databases plus one PDF resolver.
 
 ```mermaid
 flowchart TD
     Q([Your query]) --> A[arXiv]
     Q --> B[Semantic Scholar]
     Q --> C[ScienceDirect]
+    Q --> SP[Springer Nature]
     Q --> D[DOAJ]
     Q --> E[Europe PMC]
     Q --> F[OpenAlex]
     Q --> G[BASE]
     Q --> H[CORE]
-    A & B & C & D & E & F & G & H --> I{Deduplicate\nby DOI}
+    A & B & C & SP & D & E & F & G & H --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -60,21 +61,52 @@ To obtain a key, go to [semanticscholar.org/product/api](https://www.semanticsch
 
 | Property | Value |
 |----------|-------|
-| Auth | API key required |
+| Auth | API key **or** saved browser session |
 | Content | Elsevier journals and books |
-| PDF | Open-access articles only (by default) |
-| Rate limit | 20 000–50 000 req/week, 2–10 req/s |
-| Base URL | `https://api.elsevier.com/content/search/sciencedirect` |
+| PDF | Open-access articles (API mode); Unpaywall fallback (browser mode) |
+| Rate limit | 20 000–50 000 req/week, 2–10 req/s (API) · browser-paced (session) |
+| Base URL | `https://api.elsevier.com/content/search/sciencedirect` (API) · `https://www.sciencedirect.com/search` (browser) |
 
-::: warning API key required
-ScienceDirect is disabled until you set an Elsevier API key:
-```bash
-mosaic config --elsevier-key YOUR_KEY
-```
-Register free at [dev.elsevier.com](https://dev.elsevier.com) (academic/non-commercial use).
+MOSAIC selects the access mode automatically:
+
+- **API key configured** — uses the Elsevier Article Search API. Fast and reliable. By default only open-access content is returned; full-text access to subscribed content requires an institutional token or campus/VPN IP.
+- **Browser session saved, no API key** — uses headless Firefox to search `sciencedirect.com` with your institutional credentials. Returns results from subscribed content. PDF download via the session is blocked by Cloudflare on the `/pdfft/` endpoint; Unpaywall is used as fallback.
+- **Neither** — source is skipped entirely.
+
+::: tip Setup
+- API key: `mosaic config --elsevier-key YOUR_KEY` — register free at [dev.elsevier.com](https://dev.elsevier.com)
+- Browser session: see [Authenticated Access → ScienceDirect](./authenticated-access#sciencedirect-elsevier)
 :::
 
-By default MOSAIC filters `openAccess: true` so only freely downloadable papers are returned. Full-text access to subscribed content additionally requires an institutional token or a campus/VPN IP.
+## Springer Nature
+
+| Property | Value |
+|----------|-------|
+| Auth | None (publicly accessible) |
+| Content | Springer, Nature, and affiliated journals and book series |
+| PDF | Via Unpaywall or browser session (institutional access) |
+| Rate limit | Browser-paced — one page load per request |
+| Base URL | `https://link.springer.com/search` |
+
+Springer Nature's search results are fully JavaScript-rendered, so MOSAIC uses a headless Firefox browser to fetch them. No login or API key is needed — the search interface is publicly accessible.
+
+The source activates automatically whenever Playwright is installed (`pip install 'mosaic-search[browser]'`). It is disabled if the `[browser]` extra is not available.
+
+Supports `--field title` (searches the article title field natively), `--year`, `--max` (with automatic page-by-page navigation for `--max > 20`), and `--journal` (appended to the keyword query).
+
+DOIs are extracted directly from the article URLs in the search results.
+
+::: tip CLI shorthand
+```bash
+mosaic search "adaptive mesh refinement" --source sp --field title --year 2020-2025
+```
+:::
+
+::: info PDF access
+For open-access articles, Unpaywall resolves a direct PDF link. For
+subscribed content, a saved Springer browser session is used as a download
+fallback — see [Authenticated Access](./authenticated-access).
+:::
 
 ## DOAJ
 

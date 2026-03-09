@@ -16,7 +16,7 @@ from mosaic.search import search_all
 from mosaic.downloader import download as dl_paper
 from mosaic.sources import (
     ArxivSource, SemanticScholarSource, ScienceDirectSource,
-    ScienceDirectBrowserSource,
+    ScienceDirectBrowserSource, SpringerBrowserSource,
     DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
     CustomSource,
 )
@@ -73,6 +73,10 @@ def _build_sources(cfg: dict) -> list:
         sources.append(BASESource())
     if src_cfg.get("core", {}).get("enabled", True):
         sources.append(CORESource(api_key=src_cfg.get("core", {}).get("api_key", "")))
+    if src_cfg.get("springer", {}).get("enabled", True):
+        springer_src = SpringerBrowserSource()
+        if springer_src.available():
+            sources.append(springer_src)
     for custom_cfg in cfg.get("custom_sources", []):
         if custom_cfg.get("enabled", True):
             sources.append(CustomSource(custom_cfg))
@@ -86,7 +90,7 @@ def search(
     download: Annotated[bool, typer.Option("--download", "-d", help="Download available PDFs")] = False,
     oa_only: Annotated[bool, typer.Option("--oa-only", help="Show only open access papers")] = False,
     pdf_only: Annotated[bool, typer.Option("--pdf-only", help="Show only papers with a downloadable PDF")] = False,
-    source: Annotated[str, typer.Option("--source", "-s", help="Limit to one source (arxiv, ss, sd, doaj, epmc, oa, base, core)")] = "",
+    source: Annotated[str, typer.Option("--source", "-s", help="Limit to one source (arxiv, ss, sd, sp, doaj, epmc, oa, base, core)")] = "",
     year: Annotated[str, typer.Option("--year", "-y", help='Year filter: "2020", "2020-2024", or "2020,2022,2024"')] = "",
     author: Annotated[list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")] = [],
     journal: Annotated[str, typer.Option("--journal", "-j", help="Journal name filter (substring match)")] = "",
@@ -107,6 +111,7 @@ def search(
         "arxiv": "arXiv", "ss": "Semantic Scholar",
         "sd": "ScienceDirect", "doaj": "DOAJ", "epmc": "Europe PMC",
         "oa": "OpenAlex", "base": "BASE", "core": "CORE",
+        "sp": "Springer",
     }
     if source:
         key = source.lower()

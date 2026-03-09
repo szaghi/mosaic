@@ -47,16 +47,17 @@ mosaic search [OPTIONS] QUERY
 
 **Source shorthands for `--source`:**
 
-| Shorthand | Source |
-|-----------|--------|
-| `arxiv` | arXiv |
-| `ss` | Semantic Scholar |
-| `sd` | ScienceDirect |
-| `doaj` | DOAJ |
-| `epmc` | Europe PMC |
-| `oa` | OpenAlex |
-| `base` | BASE |
-| `core` | CORE |
+| Shorthand | Source | Requires |
+|-----------|--------|----------|
+| `arxiv` | arXiv | — |
+| `ss` | Semantic Scholar | — (API key optional) |
+| `sd` | ScienceDirect | API key or browser session |
+| `sp` | Springer Nature | Playwright (`[browser]` extra) |
+| `doaj` | DOAJ | — |
+| `epmc` | Europe PMC | — |
+| `oa` | OpenAlex | — (email optional) |
+| `base` | BASE | — |
+| `core` | CORE | Free API key |
 
 **`--year` / `-y` formats:**
 
