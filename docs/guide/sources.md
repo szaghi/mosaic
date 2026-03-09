@@ -17,7 +17,8 @@ flowchart TD
     Q --> F[OpenAlex]
     Q --> G[BASE]
     Q --> H[CORE]
-    A & B & C & SP & D & E & F & G & H --> I{Deduplicate\nby DOI}
+    Q --> N[NASA ADS]
+    A & B & C & SP & D & E & F & G & H & N --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -201,6 +202,40 @@ Register for a free key at [core.ac.uk/services/api](https://core.ac.uk/services
 ::: tip CLI shorthand
 ```bash
 mosaic search "open access publishing" --source core
+```
+:::
+
+## NASA ADS (Astrophysics Data System)
+
+| Property | Value |
+|----------|-------|
+| Auth | API key required (free — register at [ui.adsabs.harvard.edu](https://ui.adsabs.harvard.edu/user/settings/token)) |
+| Content | 15 million+ records in astronomy, astrophysics, planetary science, physics, and geosciences |
+| PDF | Via bibcode gateway link for open-access articles |
+| Rate limit | 5 000 req/day |
+| Base URL | `https://api.adsabs.harvard.edu/v1/search/query` |
+
+NASA ADS is the definitive database for astronomy and astrophysics literature, operated by the Smithsonian Astrophysical Observatory under a NASA grant. It covers journal articles, conference proceedings, preprints, and grey literature with strong links to arXiv copies.
+
+Open-access articles include a PDF URL constructed from the ADS bibcode (`link_gateway`). ArXiv IDs are extracted from the `identifier` field when present.
+
+::: warning API key required
+NASA ADS is disabled until you set an API token. Registration is free:
+
+1. Sign in at [ui.adsabs.harvard.edu](https://ui.adsabs.harvard.edu)
+2. Go to **Settings → API Token** and generate a token
+3. Add it to the config file:
+
+```toml
+# ~/.config/mosaic/config.toml
+[sources.nasa_ads]
+api_key = "YOUR_TOKEN"
+```
+:::
+
+::: tip CLI shorthand
+```bash
+mosaic search "gravitational waves" --source ads
 ```
 :::
 

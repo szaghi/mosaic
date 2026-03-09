@@ -726,6 +726,67 @@ class TestCORESource:
         assert params["q"] == "title:transformers AND authors.name:Vaswani"
 
 
+_NASA_ADS_JSON = {
+    "response": {
+        "numFound": 1,
+        "docs": [{
+            "title": ["Gravitational Wave Detection with LIGO"],
+            "author": ["Abbott, B. P.", "Abbott, R."],
+            "year": "2016",
+            "doi": ["10.1103/PhysRevLett.116.061102"],
+            "abstract": "We report the observation of gravitational waves.",
+            "bibcode": "2016PhRvL.116f1102A",
+            "identifier": ["arXiv:1602.03837", "2016PhRvL.116f1102A"],
+            "pub": "Physical Review Letters",
+            "property": ["OPENACCESS", "REFEREED"],
+        }]
+    }
+}
+
+
+# ── NASA ADS ──────────────────────────────────────────────────────────────────
+
+class TestNASAADSSource:
+    def _source(self, api_key="test-token"):
+        from mosaic.sources.nasa_ads import NASAADSSource
+        return NASAADSSource(api_key=api_key)
+
+    def test_unavailable_without_api_key(self):
+        from mosaic.sources.nasa_ads import NASAADSSource
+        assert not NASAADSSource(api_key="").available()
+
+    def test_available_with_api_key(self):
+        assert self._source().available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_NASA_ADS_JSON)):
+            papers = self._source().search("gravitational waves")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Gravitational Wave Detection with LIGO"
+        assert "Abbott, B. P." in p.authors
+        assert p.year == 2016
+        assert p.doi == "10.1103/PhysRevLett.116.061102"
+        assert p.abstract == "We report the observation of gravitational waves."
+        assert p.url == "https://ui.adsabs.harvard.edu/abs/2016PhRvL.116f1102A"
+        assert p.is_open_access is True
+        assert p.pdf_url == "https://ui.adsabs.harvard.edu/link_gateway/2016PhRvL.116f1102A/PUB_PDF"
+
+    def test_field_title_uses_title_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("gravitational waves", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].startswith("title:")
+
+    def test_year_filter_appended(self):
+        f = SearchFilters(year_from=2015, year_to=2020)
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("black holes", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "year:2015-2020" in params["q"]
+
+
 # ── Unpaywall ─────────────────────────────────────────────────────────────────
 
 class TestUnpaywall:

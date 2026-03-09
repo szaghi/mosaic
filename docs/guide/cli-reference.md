@@ -58,6 +58,7 @@ mosaic search [OPTIONS] QUERY
 | `oa` | OpenAlex | — (email optional) |
 | `base` | BASE | — |
 | `core` | CORE | Free API key |
+| `ads` | NASA ADS | Free API token |
 
 **`--year` / `-y` formats:**
 
@@ -90,6 +91,7 @@ Each filter is applied at the **source API level** where supported, then as a **
 | OpenAlex | ✓ native | post-process | post-process |
 | BASE | ✓ native | ✓ native | ✓ native |
 | CORE | ✓ native | ✓ native | ✓ native |
+| NASA ADS | ✓ native | post-process | post-process |
 
 **`--field` / `-f` behaviour:**
 - `all` (default): query is sent as a general full-text search to each source

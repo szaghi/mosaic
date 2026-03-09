@@ -94,6 +94,11 @@ enabled = true
 enabled = true
 # Required. Register free at https://core.ac.uk/services/api
 api_key = ""
+
+[sources.nasa_ads]
+enabled = true
+# Required. Register free at https://ui.adsabs.harvard.edu/user/settings/token
+api_key = ""
 ```
 
 ## Source credentials
