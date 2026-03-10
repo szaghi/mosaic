@@ -19,7 +19,7 @@ from mosaic.sources import (
     ScienceDirectBrowserSource, SpringerBrowserSource,
     DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
     NASAADSSource, IEEEXploreSource, ZenodoSource, CrossrefSource,
-    SpringerAPISource, CustomSource, DBLPSource, HALSource,
+    SpringerAPISource, CustomSource, DBLPSource, HALSource, PubMedSource,
 )
 
 def _version_callback(value: bool) -> None:
@@ -88,6 +88,8 @@ def _build_sources(cfg: dict) -> list:
         sources.append(DBLPSource())
     if src_cfg.get("hal", {}).get("enabled", True):
         sources.append(HALSource())
+    if src_cfg.get("pubmed", {}).get("enabled", True):
+        sources.append(PubMedSource(api_key=src_cfg.get("pubmed", {}).get("api_key", "")))
     if src_cfg.get("springer", {}).get("enabled", True):
         springer_src = SpringerBrowserSource()
         if springer_src.available():
@@ -131,7 +133,7 @@ def search(
         "sp": "Springer", "springer": "Springer Nature",
         "ads": "NASA ADS", "ieee": "IEEE Xplore",
         "zenodo": "Zenodo", "crossref": "Crossref",
-        "dblp": "DBLP", "hal": "HAL",
+        "dblp": "DBLP", "hal": "HAL", "pubmed": "PubMed",
     }
     if source:
         key = source.lower()
@@ -313,6 +315,7 @@ def config(
     show: Annotated[bool, typer.Option("--show", help="Print current config")] = False,
     elsevier_key: Annotated[str, typer.Option(help="Set Elsevier API key")] = "",
     ss_key: Annotated[str, typer.Option(help="Set Semantic Scholar API key")] = "",
+    ncbi_key: Annotated[str, typer.Option(help="Set NCBI/PubMed API key")] = "",
     unpaywall_email: Annotated[str, typer.Option(help="Set Unpaywall email")] = "",
     download_dir: Annotated[str, typer.Option(help="Set download directory")] = "",
     filename_pattern: Annotated[str, typer.Option(help="Set PDF filename pattern (placeholders: {year}, {source}, {author}, {title}, {doi})")] = "",
@@ -324,6 +327,8 @@ def config(
         cfg["sources"]["sciencedirect"]["api_key"] = elsevier_key
     if ss_key:
         cfg["sources"]["semantic_scholar"]["api_key"] = ss_key
+    if ncbi_key:
+        cfg["sources"]["pubmed"]["api_key"] = ncbi_key
     if unpaywall_email:
         cfg["unpaywall"]["email"] = unpaywall_email
     if download_dir:
@@ -331,7 +336,7 @@ def config(
     if filename_pattern:
         cfg["filename_pattern"] = filename_pattern
 
-    if any([elsevier_key, ss_key, unpaywall_email, download_dir, filename_pattern]):
+    if any([elsevier_key, ss_key, ncbi_key, unpaywall_email, download_dir, filename_pattern]):
         cfg_mod.save(cfg)
         rprint(f"[green]Config saved to[/green] ~/.config/mosaic/config.toml")
 

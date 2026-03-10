@@ -55,6 +55,7 @@ mosaic search "drug discovery" --source ss
 | `sd`      | ScienceDirect |
 | `doaj`    | DOAJ |
 | `epmc`    | Europe PMC |
+| `pubmed`  | PubMed |
 
 ## Download PDFs
 

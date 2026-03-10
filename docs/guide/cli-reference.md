@@ -67,6 +67,7 @@ mosaic search [OPTIONS] QUERY
 | `crossref` | Crossref | — (email optional) |
 | `dblp` | DBLP | — |
 | `hal` | HAL | — |
+| `pubmed` | PubMed | — (API key optional) |
 
 **`--year` / `-y` formats:**
 
@@ -246,6 +247,7 @@ mosaic config [OPTIONS]
 | `--show` | flag | Print current config as JSON |
 | `--elsevier-key TEXT` | str | Set Elsevier/ScienceDirect API key |
 | `--ss-key TEXT` | str | Set Semantic Scholar API key |
+| `--ncbi-key TEXT` | str | Set NCBI/PubMed API key |
 | `--unpaywall-email TEXT` | str | Set Unpaywall email |
 | `--download-dir TEXT` | str | Set PDF download directory |
 | `--filename-pattern TEXT` | str | Set PDF filename pattern (see below) |

@@ -1271,3 +1271,170 @@ class TestUnpaywall:
         m.json.side_effect = Exception("not found")
         with patch("httpx.get", return_value=m):
             assert resolve("10.1/x", "test@example.com") is None
+
+# ── PubMed ────────────────────────────────────────────────────────────────────
+
+_PUBMED_ESEARCH = {
+    "esearchresult": {
+        "idlist": ["38123456", "37654321"],
+    }
+}
+
+_PUBMED_ESUMMARY = {
+    "result": {
+        "uids": ["38123456", "37654321"],
+        "38123456": {
+            "uid": "38123456",
+            "title": "CRISPR-Cas9 gene editing in human cells",
+            "authors": [{"name": "Zhang F"}, {"name": "Doudna JA"}],
+            "pubdate": "2024 Jan 15",
+            "fulljournalname": "Nature Biotechnology",
+            "source": "Nat Biotechnol",
+            "volume": "42",
+            "issue": "1",
+            "pages": "10-20",
+            "articleids": [
+                {"idtype": "pubmed", "value": "38123456"},
+                {"idtype": "doi",    "value": "10.1038/s41587-024-test"},
+                {"idtype": "pmc",    "value": "PMC11111111"},
+            ],
+        },
+        "37654321": {
+            "uid": "37654321",
+            "title": "Off-target effects in CRISPR editing",
+            "authors": [{"name": "Kim H"}],
+            "pubdate": "2023 Mar",
+            "fulljournalname": "Cell",
+            "source": "Cell",
+            "volume": "186",
+            "issue": "5",
+            "pages": "1000-1010",
+            "articleids": [
+                {"idtype": "pubmed", "value": "37654321"},
+                {"idtype": "doi",    "value": "10.1016/j.cell.2023.test"},
+            ],
+        },
+    }
+}
+
+
+class TestPubMedSource:
+    def _source(self, api_key=""):
+        from mosaic.sources.pubmed import PubMedSource
+        return PubMedSource(api_key=api_key)
+
+    def _mock_two_step(self, esearch=_PUBMED_ESEARCH, esummary=_PUBMED_ESUMMARY):
+        """Return a side_effect list for the two httpx.get calls."""
+        return [
+            _mock_get(json_data=esearch),
+            _mock_get(json_data=esummary),
+        ]
+
+    def test_always_available(self):
+        assert self._source().available()
+        assert self._source(api_key="key").available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", side_effect=self._mock_two_step()):
+            papers = self._source().search("CRISPR")
+        assert len(papers) == 2
+        p = papers[0]
+        assert p.title == "CRISPR-Cas9 gene editing in human cells"
+        assert "Zhang F" in p.authors
+        assert p.year == 2024
+        assert p.doi == "10.1038/s41587-024-test"
+        assert p.journal == "Nature Biotechnology"
+        assert p.volume == "42"
+        assert p.issue == "1"
+        assert p.pages == "10-20"
+        assert p.source == "PubMed"
+
+    def test_pmc_article_is_open_access_with_pdf_url(self):
+        with patch("httpx.get", side_effect=self._mock_two_step()):
+            papers = self._source().search("CRISPR")
+        p = papers[0]  # has PMC ID
+        assert p.is_open_access is True
+        assert p.pdf_url is not None
+        assert "PMC11111111" in p.pdf_url
+
+    def test_no_pmc_article_not_open_access(self):
+        with patch("httpx.get", side_effect=self._mock_two_step()):
+            papers = self._source().search("CRISPR")
+        p = papers[1]  # no PMC ID
+        assert p.is_open_access is False
+        assert p.pdf_url is None
+
+    def test_url_points_to_pubmed(self):
+        with patch("httpx.get", side_effect=self._mock_two_step()):
+            papers = self._source().search("CRISPR")
+        assert "38123456" in papers[0].url
+
+    def test_empty_idlist_returns_empty(self):
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)):
+            papers = self._source().search("nothing")
+        assert papers == []
+
+    def test_year_filter_appended_to_query(self):
+        f = SearchFilters(year_from=2020, year_to=2024)
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("CRISPR", filters=f)
+        term = mock.call_args.kwargs["params"]["term"]
+        assert "pdat" in term
+        assert "2020" in term
+        assert "2024" in term
+
+    def test_author_filter_appended_to_query(self):
+        f = SearchFilters(authors=["Doudna"])
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("CRISPR", filters=f)
+        term = mock.call_args.kwargs["params"]["term"]
+        assert '"Doudna"[au]' in term
+
+    def test_journal_filter_appended_to_query(self):
+        f = SearchFilters(journal="Nature")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("CRISPR", filters=f)
+        term = mock.call_args.kwargs["params"]["term"]
+        assert '"Nature"[ta]' in term
+
+    def test_field_title_uses_ti_tag(self):
+        f = SearchFilters(field="title")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("gene editing", filters=f)
+        term = mock.call_args.kwargs["params"]["term"]
+        assert term == "gene editing[ti]"
+
+    def test_field_abstract_uses_ab_tag(self):
+        f = SearchFilters(field="abstract")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("gene editing", filters=f)
+        term = mock.call_args.kwargs["params"]["term"]
+        assert term == "gene editing[ab]"
+
+    def test_raw_query_overrides_term(self):
+        f = SearchFilters(raw_query="CRISPR[ti] AND Doudna[au]")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("anything", filters=f)
+        term = mock.call_args.kwargs["params"]["term"]
+        assert term == "CRISPR[ti] AND Doudna[au]"
+
+    def test_api_key_sent_in_params(self):
+        src = self._source(api_key="mykey")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            src.search("CRISPR")
+        params = mock.call_args.kwargs["params"]
+        assert params.get("api_key") == "mykey"
+
+    def test_max_results_capped_at_200(self):
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("q", max_results=500)
+        assert mock.call_args.kwargs["params"]["retmax"] == 200

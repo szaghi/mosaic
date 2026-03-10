@@ -24,7 +24,8 @@ flowchart TD
     Q --> CR[Crossref]
     Q --> DBLP[DBLP]
     Q --> HAL[HAL]
-    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL --> I{Deduplicate\nby DOI}
+    Q --> PM[PubMed]
+    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -411,6 +412,40 @@ DBLP does not expose abstracts through its search API. The `abstract` field is a
 ::: tip CLI shorthand
 ```bash
 mosaic search "graph neural networks" --source dblp --field title --year 2020-2024
+```
+:::
+
+## PubMed
+
+| Property | Value |
+|----------|-------|
+| Auth | None (API key optional for higher rate limits) |
+| Content | 35 M+ biomedical citations indexed by NCBI |
+| PDF | PMC PDF URL for articles with a PubMed Central ID |
+| Rate limit | 3 req/s (no key) · 10 req/s (with key) |
+| Base URL | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/` |
+
+PubMed is the primary index for biomedical and life-science literature, operated by the National Center for Biotechnology Information (NCBI). It covers MEDLINE journals, PubMed Central full-text articles, and selected life-science books. Two E-utilities calls are made per search: `esearch` to retrieve PMIDs, then `esummary` to fetch metadata. Articles deposited in PubMed Central (PMC) are open access and include a direct PDF link.
+
+::: info No abstracts in esummary
+The E-utilities `esummary` endpoint does not return abstract text. For biomedical abstracts, combine PubMed with Europe PMC — results are automatically merged by DOI.
+:::
+
+::: tip Optional API key
+NCBI allows 3 requests/s without a key. A free API key raises this to 10 req/s — recommended for large searches:
+
+1. Create an NCBI account at [ncbi.nlm.nih.gov](https://www.ncbi.nlm.nih.gov)
+2. Go to **Settings → API Key Management** and generate a key
+3. Apply it with:
+
+```bash
+mosaic config --ncbi-key YOUR_KEY
+```
+:::
+
+::: tip CLI shorthand
+```bash
+mosaic search "CRISPR gene editing" --source pubmed --year 2020-2024
 ```
 :::
 

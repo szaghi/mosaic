@@ -28,6 +28,7 @@ _DEFAULTS: dict = {
         "crossref": {"enabled": True},
         "dblp": {"enabled": True},
         "hal": {"enabled": True},
+        "pubmed": {"enabled": True, "api_key": ""},
     },
     "unpaywall": {"email": ""},
     "custom_sources": [],
