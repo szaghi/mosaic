@@ -24,6 +24,7 @@ export default withMermaid({
           { text: 'Authenticated Access', link: '/guide/authenticated-access' },
           { text: 'NotebookLM',          link: '/guide/notebooklm' },
           { text: 'Zotero Integration',  link: '/guide/zotero' },
+          { text: 'Web UI',             link: '/guide/web-ui' },
           { text: 'CLI Reference', link: '/guide/cli-reference' },
           { text: 'Changelog',     link: '/guide/changelog' },
           { text: 'Contributing',  link: '/guide/contributing' },
@@ -50,6 +51,7 @@ export default withMermaid({
             { text: 'Authenticated Access', link: '/guide/authenticated-access' },
             { text: 'NotebookLM',          link: '/guide/notebooklm' },
             { text: 'Zotero Integration',  link: '/guide/zotero' },
+            { text: 'Web UI',              link: '/guide/web-ui' },
           ],
         },
         {

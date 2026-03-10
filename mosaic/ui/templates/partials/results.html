@@ -1,0 +1,102 @@
+{% if seed_title is defined and seed_title %}
+<p><strong>Similar to:</strong> {{ seed_title }}</p>
+{% endif %}
+
+{% for err in errors %}
+<article>&#9888; {{ err }}</article>
+{% endfor %}
+
+{% if stats and stats.get('per_source') %}
+<p class="stats-line">
+  {{ stats.get('raw_total', 0) }} raw results from {{ stats['per_source'] | length }} source(s)
+  &rarr; {{ stats.get('unique', 0) }} unique
+  {% if stats.get('merged', 0) %}({{ stats['merged'] }} merged){% endif %}
+  {% if stats.get('after_filters') is not none %}&rarr; {{ stats['after_filters'] }} after filters{% endif %}
+</p>
+{% endif %}
+
+{% if papers %}
+{% if job_id is defined and job_id %}
+<div class="export-bar">
+  <strong>Export:</strong>
+  <a href="{{ url_for('ui.export_results', job_id=job_id, format='csv') }}" role="button" class="outline secondary">CSV</a>
+  <a href="{{ url_for('ui.export_results', job_id=job_id, format='json') }}" role="button" class="outline secondary">JSON</a>
+  <a href="{{ url_for('ui.export_results', job_id=job_id, format='bib') }}" role="button" class="outline secondary">BibTeX</a>
+  <a href="{{ url_for('ui.export_results', job_id=job_id, format='md') }}" role="button" class="outline secondary">Markdown</a>
+</div>
+{% endif %}
+
+{% set has_citations = papers | selectattr('citation_count') | list %}
+<figure>
+<table role="grid" id="results-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Title</th>
+      <th>Authors</th>
+      <th>Year</th>
+      <th>Source</th>
+      <th>OA</th>
+      <th>PDF</th>
+      {% if has_citations %}<th>Cited</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in papers %}
+    <tr class="result-row">
+      <td>{{ loop.index }}</td>
+      <td><a href="{{ url_for('ui.paper_detail', uid=p.uid) }}">{{ p.title[:80] }}{% if p.title | length > 80 %}&hellip;{% endif %}</a></td>
+      <td>{{ p.short_authors }}</td>
+      <td>{% if p.year %}{{ p.year }}{% else %}&ndash;{% endif %}</td>
+      <td>{{ p.source }}</td>
+      <td>{% if p.is_open_access %}<span class="badge-oa">&#10003;</span>{% else %}<span class="badge-closed">&ndash;</span>{% endif %}</td>
+      <td>{% if p.pdf_url %}<span class="badge-oa">&#10003;</span>{% else %}&ndash;{% endif %}</td>
+      {% if has_citations %}
+      <td>{% if p.citation_count is not none %}{{ p.citation_count }}{% else %}&ndash;{% endif %}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</figure>
+
+{% if papers | length > 25 %}
+<nav id="pagination" style="display:flex;gap:.5rem;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:1rem;">
+</nav>
+<script>
+(function(){
+  var PER_PAGE = 25;
+  var rows = document.querySelectorAll("#results-table .result-row");
+  var total = rows.length;
+  if (total <= PER_PAGE) return;
+  var pages = Math.ceil(total / PER_PAGE);
+  var nav = document.getElementById("pagination");
+
+  function show(page) {
+    rows.forEach(function(r, i) {
+      r.style.display = (i >= (page-1)*PER_PAGE && i < page*PER_PAGE) ? "" : "none";
+    });
+    nav.innerHTML = "";
+    for (var p = 1; p <= pages; p++) {
+      var btn = document.createElement("a");
+      btn.href = "#";
+      btn.role = "button";
+      btn.className = p === page ? "outline" : "outline secondary";
+      btn.textContent = p;
+      btn.dataset.page = p;
+      btn.style.padding = ".2rem .6rem";
+      btn.style.fontSize = ".85em";
+      btn.onclick = function(e) { e.preventDefault(); show(parseInt(this.dataset.page)); };
+      nav.appendChild(btn);
+    }
+  }
+  show(1);
+})();
+</script>
+{% endif %}
+
+<p class="stats-line">{{ papers | length }} result(s)</p>
+
+{% elif not errors %}
+<p>No results found.</p>
+{% endif %}

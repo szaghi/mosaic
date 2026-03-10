@@ -14,13 +14,7 @@ from mosaic.db import Cache
 from mosaic.models import SearchFilters
 from mosaic.search import search_all
 from mosaic.downloader import download as dl_paper
-from mosaic.sources import (
-    ArxivSource, SemanticScholarSource, ScienceDirectSource,
-    ScienceDirectBrowserSource, SpringerBrowserSource,
-    BioRxivSource, DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
-    NASAADSSource, IEEEXploreSource, ZenodoSource, CrossrefSource,
-    SpringerAPISource, CustomSource, DBLPSource, HALSource, PubMedSource, PMCSource,
-)
+from mosaic.helpers import build_sources, SRC_MAP
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -47,61 +41,6 @@ def main(
 console = Console()
 
 
-def _build_sources(cfg: dict) -> list:
-    src_cfg = cfg.get("sources", {})
-    sources = []
-    if src_cfg.get("arxiv", {}).get("enabled", True):
-        sources.append(ArxivSource(delay=cfg.get("rate_limit_delay", 3.0)))
-    if src_cfg.get("semantic_scholar", {}).get("enabled", True):
-        sources.append(SemanticScholarSource(
-            api_key=src_cfg.get("semantic_scholar", {}).get("api_key", "")
-        ))
-    if src_cfg.get("sciencedirect", {}).get("enabled", True):
-        api_key = src_cfg.get("sciencedirect", {}).get("api_key", "")
-        if api_key:
-            sources.append(ScienceDirectSource(api_key=api_key, open_access_only=True))
-        else:
-            browser_src = ScienceDirectBrowserSource()
-            if browser_src.available():
-                sources.append(browser_src)
-    if src_cfg.get("doaj", {}).get("enabled", True):
-        sources.append(DoajSource())
-    if src_cfg.get("europepmc", {}).get("enabled", True):
-        sources.append(EuropePMCSource())
-    if src_cfg.get("openalex", {}).get("enabled", True):
-        sources.append(OpenAlexSource(email=cfg.get("unpaywall", {}).get("email", "")))
-    if src_cfg.get("base", {}).get("enabled", True):
-        sources.append(BASESource())
-    if src_cfg.get("core", {}).get("enabled", True):
-        sources.append(CORESource(api_key=src_cfg.get("core", {}).get("api_key", "")))
-    if src_cfg.get("nasa_ads", {}).get("enabled", True):
-        sources.append(NASAADSSource(api_key=src_cfg.get("nasa_ads", {}).get("api_key", "")))
-    if src_cfg.get("ieee", {}).get("enabled", True):
-        sources.append(IEEEXploreSource(api_key=src_cfg.get("ieee", {}).get("api_key", "")))
-    if src_cfg.get("zenodo", {}).get("enabled", True):
-        sources.append(ZenodoSource(api_key=src_cfg.get("zenodo", {}).get("api_key", "")))
-    if src_cfg.get("crossref", {}).get("enabled", True):
-        sources.append(CrossrefSource(email=cfg.get("unpaywall", {}).get("email", "")))
-    if src_cfg.get("springer_api", {}).get("enabled", True):
-        sources.append(SpringerAPISource(api_key=src_cfg.get("springer_api", {}).get("api_key", "")))
-    if src_cfg.get("dblp", {}).get("enabled", True):
-        sources.append(DBLPSource())
-    if src_cfg.get("hal", {}).get("enabled", True):
-        sources.append(HALSource())
-    if src_cfg.get("pubmed", {}).get("enabled", True):
-        sources.append(PubMedSource(api_key=src_cfg.get("pubmed", {}).get("api_key", "")))
-    if src_cfg.get("pmc", {}).get("enabled", True):
-        sources.append(PMCSource(api_key=src_cfg.get("pmc", {}).get("api_key", "")))
-    if src_cfg.get("biorxiv", {}).get("enabled", True):
-        sources.append(BioRxivSource())
-    if src_cfg.get("springer", {}).get("enabled", True):
-        springer_src = SpringerBrowserSource()
-        if springer_src.available():
-            sources.append(springer_src)
-    for custom_cfg in cfg.get("custom_sources", []):
-        if custom_cfg.get("enabled", True):
-            sources.append(CustomSource(custom_cfg))
-    return sources
 
 
 @app.command()
@@ -130,25 +69,15 @@ def search(
     if download_dir:
         cfg["download_dir"] = download_dir
     cache = Cache(cfg["db_path"])
-    sources = _build_sources(cfg)
+    sources = build_sources(cfg)
 
     # filter by source shorthand
-    _src_map = {
-        "arxiv": "arXiv", "ss": "Semantic Scholar",
-        "sd": "ScienceDirect", "doaj": "DOAJ", "epmc": "Europe PMC",
-        "oa": "OpenAlex", "base": "BASE", "core": "CORE",
-        "sp": "Springer", "springer": "Springer Nature",
-        "ads": "NASA ADS", "ieee": "IEEE Xplore",
-        "zenodo": "Zenodo", "crossref": "Crossref",
-        "dblp": "DBLP", "hal": "HAL", "pubmed": "PubMed", "pmc": "PubMed Central",
-        "rxiv": "bioRxiv/medRxiv",
-    }
     if source:
         key = source.lower()
-        if key not in _src_map:
-            rprint(f"[red]Unknown source '{source}'. Use: {', '.join(_src_map.keys())}[/red]")
+        if key not in SRC_MAP:
+            rprint(f"[red]Unknown source '{source}'. Use: {', '.join(SRC_MAP.keys())}[/red]")
             raise typer.Exit(1)
-        name = _src_map[key]
+        name = SRC_MAP[key]
         sources = [s for s in sources if s.name == name]
         if not sources:
             rprint(f"[yellow]Source '{source}' is not active (missing API key or disabled in config).[/yellow]")
@@ -694,7 +623,7 @@ def notebook_create(
         return
 
     # ── query path: search → download → import ────────────────────────────────
-    sources = _build_sources(cfg)
+    sources = build_sources(cfg)
     cache = Cache(cfg["db_path"])
     email = cfg.get("unpaywall", {}).get("email", "")
 
@@ -753,6 +682,36 @@ def notebook_create(
     rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
     if _artifacts:
         rprint(f"[dim]{', '.join(sorted(_artifacts))} queued — check NotebookLM in a few minutes.[/dim]")
+
+
+@app.command()
+def ui(
+    host: Annotated[str, typer.Option(help="Bind address")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port number")] = 5555,
+    no_browser: Annotated[bool, typer.Option("--no-browser", help="Don't auto-open browser")] = False,
+    debug: Annotated[bool, typer.Option("--debug", help="Enable Flask debug mode")] = False,
+):
+    """Launch the MOSAIC web interface."""
+    try:
+        from mosaic.ui import create_app
+    except ImportError:
+        rprint("[red]Flask is required for the web UI. Install it with:[/red]")
+        rprint("  pip install 'mosaic-search[ui]'")
+        raise typer.Exit(1)
+
+    flask_app = create_app()
+    if not no_browser:
+        import webbrowser
+        import threading
+        threading.Timer(1.0, webbrowser.open, args=[f"http://{host}:{port}"]).start()
+
+    if debug:
+        flask_app.run(host=host, port=port, debug=True)
+    else:
+        from waitress import create_server
+        server = create_server(flask_app, host=host, port=port)
+        rprint(f"[green]MOSAIC[/green] running at [link]http://{host}:{port}[/link]  (Ctrl+C to stop)")
+        server.run()
 
 
 @auth_app.command("login")

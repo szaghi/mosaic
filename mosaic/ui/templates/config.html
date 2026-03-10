@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Configuration &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Configuration</h2>
+
+<div id="config-status"></div>
+
+<form hx-post="{{ url_for('ui.config_save') }}" hx-target="#config-status" hx-swap="innerHTML">
+
+  <fieldset>
+    <legend><strong>General</strong></legend>
+    <label>
+      Download directory
+      <input type="text" name="download_dir" value="{{ cfg.get('download_dir', '') }}" placeholder="~/mosaic-papers">
+    </label>
+    <label>
+      Filename pattern
+      <input type="text" name="filename_pattern" value="{{ cfg.get('filename_pattern', '{year}_{source}_{author}_{title}') }}" placeholder="{year}_{source}_{author}_{title}">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend><strong>API Keys</strong></legend>
+    <div class="grid">
+      <label>
+        Elsevier (ScienceDirect)
+        <input type="password" name="elsevier_key" value="{{ cfg.get('sources', {}).get('sciencedirect', {}).get('api_key', '') }}" placeholder="API key">
+      </label>
+      <label>
+        Semantic Scholar
+        <input type="password" name="ss_key" value="{{ cfg.get('sources', {}).get('semantic_scholar', {}).get('api_key', '') }}" placeholder="API key">
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        NCBI (PubMed / PMC)
+        <input type="password" name="ncbi_key" value="{{ cfg.get('sources', {}).get('pubmed', {}).get('api_key', '') }}" placeholder="API key">
+      </label>
+      <label>
+        CORE
+        <input type="password" name="core_key" value="{{ cfg.get('sources', {}).get('core', {}).get('api_key', '') }}" placeholder="API key">
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        NASA ADS
+        <input type="password" name="ads_key" value="{{ cfg.get('sources', {}).get('nasa_ads', {}).get('api_key', '') }}" placeholder="API token">
+      </label>
+      <label>
+        IEEE Xplore
+        <input type="password" name="ieee_key" value="{{ cfg.get('sources', {}).get('ieee', {}).get('api_key', '') }}" placeholder="API key">
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        Springer Nature
+        <input type="password" name="springer_key" value="{{ cfg.get('sources', {}).get('springer_api', {}).get('api_key', '') }}" placeholder="API key">
+      </label>
+      <label>
+        Zotero
+        <input type="password" name="zotero_key" value="{{ cfg.get('zotero', {}).get('api_key', '') }}" placeholder="Web API key">
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend><strong>Unpaywall</strong></legend>
+    <label>
+      Email (for Unpaywall API)
+      <input type="email" name="unpaywall_email" value="{{ cfg.get('unpaywall', {}).get('email', '') }}" placeholder="your@email.com">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend><strong>Enabled Sources</strong></legend>
+    <input type="hidden" name="_sources_section" value="1">
+    <div class="source-grid">
+      {% set src_cfg = cfg.get('sources', {}) %}
+      {% for cfg_key, label in [
+        ('arxiv', 'arXiv'),
+        ('semantic_scholar', 'Semantic Scholar'),
+        ('sciencedirect', 'ScienceDirect'),
+        ('doaj', 'DOAJ'),
+        ('europepmc', 'Europe PMC'),
+        ('openalex', 'OpenAlex'),
+        ('base', 'BASE'),
+        ('core', 'CORE'),
+        ('springer_api', 'Springer Nature'),
+        ('springer', 'Springer (browser)'),
+        ('nasa_ads', 'NASA ADS'),
+        ('ieee', 'IEEE Xplore'),
+        ('zenodo', 'Zenodo'),
+        ('crossref', 'Crossref'),
+        ('dblp', 'DBLP'),
+        ('hal', 'HAL'),
+        ('pubmed', 'PubMed'),
+        ('pmc', 'PubMed Central'),
+        ('biorxiv', 'bioRxiv/medRxiv'),
+      ] %}
+      <label>
+        <input type="checkbox" name="enabled_sources" value="{{ cfg_key }}"
+               {% if src_cfg.get(cfg_key, {}).get('enabled', true) %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <button type="submit">Save Configuration</button>
+</form>
+{% endblock %}

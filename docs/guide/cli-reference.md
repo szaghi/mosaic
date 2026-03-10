@@ -270,6 +270,36 @@ mosaic get --from refs.bib --download-dir ~/papers
 
 ---
 
+### `ui`
+
+Launch the MOSAIC web interface in your browser.
+
+```
+mosaic ui [OPTIONS]
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--host` | str | `127.0.0.1` | Bind address |
+| `--port` | int | `5555` | Port number |
+| `--no-browser` | flag | off | Don't auto-open the browser |
+| `--debug` | flag | off | Use Flask dev server with hot-reload |
+
+Requires the `ui` extra: `pip install 'mosaic-search[ui]'`.
+
+By default, the server uses [Waitress](https://docs.pylonsproject.org/projects/waitress/) (production-grade, multi-threaded). Pass `--debug` to use Flask's built-in dev server with hot-reload for development.
+
+```bash
+mosaic ui                          # default: http://127.0.0.1:5555
+mosaic ui --port 8080              # custom port
+mosaic ui --host 0.0.0.0           # accessible on LAN
+mosaic ui --debug                  # development mode
+```
+
+See the [Web UI guide](./web-ui) for a full walkthrough.
+
+---
+
 ### `config`
 
 View or update MOSAIC configuration.

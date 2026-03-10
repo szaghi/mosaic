@@ -36,6 +36,9 @@ features:
   - icon: 🖥️
     title: Rich Terminal UI
     details: Results are displayed as a formatted table with open-access and PDF indicators. Progress spinners keep you informed during long searches.
+  - icon: 🌐
+    title: Web Interface
+    details: Launch a browser-based UI with `mosaic ui`. Search, filter, download, and export from a responsive dashboard with dark mode, per-source progress, and keyboard shortcuts.
   - icon: 🔓
     title: Open & Extensible
     details: Each source is a small self-contained class. Adding a new database takes fewer than 50 lines of Python.
