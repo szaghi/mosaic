@@ -23,7 +23,8 @@ flowchart TD
     Q --> Z[Zenodo]
     Q --> CR[Crossref]
     Q --> DBLP[DBLP]
-    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP --> I{Deduplicate\nby DOI}
+    Q --> HAL[HAL]
+    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -331,6 +332,27 @@ When you set an Unpaywall email in the config, MOSAIC reuses it as the Crossref 
 ::: tip CLI shorthand
 ```bash
 mosaic search "transformer attention" --source crossref
+```
+:::
+
+## HAL
+
+| Property | Value |
+|----------|-------|
+| Auth | None |
+| Content | 1.5 M+ OA documents — strong for French academic output and grey literature |
+| PDF | Direct PDF when deposited (`fileMain_s`) |
+| Rate limit | No documented hard limit — use responsibly |
+| Base URL | `https://api.archives-ouvertes.fr/search/` |
+
+HAL (Hyper Articles en Ligne) is the French national open archive operated by CCSD, covering publications from French research institutions and laboratories. It is particularly strong for grey literature, theses, and conference papers from the French academic community. The API natively supports Lucene/SOLR query syntax, enabling precise field-scoped searches and compound filters.
+
+Field scoping: `--field title` uses the `title_s:` Lucene prefix; `--field abstract` uses `abstract_s:`. Year, author, and journal filters are applied natively in the query string.
+
+::: tip CLI shorthand
+```bash
+mosaic search "machine learning" --source hal
+mosaic search "intelligence artificielle" --source hal --field title --year 2020-2025
 ```
 :::
 

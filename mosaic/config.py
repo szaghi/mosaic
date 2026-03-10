@@ -26,6 +26,7 @@ _DEFAULTS: dict = {
         "zenodo": {"enabled": True, "api_key": ""},
         "crossref": {"enabled": True},
         "dblp": {"enabled": True},
+        "hal": {"enabled": True},
     },
     "unpaywall": {"email": ""},
     "custom_sources": [],

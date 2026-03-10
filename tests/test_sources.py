@@ -999,6 +999,83 @@ class TestCrossrefSource:
         assert papers[0].is_open_access is False
 
 
+# ── HAL ───────────────────────────────────────────────────────────────────────
+
+_HAL_JSON = {
+    "response": {
+        "docs": [{
+            "title_s": ["Attention Is All You Need"],
+            "authFullName_s": ["Ashish Vaswani", "Noam Shazeer"],
+            "producedDate_s": "2017-06-12",
+            "doiId_s": "10.48550/arXiv.1706.03762",
+            "abstract_s": ["We propose the Transformer."],
+            "journalTitle_s": "arXiv",
+            "fileMain_s": "https://hal.science/hal-01234567/document",
+            "openAccess_bool": True,
+            "uri_s": "https://hal.science/hal-01234567",
+        }]
+    }
+}
+
+
+class TestHALSource:
+    def _source(self):
+        from mosaic.sources.hal import HALSource
+        return HALSource()
+
+    def test_always_available(self):
+        assert self._source().available() is True
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_HAL_JSON)):
+            papers = self._source().search("transformer attention")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert p.authors == ["Ashish Vaswani", "Noam Shazeer"]
+        assert p.year == 2017
+        assert p.doi == "10.48550/arXiv.1706.03762"
+        assert p.abstract == "We propose the Transformer."
+        assert p.journal == "arXiv"
+        assert p.url == "https://hal.science/hal-01234567"
+        assert p.pdf_url == "https://hal.science/hal-01234567/document"
+        assert p.source == "HAL"
+        assert p.is_open_access is True
+
+    def test_field_title_uses_title_s_prefix(self):
+        f = SearchFilters(field="title")
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("transformer", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].startswith('title_s:"')
+
+    def test_field_abstract_uses_abstract_s_prefix(self):
+        f = SearchFilters(field="abstract")
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("transformer", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["q"].startswith('abstract_s:"')
+
+    def test_year_filter_appended_to_query(self):
+        f = SearchFilters()
+        f.year_from = 2020
+        f.year_to = 2023
+        with patch("httpx.get", return_value=_mock_get(json_data={"response": {"docs": []}})) as mock:
+            self._source().search("transformer", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert "producedDate_s:" in params["q"]
+        assert "2020-01-01T00:00:00Z" in params["q"]
+        assert "2023-12-31T23:59:59Z" in params["q"]
+
+    def test_no_pdf_when_fileMain_absent(self):
+        doc_no_pdf = dict(_HAL_JSON["response"]["docs"][0])
+        doc_no_pdf.pop("fileMain_s", None)
+        data = {"response": {"docs": [doc_no_pdf]}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("transformer")
+        assert papers[0].pdf_url is None
+
+
 # ── IEEE Xplore ───────────────────────────────────────────────────────────────
 
 _IEEE_JSON = {

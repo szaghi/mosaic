@@ -82,6 +82,7 @@ MOSAIC solves all of this in a single command.
 | **Zenodo** | `zenodo` | 3 M+ OA research outputs (papers, datasets, software) | None (token optional) | Attached PDF files |
 | **Crossref** | `crossref` | 150 M+ scholarly works (DOI registry) | None (email optional) | When deposited by publisher |
 | **DBLP** | `dblp` | 6 M+ CS publications (journals, conferences) | None | Via `ee` field (arXiv/OA links) |
+| **HAL** | `hal` | 1.5 M+ OA documents, strong for French academic output | None | Direct PDF when deposited |
 | **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
 
 ---
@@ -236,8 +237,8 @@ MOSAIC uploads local PDFs when available, falls back to URLs otherwise, and resp
 ```mermaid
 flowchart LR
     CLI -->|query + filters| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer browser] & SPN[Springer API] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & IEEE[IEEE Xplore] & ZEN[Zenodo] & CR[Crossref] & DBLP[DBLP]
-    arXiv & SS & SD & SP & SPN & DOAJ & EPMC & OA & BASE & CORE & ADS & IEEE & ZEN & CR & DBLP -->|Paper list| Dedup{Deduplicate\nby DOI}
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer browser] & SPN[Springer API] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & IEEE[IEEE Xplore] & ZEN[Zenodo] & CR[Crossref] & DBLP[DBLP] & HAL[HAL]
+    arXiv & SS & SD & SP & SPN & DOAJ & EPMC & OA & BASE & CORE & ADS & IEEE & ZEN & CR & DBLP & HAL -->|Paper list| Dedup{Deduplicate\nby DOI}
     Dedup --> Cache[(SQLite\ncache)]
     Dedup --> Table[Rich table]
     Table -->|--download| DL[Downloader]

@@ -15,6 +15,7 @@ from mosaic.sources.zenodo import ZenodoSource
 from mosaic.sources.crossref import CrossrefSource
 from mosaic.sources.custom import CustomSource
 from mosaic.sources.dblp import DBLPSource
+from mosaic.sources.hal import HALSource
 
 __all__ = [
     "ArxivSource",
@@ -34,4 +35,5 @@ __all__ = [
     "CrossrefSource",
     "CustomSource",
     "DBLPSource",
+    "HALSource",
 ]

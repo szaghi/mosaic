@@ -127,6 +127,10 @@ enabled = true
 [sources.dblp]
 enabled = true
 # No credentials required. CS bibliography — journals, conferences, workshops.
+
+[sources.hal]
+enabled = true
+# No credentials required. French open archive — strong for French academic output and grey literature.
 ```
 
 ## Source credentials
@@ -316,6 +320,6 @@ To disable the source entirely:
 enabled = false
 ```
 
-### arXiv, DOAJ, Europe PMC, BASE, DBLP
+### arXiv, DOAJ, Europe PMC, BASE, DBLP, HAL
 
-These sources require no credentials and are ready to use out of the box. DBLP is particularly useful for computer science conference and journal papers; note that it does not provide abstracts.
+These sources require no credentials and are ready to use out of the box. DBLP is particularly useful for computer science conference and journal papers; note that it does not provide abstracts. HAL is the French national open archive, strong for French academic output and grey literature.

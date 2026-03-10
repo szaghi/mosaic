@@ -64,6 +64,7 @@ mosaic search [OPTIONS] QUERY
 | `zenodo` | Zenodo | — (access token optional) |
 | `crossref` | Crossref | — (email optional) |
 | `dblp` | DBLP | — |
+| `hal` | HAL | — |
 
 **`--year` / `-y` formats:**
 
