@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.13] — 2026-03-10
+### Added
+- **search**: Add --verbose flag with per-source deduplication stats
+
+
 ## [1.2.12] — 2026-03-10
 ### Added
 - **cli**: Add mosaic similar command for related-paper discovery
