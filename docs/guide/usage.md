@@ -57,6 +57,7 @@ mosaic search "drug discovery" --source ss
 | `epmc`    | Europe PMC |
 | `pubmed`  | PubMed |
 | `pmc`     | PubMed Central |
+| `rxiv`    | bioRxiv / medRxiv |
 
 ## Download PDFs
 

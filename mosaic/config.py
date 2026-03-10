@@ -30,6 +30,7 @@ _DEFAULTS: dict = {
         "hal": {"enabled": True},
         "pubmed": {"enabled": True, "api_key": ""},
         "pmc": {"enabled": True, "api_key": ""},
+        "biorxiv": {"enabled": True},
     },
     "unpaywall": {"email": ""},
     "zotero": {"api_key": "", "user_id": 0},

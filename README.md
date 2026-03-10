@@ -13,7 +13,7 @@
 >Search, discover, and download scientific papers from multiple open databases — with a single command.
 >Send results directly to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
 
-[![Version](https://img.shields.io/github/v/release/szaghi/mosaic?label=version)](https://github.com/szaghi/mosaic/releases/latest)
+[![Version](https://img.shields.io/pypi/v/mosaic-search?label=version)](https://pypi.org/project/mosaic-search/)
 [![Tests](https://github.com/szaghi/mosaic/actions/workflows/tests.yml/badge.svg)](https://github.com/szaghi/mosaic/actions/workflows/tests.yml)
 [![Coverage](https://img.shields.io/endpoint?url=https://szaghi.github.io/mosaic/coverage-badge.json)](https://szaghi.github.io/mosaic/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
@@ -31,7 +31,7 @@
 ## What MOSAIC does
 
 ```bash
-# Search 19 sources at once, deduplicate, download OA PDFs
+# Search 20 sources at once, deduplicate, download OA PDFs
 mosaic search "attention is all you need" --oa-only --download
 
 # Discover related literature from any DOI or arXiv ID — no query needed
@@ -52,9 +52,9 @@ mosaic notebook create "Transformers" --query "transformer architecture" --oa-on
 <tr>
 <td align="center" width="33%">
 
-🌐 **19 sources, one command**
+🌐 **20 sources, one command**
 
-arXiv · Semantic Scholar · OpenAlex · PubMed · PubMed Central · Europe PMC · DOAJ · Crossref · Springer · IEEE · NASA ADS · Zenodo · BASE · CORE · DBLP · HAL · ScienceDirect · and more
+arXiv · Semantic Scholar · OpenAlex · PubMed · PubMed Central · Europe PMC · DOAJ · Crossref · Springer · IEEE · NASA ADS · Zenodo · BASE · CORE · DBLP · HAL · ScienceDirect · bioRxiv/medRxiv · and more
 
 </td>
 <td align="center" width="33%">
@@ -153,6 +153,7 @@ Push results directly into your Zotero library — local API (Zotero running on 
 | **HAL** | `hal` | 1.5 M+ OA documents, strong for French academic output | None | Direct PDF when deposited |
 | **PubMed** | `pubmed` | 35 M+ biomedical citations (NCBI) | None (API key optional) | PMC PDF for OA articles |
 | **PubMed Central** | `pmc` | 5 M+ free full-text biomedical articles | None (API key optional) | Always — all PMC articles are OA |
+| **bioRxiv / medRxiv** | `rxiv` | Life-science and medical preprints | None | Always (all preprints are OA) |
 | **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
 
 ## Installation
@@ -348,8 +349,8 @@ MOSAIC uploads local PDFs when available, falls back to URLs otherwise, and resp
 ```mermaid
 flowchart LR
     CLI -->|query + filters| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer browser] & SPN[Springer API] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & IEEE[IEEE Xplore] & ZEN[Zenodo] & CR[Crossref] & DBLP[DBLP] & HAL[HAL] & PM[PubMed] & PMC[PubMed Central]
-    arXiv & SS & SD & SP & SPN & DOAJ & EPMC & OA & BASE & CORE & ADS & IEEE & ZEN & CR & DBLP & HAL & PM & PMC -->|Paper list| Dedup{Deduplicate\nby DOI}
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer browser] & SPN[Springer API] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & IEEE[IEEE Xplore] & ZEN[Zenodo] & CR[Crossref] & DBLP[DBLP] & HAL[HAL] & PM[PubMed] & PMC[PubMed Central] & RXV[bioRxiv/medRxiv]
+    arXiv & SS & SD & SP & SPN & DOAJ & EPMC & OA & BASE & CORE & ADS & IEEE & ZEN & CR & DBLP & HAL & PM & PMC & RXV -->|Paper list| Dedup{Deduplicate\nby DOI}
     Dedup --> Cache[(SQLite\ncache)]
     Dedup --> Table[Rich table]
     Table -->|--download| DL[Downloader]

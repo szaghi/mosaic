@@ -23,7 +23,7 @@ hero:
 features:
   - icon: 🔍
     title: Multi-source Search
-    details: Query arXiv, Semantic Scholar, ScienceDirect, Springer Nature (browser + API), DOAJ, Europe PMC, OpenAlex, BASE, CORE, NASA ADS, IEEE Xplore, Zenodo, Crossref, DBLP, and HAL simultaneously. Results are deduplicated by DOI so you never see the same paper twice.
+    details: Query arXiv, Semantic Scholar, ScienceDirect, Springer Nature (browser + API), DOAJ, Europe PMC, OpenAlex, BASE, CORE, NASA ADS, IEEE Xplore, Zenodo, Crossref, DBLP, HAL, PubMed, PubMed Central, and bioRxiv/medRxiv simultaneously. Results are deduplicated by DOI so you never see the same paper twice.
   - icon: 📄
     title: PDF Download
     details: Download open-access PDFs directly. When no PDF link is known, MOSAIC queries Unpaywall to find a legal open-access copy automatically.
@@ -60,8 +60,8 @@ mosaic search "attention is all you need" --oa-only --download
 ```mermaid
 flowchart LR
     CLI -->|query| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer browser] & SPN[Springer API] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & IEEE[IEEE Xplore] & ZEN[Zenodo] & CR[Crossref] & DBLP[DBLP] & HAL[HAL]
-    arXiv & SS & SD & SP & SPN & DOAJ & EPMC & OA & BASE & CORE & ADS & IEEE & ZEN & CR & DBLP & HAL -->|Paper list| Dedup
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer browser] & SPN[Springer API] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & IEEE[IEEE Xplore] & ZEN[Zenodo] & CR[Crossref] & DBLP[DBLP] & HAL[HAL] & PM[PubMed] & PMC[PubMed Central] & RXV[bioRxiv/medRxiv]
+    arXiv & SS & SD & SP & SPN & DOAJ & EPMC & OA & BASE & CORE & ADS & IEEE & ZEN & CR & DBLP & HAL & PM & PMC & RXV -->|Paper list| Dedup
     Dedup -->|unique papers| Cache[(SQLite)]
     Dedup --> Table[Rich table]
     Table -->|download flag| DL[Downloader]

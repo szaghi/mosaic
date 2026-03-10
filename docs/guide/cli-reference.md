@@ -72,6 +72,7 @@ mosaic search [OPTIONS] QUERY
 | `hal` | HAL | — |
 | `pubmed` | PubMed | — (API key optional) |
 | `pmc` | PubMed Central | — (API key optional) |
+| `rxiv` | bioRxiv / medRxiv | — |
 
 **`--year` / `-y` formats:**
 
@@ -105,6 +106,7 @@ Each filter is applied at the **source API level** where supported, then as a **
 | BASE | ✓ native | ✓ native | ✓ native |
 | CORE | ✓ native | ✓ native | ✓ native |
 | NASA ADS | ✓ native | post-process | post-process |
+| bioRxiv/medRxiv | ✓ native | ✓ native | post-process |
 
 **`--field` / `-f` behaviour:**
 - `all` (default): query is sent as a general full-text search to each source
