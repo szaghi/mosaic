@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.12] — 2026-03-10
+### Added
+- **cli**: Add mosaic similar command for related-paper discovery
+
+
 ## [1.2.11] — 2026-03-10
 ### Added
 - **search**: Add --sort flag to rank results by citations or year
