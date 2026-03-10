@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.10] — 2026-03-10
+### Fixed
+- **security**: Restrict config and session file permissions to owner
+
+
 ## [1.2.9] — 2026-03-10
 ### Added
 - **sources**: Add HAL open archive source
