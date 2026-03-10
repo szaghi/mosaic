@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MOSAIC{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('ui.static', filename='pico.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='pico.min.css') }}">
   <style>
     .htmx-indicator { display: none; }
     .htmx-request .htmx-indicator,
@@ -60,7 +60,7 @@
     <small>MOSAIC v{{ version }} &mdash; Multi-source Scientific Article Indexer and Collector</small>
   </footer>
 
-  <script src="{{ url_for('ui.static', filename='htmx.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='htmx.min.js') }}"></script>
   <script>
     // Theme toggle (persisted to localStorage)
     function toggleTheme() {

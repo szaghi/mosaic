@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 from flask import Flask
 
@@ -10,8 +12,24 @@ from mosaic.db import Cache
 from mosaic.ui.jobs import JobManager
 
 
+def _ui_base_path() -> Path:
+    """Return the base path for UI templates and static files.
+
+    When running inside a PyInstaller bundle, files are unpacked under
+    ``sys._MEIPASS``; otherwise use the normal package directory.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "mosaic" / "ui"  # type: ignore[attr-defined]
+    return Path(__file__).parent
+
+
 def create_app() -> Flask:
-    app = Flask(__name__)
+    base = _ui_base_path()
+    app = Flask(
+        __name__,
+        template_folder=str(base / "templates"),
+        static_folder=str(base / "static"),
+    )
     app.secret_key = os.urandom(24)
 
     cfg = cfg_mod.load()

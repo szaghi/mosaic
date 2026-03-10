@@ -15,9 +15,7 @@ from mosaic.helpers import SRC_MAP, build_sources
 from mosaic.models import Paper, SearchFilters
 from mosaic.search import search_all
 
-bp = Blueprint("ui", __name__,
-               static_folder="static",
-               template_folder="templates")
+bp = Blueprint("ui", __name__)
 
 
 # ---------------------------------------------------------------------------
