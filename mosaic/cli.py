@@ -114,6 +114,7 @@ def search(
     output: Annotated[list[Path], typer.Option("--output", "-o", help="Save results to file (.md, .markdown, .csv, .json, .bib); repeatable")] = [],
     download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
     sort_by: Annotated[str, typer.Option("--sort", help='Sort results: "citations" (most cited first) or "year" (newest first)')] = "",
+    verbose: Annotated[bool, typer.Option("--verbose", help="Print per-source counts and deduplication stats")] = False,
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -162,12 +163,16 @@ def search(
                 raise typer.Exit(1)
 
     errors: list[str] = []
+    search_stats: dict = {}
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
         prog.add_task(f"Searching {len(sources)} source(s) for [bold]{query}[/bold]…")
-        papers = search_all(sources, query, max_per_source=max_results, filters=filters, errors=errors)
+        papers = search_all(sources, query, max_per_source=max_results, filters=filters, errors=errors, stats=search_stats)
 
     for err in errors:
         rprint(f"[yellow]Warning:[/yellow] {err}")
+
+    if verbose:
+        _print_search_stats(search_stats, filters)
 
     if oa_only:
         papers = [p for p in papers if p.is_open_access or p.pdf_url]
@@ -333,6 +338,44 @@ def config(
     if show or not any([elsevier_key, ss_key, unpaywall_email, download_dir, filename_pattern]):
         import tomli_w
         console.print_json(data=cfg)
+
+
+def _print_search_stats(stats: dict, filters) -> None:
+    from rich.panel import Panel
+
+    per_source = stats.get("per_source", {})
+    raw_total  = stats.get("raw_total", 0)
+    unique     = stats.get("unique", 0)
+    merged     = stats.get("merged", 0)
+
+    source_names = list(per_source.keys())
+    sources_line = "  ".join(f"[bold]{n}[/bold]=[cyan]{c}[/cyan]" for n, c in per_source.items())
+    if not source_names:
+        sources_line = "[dim]none[/dim]"
+
+    filter_parts = []
+    if filters:
+        if filters.year_from and filters.year_to:
+            filter_parts.append(f"year={filters.year_from}–{filters.year_to}")
+        elif filters.year_from:
+            filter_parts.append(f"year={filters.year_from}")
+        elif filters.years:
+            filter_parts.append(f"year={','.join(str(y) for y in filters.years)}")
+        if filters.authors:
+            filter_parts.append(f"author={', '.join(filters.authors)}")
+        if filters.journal:
+            filter_parts.append(f"journal={filters.journal}")
+        if filters.field and filters.field != "all":
+            filter_parts.append(f"field={filters.field}")
+    filters_line = "  ".join(filter_parts) if filter_parts else "[dim]none[/dim]"
+
+    lines = [
+        f"[dim]Sources   [/dim] {', '.join(source_names) or '[dim]none[/dim]'}",
+        f"[dim]Raw       [/dim] {sources_line}  [dim]→ {raw_total} total[/dim]",
+        f"[dim]Unique    [/dim] [bold]{unique}[/bold] papers[dim]  ({merged} merged by DOI)[/dim]",
+        f"[dim]Filters   [/dim] {filters_line}",
+    ]
+    console.print(Panel("\n".join(lines), title="[bold]Search stats[/bold]", border_style="dim", padding=(0, 1)))
 
 
 def _print_results(papers: list) -> None:

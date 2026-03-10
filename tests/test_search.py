@@ -157,3 +157,59 @@ class TestPostProcessingFilter:
         f = SearchFilters(year_from=2020)
         search_all([src], "query", filters=f)
         src.search.assert_called_once_with("query", max_results=25, filters=f)
+
+
+class TestSearchStats:
+    def test_stats_populated_per_source(self):
+        src_a = _make_source("A", [_paper(doi="10.1/a"), _paper(doi="10.1/b")])
+        src_b = _make_source("B", [_paper(doi="10.1/c")])
+        stats = {}
+        search_all([src_a, src_b], "q", stats=stats)
+        assert stats["per_source"] == {"A": 2, "B": 1}
+
+    def test_stats_raw_total(self):
+        src_a = _make_source("A", [_paper(doi="10.1/a"), _paper(doi="10.1/b")])
+        src_b = _make_source("B", [_paper(doi="10.1/c"), _paper(doi="10.1/d")])
+        stats = {}
+        search_all([src_a, src_b], "q", stats=stats)
+        assert stats["raw_total"] == 4
+
+    def test_stats_merged_count(self):
+        # Same DOI from two sources → 1 merged
+        p1 = _paper(doi="10.1/x")
+        p2 = _paper(doi="10.1/x")
+        src_a = _make_source("A", [p1, _paper(doi="10.1/y")])
+        src_b = _make_source("B", [p2])
+        stats = {}
+        search_all([src_a, src_b], "q", stats=stats)
+        assert stats["merged"] == 1
+        assert stats["unique"] == 2
+
+    def test_stats_no_merges(self):
+        src = _make_source("A", [_paper(doi="10.1/a"), _paper(doi="10.1/b")])
+        stats = {}
+        search_all([src], "q", stats=stats)
+        assert stats["merged"] == 0
+        assert stats["unique"] == 2
+
+    def test_stats_after_filters(self):
+        papers = [_paper(doi=f"10.1/{i}", year=y) for i, y in enumerate([2018, 2020, 2023])]
+        src = _make_source("A", papers)
+        stats = {}
+        f = SearchFilters(year_from=2019, year_to=2022)
+        search_all([src], "q", filters=f, stats=stats)
+        assert stats["unique"] == 3       # before post-filter
+        assert stats["after_filters"] == 1
+
+    def test_stats_not_populated_when_none(self):
+        src = _make_source("A", [_paper()])
+        # should not raise; stats param absent
+        results = search_all([src], "q")
+        assert len(results) == 1
+
+    def test_stats_empty_when_no_sources(self):
+        stats = {}
+        search_all([], "q", stats=stats)
+        assert stats["raw_total"] == 0
+        assert stats["unique"] == 0
+        assert stats["merged"] == 0

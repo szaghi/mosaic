@@ -134,6 +134,25 @@ mosaic search "large language model" -n 50 --source arxiv --oa-only --download
 
 ![Multi-filter search demo](/gifs/03_filter_search.gif)
 
+## Verbose mode
+
+Add `--verbose` to any search to see a per-source breakdown and deduplication report printed before the results table:
+
+```bash
+mosaic search "transformer attention" --verbose
+```
+
+```
+╭─ Search stats ────────────────────────────────────────────────╮
+│ Sources    arXiv, Semantic Scholar, OpenAlex, Crossref        │
+│ Raw        arXiv=12  Semantic Scholar=18  OpenAlex=15  …  → 54 total │
+│ Unique     31 papers  (23 merged by DOI)                      │
+│ Filters    none                                               │
+╰───────────────────────────────────────────────────────────────╯
+```
+
+Useful for tuning source selection and understanding which sources contribute unique results.
+
 ## Sort results
 
 Use `--sort` to rank results after the search:

@@ -45,6 +45,7 @@ mosaic search [OPTIONS] QUERY
 | `--output` | `-o` | path | | Save results to file (repeatable); format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib` |
 | `--download-dir` | | path | config | Override PDF download directory for this run only |
 | `--sort` | | str | | Sort results: `citations` (most cited first) or `year` (newest first) |
+| `--verbose` | | flag | off | Print per-source counts and deduplication stats before results |
 
 **Source shorthands for `--source`:**
 
