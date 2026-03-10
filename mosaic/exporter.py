@@ -57,11 +57,12 @@ def _to_markdown_full(papers: list[Paper], path: Path) -> None:
             ("Volume",       p.volume or ""),
             ("Issue",        p.issue or ""),
             ("Pages",        p.pages or ""),
-            ("Source",       p.source),
-            ("Open Access",  "yes" if p.is_open_access else "no"),
-            ("PDF",          p.pdf_url or ""),
-            ("URL",          p.url or ""),
-            ("Abstract",     p.abstract or ""),
+            ("Source",          p.source),
+            ("Open Access",     "yes" if p.is_open_access else "no"),
+            ("Citation count",  str(p.citation_count) if p.citation_count is not None else ""),
+            ("PDF",             p.pdf_url or ""),
+            ("URL",             p.url or ""),
+            ("Abstract",        p.abstract or ""),
         ]
         table = "| Field | Value |\n|-------|-------|\n"
         table += "\n".join(
@@ -78,7 +79,7 @@ def _to_markdown_full(papers: list[Paper], path: Path) -> None:
 def _to_csv(papers: list[Paper], path: Path) -> None:
     fields = ["title", "authors", "year", "doi", "arxiv_id",
               "journal", "volume", "issue", "pages",
-              "source", "is_open_access", "pdf_url", "url"]
+              "source", "is_open_access", "citation_count", "pdf_url", "url"]
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
@@ -95,6 +96,7 @@ def _to_csv(papers: list[Paper], path: Path) -> None:
                 "pages":          p.pages or "",
                 "source":         p.source,
                 "is_open_access": p.is_open_access,
+                "citation_count": p.citation_count if p.citation_count is not None else "",
                 "pdf_url":        p.pdf_url or "",
                 "url":            p.url or "",
             })
@@ -117,6 +119,7 @@ def _to_json(papers: list[Paper], path: Path) -> None:
             "pages":          p.pages,
             "source":         p.source,
             "is_open_access": p.is_open_access,
+            "citation_count": p.citation_count,
             "pdf_url":        p.pdf_url,
             "url":            p.url,
         }

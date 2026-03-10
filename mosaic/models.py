@@ -74,6 +74,7 @@ class Paper:
     source: str = ""
     is_open_access: bool = False
     url: str | None = None
+    citation_count: int | None = None
 
     @property
     def uid(self) -> str:

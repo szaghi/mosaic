@@ -113,6 +113,7 @@ def search(
     raw_query: Annotated[str, typer.Option("--raw-query", help="Raw query sent directly to source APIs, bypassing all field transforms")] = "",
     output: Annotated[list[Path], typer.Option("--output", "-o", help="Save results to file (.md, .markdown, .csv, .json, .bib); repeatable")] = [],
     download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
+    sort_by: Annotated[str, typer.Option("--sort", help='Sort results: "citations" (most cited first) or "year" (newest first)')] = "",
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -172,6 +173,15 @@ def search(
         papers = [p for p in papers if p.is_open_access or p.pdf_url]
     if pdf_only:
         papers = [p for p in papers if p.pdf_url]
+
+    if sort_by:
+        if sort_by == "citations":
+            papers.sort(key=lambda p: p.citation_count or 0, reverse=True)
+        elif sort_by == "year":
+            papers.sort(key=lambda p: p.year or 0, reverse=True)
+        else:
+            rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year[/red]')
+            raise typer.Exit(1)
 
     if not papers:
         rprint("[yellow]No results found.[/yellow]")
@@ -247,6 +257,8 @@ def config(
 
 
 def _print_results(papers: list) -> None:
+    show_citations = any(p.citation_count is not None for p in papers)
+
     table = Table(show_header=True, header_style="bold cyan", expand=True)
     table.add_column("#", style="dim", width=3)
     table.add_column("Title", min_width=30, ratio=3)
@@ -256,12 +268,18 @@ def _print_results(papers: list) -> None:
     table.add_column("Source", width=16)
     table.add_column("OA", width=4)
     table.add_column("PDF", width=5)
+    if show_citations:
+        table.add_column("Cited", width=7, justify="right")
 
     for i, p in enumerate(papers, 1):
         oa = "[green]yes[/green]" if p.is_open_access else "[red]no[/red]"
         pdf = "[green]✓[/green]" if p.pdf_url else "[dim]–[/dim]"
         doi = p.doi or "[dim]–[/dim]"
-        table.add_row(str(i), p.title[:80], p.short_authors, str(p.year or ""), doi, p.source, oa, pdf)
+        row = [str(i), p.title[:80], p.short_authors, str(p.year or ""), doi, p.source, oa, pdf]
+        if show_citations:
+            cited = str(p.citation_count) if p.citation_count is not None else "[dim]–[/dim]"
+            row.append(cited)
+        table.add_row(*row)
 
     console.print(table)
     console.print(f"[dim]{len(papers)} result(s)[/dim]")

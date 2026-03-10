@@ -133,3 +133,20 @@ mosaic search "large language model" -n 50 --source arxiv --oa-only --download
 ```
 
 ![Multi-filter search demo](/gifs/03_filter_search.gif)
+
+## Sort results
+
+Use `--sort` to rank results after the search:
+
+```bash
+# Most-cited papers first (citation count from Semantic Scholar and OpenAlex)
+mosaic search "transformer attention" --sort citations
+
+# Newest papers first
+mosaic search "diffusion models" --sort year
+
+# Combine with other flags
+mosaic search "protein folding" --oa-only --sort citations -n 20
+```
+
+When `--sort citations` is active, the results table gains a **Cited** column showing the citation count for each paper. Papers from sources that do not return citation data (arXiv, DOAJ, …) show `–` and are placed after all papers with known counts.

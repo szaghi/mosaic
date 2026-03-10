@@ -5,7 +5,7 @@ from mosaic.models import Paper, SearchFilters
 from mosaic.sources.base import BaseSource
 
 _BASE = "https://api.semanticscholar.org/graph/v1"
-_FIELDS = "title,authors,year,abstract,externalIds,openAccessPdf,publicationVenue,journal,isOpenAccess"
+_FIELDS = "title,authors,year,abstract,externalIds,openAccessPdf,publicationVenue,journal,isOpenAccess,citationCount"
 
 
 class SemanticScholarSource(BaseSource):
@@ -81,4 +81,5 @@ class SemanticScholarSource(BaseSource):
             source=self.name,
             is_open_access=item.get("isOpenAccess", False),
             url=f"https://www.semanticscholar.org/paper/{item.get('paperId', '')}",
+            citation_count=item.get("citationCount"),
         )

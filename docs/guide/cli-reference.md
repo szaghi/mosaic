@@ -44,6 +44,7 @@ mosaic search [OPTIONS] QUERY
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
 | `--output` | `-o` | path | | Save results to file (repeatable); format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib` |
 | `--download-dir` | | path | config | Override PDF download directory for this run only |
+| `--sort` | | str | | Sort results: `citations` (most cited first) or `year` (newest first) |
 
 **Source shorthands for `--source`:**
 

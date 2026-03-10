@@ -13,8 +13,9 @@ def _make_source(name: str, results: list[Paper], available: bool = True) -> Bas
     return src
 
 
-def _paper(doi="10.1/test", title="Paper", year=2020, abstract=None, pdf_url=None):
-    return Paper(title=title, doi=doi, year=year, abstract=abstract, pdf_url=pdf_url, authors=["A"])
+def _paper(doi="10.1/test", title="Paper", year=2020, abstract=None, pdf_url=None, citation_count=None):
+    return Paper(title=title, doi=doi, year=year, abstract=abstract, pdf_url=pdf_url, authors=["A"],
+                 citation_count=citation_count)
 
 
 class TestDeduplication:
@@ -80,6 +81,66 @@ class TestErrorHandling:
         results = search_all([src], "q")
         src.search.assert_not_called()
         assert results == []
+
+
+class TestCitationMerging:
+    def test_citation_count_filled_from_second_source(self):
+        p1 = _paper(doi="10.1/x", citation_count=None)
+        p2 = _paper(doi="10.1/x", citation_count=42)
+        src_a = _make_source("A", [p1])
+        src_b = _make_source("B", [p2])
+        results = search_all([src_a, src_b], "q")
+        assert results[0].citation_count == 42
+
+    def test_higher_citation_count_preferred(self):
+        p1 = _paper(doi="10.1/x", citation_count=10)
+        p2 = _paper(doi="10.1/x", citation_count=99)
+        src_a = _make_source("A", [p1])
+        src_b = _make_source("B", [p2])
+        results = search_all([src_a, src_b], "q")
+        assert results[0].citation_count == 99
+
+    def test_existing_citation_count_not_lowered(self):
+        p1 = _paper(doi="10.1/x", citation_count=100)
+        p2 = _paper(doi="10.1/x", citation_count=5)
+        src_a = _make_source("A", [p1])
+        src_b = _make_source("B", [p2])
+        results = search_all([src_a, src_b], "q")
+        assert results[0].citation_count == 100
+
+    def test_none_does_not_overwrite_existing(self):
+        p1 = _paper(doi="10.1/x", citation_count=50)
+        p2 = _paper(doi="10.1/x", citation_count=None)
+        src_a = _make_source("A", [p1])
+        src_b = _make_source("B", [p2])
+        results = search_all([src_a, src_b], "q")
+        assert results[0].citation_count == 50
+
+
+class TestSortByCitations:
+    def test_sort_by_citations_descending(self):
+        papers = [
+            _paper(doi="10.1/a", citation_count=5),
+            _paper(doi="10.1/b", citation_count=100),
+            _paper(doi="10.1/c", citation_count=20),
+        ]
+        src = _make_source("A", papers)
+        results = search_all([src], "q")
+        results.sort(key=lambda p: p.citation_count or 0, reverse=True)
+        assert [p.citation_count for p in results] == [100, 20, 5]
+
+    def test_sort_by_citations_none_last(self):
+        papers = [
+            _paper(doi="10.1/a", citation_count=None),
+            _paper(doi="10.1/b", citation_count=50),
+            _paper(doi="10.1/c", citation_count=None),
+        ]
+        src = _make_source("A", papers)
+        results = search_all([src], "q")
+        results.sort(key=lambda p: p.citation_count or 0, reverse=True)
+        assert results[0].citation_count == 50
+        assert results[1].citation_count is None
+        assert results[2].citation_count is None
 
 
 class TestPostProcessingFilter:

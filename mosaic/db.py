@@ -33,7 +33,8 @@ def _init(con: sqlite3.Connection) -> None:
             pdf_url      TEXT,
             source       TEXT,
             is_open_access INTEGER DEFAULT 0,
-            url          TEXT
+            url          TEXT,
+            citation_count INTEGER
         );
         CREATE TABLE IF NOT EXISTS downloads (
             uid        TEXT PRIMARY KEY,
@@ -43,15 +44,22 @@ def _init(con: sqlite3.Connection) -> None:
         );
     """)
     con.commit()
+    # Migrations — add columns introduced after the initial schema
+    try:
+        con.execute("ALTER TABLE papers ADD COLUMN citation_count INTEGER")
+        con.commit()
+    except sqlite3.OperationalError:
+        pass  # column already exists
 
 
 def upsert(con: sqlite3.Connection, paper: Paper) -> None:
     con.execute("""
-        INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(uid) DO UPDATE SET
             pdf_url=excluded.pdf_url,
             abstract=excluded.abstract,
-            is_open_access=excluded.is_open_access
+            is_open_access=excluded.is_open_access,
+            citation_count=COALESCE(excluded.citation_count, papers.citation_count)
     """, (
         paper.uid, paper.title,
         json.dumps(paper.authors), paper.year,
@@ -60,6 +68,7 @@ def upsert(con: sqlite3.Connection, paper: Paper) -> None:
         paper.volume, paper.issue, paper.pages,
         paper.pdf_url, paper.source,
         int(paper.is_open_access), paper.url,
+        paper.citation_count,
     ))
     con.commit()
 
@@ -94,6 +103,7 @@ def row_to_paper(row: sqlite3.Row) -> Paper:
         source=row["source"],
         is_open_access=bool(row["is_open_access"]),
         url=row["url"],
+        citation_count=row["citation_count"],
     )
 
 

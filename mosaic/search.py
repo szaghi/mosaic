@@ -34,6 +34,11 @@ def search_all(
                     existing.pdf_url = paper.pdf_url
                 if paper.doi and not existing.doi:
                     existing.doi = paper.doi
+                if paper.citation_count is not None and (
+                    existing.citation_count is None
+                    or paper.citation_count > existing.citation_count
+                ):
+                    existing.citation_count = paper.citation_count
 
     papers = list(seen.values())
 

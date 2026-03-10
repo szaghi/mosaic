@@ -8,7 +8,7 @@ _BASE = "https://api.openalex.org/works"
 _SELECT = (
     "id,title,authorships,publication_year,doi,ids,"
     "abstract_inverted_index,primary_location,best_oa_location,"
-    "open_access,biblio"
+    "open_access,biblio,cited_by_count"
 )
 
 
@@ -121,6 +121,7 @@ class OpenAlexSource(BaseSource):
             source=self.name,
             is_open_access=oa.get("is_oa", False),
             url=item.get("id"),
+            citation_count=item.get("cited_by_count"),
         )
 
 
