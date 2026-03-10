@@ -1,4 +1,4 @@
-Output gifs/02_search_download.gif
+Output public/gifs/02_search_download.gif
 Set FontSize 12
 Set Width 1200
 Set Height 600

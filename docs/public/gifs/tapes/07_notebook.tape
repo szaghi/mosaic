@@ -1,4 +1,4 @@
-Output gifs/07_notebook.gif
+Output public/gifs/07_notebook.gif
 Set FontSize 14
 Set Width 1100
 Set Height 600

@@ -1,4 +1,4 @@
-Output gifs/06_auth_status.gif
+Output public/gifs/06_auth_status.gif
 Set FontSize 12
 Set Width 1100
 Set Height 400

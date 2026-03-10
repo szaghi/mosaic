@@ -119,6 +119,9 @@ def search(
     download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
     sort_by: Annotated[str, typer.Option("--sort", help='Sort results: "citations" (most cited first) or "year" (newest first)')] = "",
     verbose: Annotated[bool, typer.Option("--verbose", help="Print per-source counts and deduplication stats")] = False,
+    zotero: Annotated[bool, typer.Option("--zotero", help="Export results to Zotero")] = False,
+    zotero_collection: Annotated[str, typer.Option("--zotero-collection", help="Zotero collection name (created if missing)")] = "",
+    zotero_local: Annotated[bool, typer.Option("--zotero-local", help="Force Zotero local API even when an API key is configured")] = False,
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -212,8 +215,13 @@ def search(
                 rprint(f"[red]{e}[/red]")
                 raise typer.Exit(1)
 
+    pdf_map: dict[str, str] = {}
     if download:
-        _download_all(papers, cfg, cache)
+        pdf_map = _download_all(papers, cfg, cache)
+
+    if zotero:
+        _push_to_zotero(papers, cfg, collection_name=zotero_collection,
+                        force_local=zotero_local, pdf_map=pdf_map)
 
 
 @app.command()
@@ -226,6 +234,9 @@ def similar(
     sort_by: Annotated[str, typer.Option("--sort", help='Sort results: "citations" (most cited first) or "year" (newest first)')] = "",
     output: Annotated[list[Path], typer.Option("--output", "-o", help="Save results to file (.md, .markdown, .csv, .json, .bib); repeatable")] = [],
     download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
+    zotero: Annotated[bool, typer.Option("--zotero", help="Export results to Zotero")] = False,
+    zotero_collection: Annotated[str, typer.Option("--zotero-collection", help="Zotero collection name (created if missing)")] = "",
+    zotero_local: Annotated[bool, typer.Option("--zotero-local", help="Force Zotero local API even when an API key is configured")] = False,
 ):
     """Find papers similar to a given paper by DOI or arXiv ID."""
     from mosaic.similar import find_similar
@@ -291,8 +302,13 @@ def similar(
                 rprint(f"[red]{e}[/red]")
                 raise typer.Exit(1)
 
+    pdf_map: dict[str, str] = {}
     if download:
-        _download_all(papers, cfg, cache)
+        pdf_map = _download_all(papers, cfg, cache)
+
+    if zotero:
+        _push_to_zotero(papers, cfg, collection_name=zotero_collection,
+                        force_local=zotero_local, pdf_map=pdf_map)
 
 
 @app.command()
@@ -301,6 +317,9 @@ def get(
     from_file: Annotated[Optional[Path], typer.Option("--from", help="BibTeX (.bib) or CSV (.csv) file containing DOIs to bulk-download")] = None,
     oa_only: Annotated[bool, typer.Option("--oa-only", help="Treat unresolvable papers as skipped rather than failed")] = False,
     download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
+    zotero: Annotated[bool, typer.Option("--zotero", help="Export downloaded paper(s) to Zotero")] = False,
+    zotero_collection: Annotated[str, typer.Option("--zotero-collection", help="Zotero collection name (created if missing)")] = "",
+    zotero_local: Annotated[bool, typer.Option("--zotero-local", help="Force Zotero local API even when an API key is configured")] = False,
 ):
     """Download a paper by DOI, or bulk-download all DOIs from a .bib/.csv file."""
     cfg = cfg_mod.load()
@@ -313,7 +332,9 @@ def get(
         raise typer.Exit(1)
 
     if from_file:
-        _bulk_download(from_file, cfg, cache, oa_only)
+        _bulk_download(from_file, cfg, cache, oa_only,
+                       zotero=zotero, zotero_collection=zotero_collection,
+                       zotero_local=zotero_local)
         return
 
     if doi is None:
@@ -329,6 +350,11 @@ def get(
     else:
         rprint("[red]Could not find a downloadable PDF for this DOI.[/red]")
 
+    if zotero:
+        pdf_map = {paper.uid: path} if path else {}
+        _push_to_zotero([paper], cfg, collection_name=zotero_collection,
+                        force_local=zotero_local, pdf_map=pdf_map)
+
 
 @app.command()
 def config(
@@ -336,6 +362,7 @@ def config(
     elsevier_key: Annotated[str, typer.Option(help="Set Elsevier API key")] = "",
     ss_key: Annotated[str, typer.Option(help="Set Semantic Scholar API key")] = "",
     ncbi_key: Annotated[str, typer.Option(help="Set NCBI/PubMed API key")] = "",
+    zotero_key: Annotated[str, typer.Option(help="Set Zotero API key (web API)")] = "",
     unpaywall_email: Annotated[str, typer.Option(help="Set Unpaywall email")] = "",
     download_dir: Annotated[str, typer.Option(help="Set download directory")] = "",
     filename_pattern: Annotated[str, typer.Option(help="Set PDF filename pattern (placeholders: {year}, {source}, {author}, {title}, {doi})")] = "",
@@ -350,6 +377,17 @@ def config(
     if ncbi_key:
         cfg["sources"]["pubmed"]["api_key"] = ncbi_key
         cfg["sources"]["pmc"]["api_key"] = ncbi_key
+    if zotero_key:
+        cfg["zotero"]["api_key"] = zotero_key
+        # auto-discover and cache the user ID
+        from mosaic.zotero import ZoteroClient
+        client = ZoteroClient(api_key=zotero_key)
+        try:
+            uid = client.discover_user_id()
+            cfg["zotero"]["user_id"] = uid
+            rprint(f"[green]Zotero web API configured for user {uid}[/green]")
+        except Exception as e:
+            rprint(f"[yellow]Could not auto-discover Zotero user ID: {e}[/yellow]")
     if unpaywall_email:
         cfg["unpaywall"]["email"] = unpaywall_email
     if download_dir:
@@ -357,16 +395,24 @@ def config(
     if filename_pattern:
         cfg["filename_pattern"] = filename_pattern
 
-    if any([elsevier_key, ss_key, ncbi_key, unpaywall_email, download_dir, filename_pattern]):
+    if any([elsevier_key, ss_key, ncbi_key, zotero_key, unpaywall_email, download_dir, filename_pattern]):
         cfg_mod.save(cfg)
         rprint(f"[green]Config saved to[/green] ~/.config/mosaic/config.toml")
 
-    if show or not any([elsevier_key, ss_key, unpaywall_email, download_dir, filename_pattern]):
+    if show or not any([elsevier_key, ss_key, ncbi_key, zotero_key, unpaywall_email, download_dir, filename_pattern]):
         import tomli_w
         console.print_json(data=cfg)
 
 
-def _bulk_download(from_file: Path, cfg: dict, cache: Cache, oa_only: bool) -> None:
+def _bulk_download(
+    from_file: Path,
+    cfg: dict,
+    cache: Cache,
+    oa_only: bool,
+    zotero: bool = False,
+    zotero_collection: str = "",
+    zotero_local: bool = False,
+) -> None:
     from mosaic.bulk import read_dois
     from mosaic.models import Paper
 
@@ -390,15 +436,19 @@ def _bulk_download(from_file: Path, cfg: dict, cache: Cache, oa_only: bool) -> N
     download_dir = cfg["download_dir"]
     pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
     ok = fail = skip = 0
+    papers_list: list = []
+    pdf_map: dict[str, str] = {}
 
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False) as prog:
         for doi in dois:
             paper = Paper(title=doi, doi=doi, source="manual")
+            papers_list.append(paper)
             task = prog.add_task(f"{doi}…")
             path = dl_paper(paper, download_dir, cache, email, pattern)
             prog.remove_task(task)
             if path:
                 ok += 1
+                pdf_map[paper.uid] = path
                 rprint(f"  [green]✓[/green] {Path(path).name}")
             elif oa_only:
                 skip += 1
@@ -413,6 +463,10 @@ def _bulk_download(from_file: Path, cfg: dict, cache: Cache, oa_only: bool) -> N
     if skip:
         parts.append(f"[dim]{skip} skipped (no OA copy)[/dim]")
     console.print(f"\n[bold]Done:[/bold] {', '.join(parts)}")
+
+    if zotero and papers_list:
+        _push_to_zotero(papers_list, cfg, collection_name=zotero_collection,
+                        force_local=zotero_local, pdf_map=pdf_map)
 
 
 def _print_search_stats(stats: dict, filters) -> None:
@@ -482,11 +536,13 @@ def _print_results(papers: list) -> None:
     console.print(f"[dim]{len(papers)} result(s)[/dim]")
 
 
-def _download_all(papers: list, cfg: dict, cache: Cache) -> None:
+def _download_all(papers: list, cfg: dict, cache: Cache) -> dict[str, str]:
+    """Download PDFs for *papers*. Returns a ``{paper.uid: local_path}`` map."""
     email = cfg.get("unpaywall", {}).get("email", "")
     download_dir = cfg["download_dir"]
     pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
     ok = fail = skip = 0
+    pdf_map: dict[str, str] = {}
 
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False) as prog:
         for p in papers:
@@ -498,12 +554,66 @@ def _download_all(papers: list, cfg: dict, cache: Cache) -> None:
             prog.remove_task(task)
             if path:
                 ok += 1
+                pdf_map[p.uid] = path
                 rprint(f"  [green]✓[/green] {Path(path).name}")
             else:
                 fail += 1
                 rprint(f"  [red]✗[/red] {p.title[:60]}")
 
     console.print(f"\n[bold]Done:[/bold] {ok} downloaded, {fail} failed, {skip} skipped (no PDF)")
+    return pdf_map
+
+
+def _push_to_zotero(
+    papers: list,
+    cfg: dict,
+    *,
+    collection_name: str = "",
+    force_local: bool = False,
+    pdf_map: dict[str, str] | None = None,
+) -> None:
+    """Export *papers* to Zotero (local or web API)."""
+    from mosaic.zotero import ZoteroClient
+
+    zot_cfg = cfg.get("zotero", {})
+    api_key = "" if force_local else zot_cfg.get("api_key", "")
+    user_id = zot_cfg.get("user_id", 0)
+    client = ZoteroClient(api_key=api_key, user_id=user_id)
+
+    if not client.is_reachable():
+        if api_key:
+            rprint("[red]Zotero web API not reachable. Check your API key.[/red]")
+        else:
+            rprint("[red]Zotero is not running. Start Zotero or configure a web API key "
+                   "with: mosaic config --zotero-key YOUR_KEY[/red]")
+        raise typer.Exit(1)
+
+    collection_key: str | None = None
+    if collection_name:
+        try:
+            collection_key = client.ensure_collection(collection_name)
+        except Exception as e:
+            rprint(f"[yellow]Could not create/find Zotero collection '{collection_name}': {e}[/yellow]")
+
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
+        prog.add_task(f"Adding {len(papers)} paper(s) to Zotero…")
+        item_keys = client.add_papers(papers, collection_key=collection_key)
+
+    added = sum(1 for k in item_keys if k)
+    rprint(f"[green]Zotero:[/green] {added} paper(s) added" +
+           (f" to '{collection_name}'" if collection_name else ""))
+
+    if pdf_map:
+        attached = 0
+        for paper, item_key in zip(papers, item_keys):
+            if not item_key:
+                continue
+            local_path = pdf_map.get(paper.uid)
+            if local_path and Path(local_path).exists():
+                if client.attach_pdf(item_key, Path(local_path)):
+                    attached += 1
+        if attached:
+            rprint(f"[dim]{attached} PDF(s) linked.[/dim]")
 
 
 @notebook_app.command("create")

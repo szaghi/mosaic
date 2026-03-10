@@ -1,4 +1,4 @@
-Output gifs/05_config.gif
+Output public/gifs/05_config.gif
 Set FontSize 12
 Set Width 800
 Set Height 1100

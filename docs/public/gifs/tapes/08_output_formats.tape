@@ -1,4 +1,4 @@
-Output gifs/08_output_formats.gif
+Output public/gifs/08_output_formats.gif
 Set FontSize 12
 Set Width 1200
 Set Height 1000

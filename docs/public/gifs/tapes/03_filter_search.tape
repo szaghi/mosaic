@@ -1,4 +1,4 @@
-Output gifs/03_filter_search.gif
+Output public/gifs/03_filter_search.gif
 Set FontSize 12
 Set Width 1100
 Set Height 600

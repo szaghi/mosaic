@@ -200,6 +200,31 @@ mosaic search "protein folding" --oa-only --sort citations -n 20
 
 When `--sort citations` is active, the results table gains a **Cited** column showing the citation count for each paper. Papers from sources that do not return citation data (arXiv, DOAJ, …) show `–` and are placed after all papers with known counts.
 
+## Export to Zotero
+
+Push results directly into your Zotero library — no copy-paste required.
+
+```bash
+# Local API (Zotero must be running)
+mosaic search "CRISPR" --oa-only --zotero
+
+# Push to a named collection
+mosaic search "transformers" --zotero --zotero-collection "Deep Learning"
+
+# Download PDFs and link them in Zotero
+mosaic search "diffusion models" --download --zotero --zotero-collection "Generative AI"
+```
+
+For the **web API** (Zotero not running locally), configure once:
+```bash
+mosaic config --zotero-key YOUR_API_KEY
+```
+Then use `--zotero` as normal — MOSAIC will talk to `api.zotero.org`.
+
+![Zotero integration demo](/gifs/09_zotero.gif)
+
+See the [Zotero Integration guide](./zotero) for the full setup and all options.
+
 ## Find similar papers
 
 `mosaic similar` discovers related literature from any DOI or arXiv ID — no search query needed.

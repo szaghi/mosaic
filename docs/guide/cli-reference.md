@@ -46,6 +46,9 @@ mosaic search [OPTIONS] QUERY
 | `--download-dir` | | path | config | Override PDF download directory for this run only |
 | `--sort` | | str | | Sort results: `citations` (most cited first) or `year` (newest first) |
 | `--verbose` | | flag | off | Print per-source counts and deduplication stats before results |
+| `--zotero` | | flag | off | Export results to Zotero |
+| `--zotero-collection` | | str | | Zotero collection name (created if missing) |
+| `--zotero-local` | | flag | off | Force local API even when a web API key is configured |
 
 **Source shorthands for `--source`:**
 
@@ -199,6 +202,9 @@ mosaic similar [OPTIONS] IDENTIFIER
 | `--sort` | | str | | Sort: `citations` or `year` |
 | `--output` | `-o` | path | | Save results to file (repeatable) |
 | `--download-dir` | | path | config | Override PDF download directory |
+| `--zotero` | | flag | off | Export results to Zotero |
+| `--zotero-collection` | | str | | Zotero collection name (created if missing) |
+| `--zotero-local` | | flag | off | Force local API even when a web API key is configured |
 
 `IDENTIFIER` accepts the same formats as `mosaic get`: a bare DOI, `doi:10.xxx`, `DOI:10.xxx`, `arxiv:NNNN.NNNNN`, or `ARXIV:NNNN.NNNNN`.
 
@@ -231,6 +237,9 @@ mosaic get [OPTIONS] [DOI]
 | `--from` | path | | BibTeX (`.bib`) or CSV (`.csv`) file containing DOIs to bulk-download |
 | `--oa-only` | flag | off | In bulk mode: treat unresolvable papers as skipped rather than failed |
 | `--download-dir` | path | config | Override PDF download directory for this run |
+| `--zotero` | flag | off | Export downloaded paper(s) to Zotero |
+| `--zotero-collection` | str | | Zotero collection name (created if missing) |
+| `--zotero-local` | flag | off | Force local API even when a web API key is configured |
 
 Provide either a `DOI` positional argument (single download) or `--from <file>` (bulk download) — not both.
 
@@ -273,6 +282,7 @@ mosaic config [OPTIONS]
 | `--elsevier-key TEXT` | str | Set Elsevier/ScienceDirect API key |
 | `--ss-key TEXT` | str | Set Semantic Scholar API key |
 | `--ncbi-key TEXT` | str | Set NCBI/PubMed API key |
+| `--zotero-key TEXT` | str | Set Zotero API key (web API); auto-discovers and caches user ID |
 | `--unpaywall-email TEXT` | str | Set Unpaywall email |
 | `--download-dir TEXT` | str | Set PDF download directory |
 | `--filename-pattern TEXT` | str | Set PDF filename pattern (see below) |

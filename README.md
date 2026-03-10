@@ -91,7 +91,7 @@ Year · author · journal · open-access · citation count — composable, appli
 
 📤 **Export anywhere**
 
-Markdown · CSV · JSON · BibTeX — one flag, any combination
+Markdown · CSV · JSON · BibTeX · Zotero (local & web API)
 
 </td>
 </tr>
@@ -115,6 +115,17 @@ SQLite — repeated queries are instant, no re-fetching
 🧩 **Custom sources**
 
 Wire any JSON REST API as a new source with a few lines of TOML — no Python needed
+
+</td>
+</tr>
+<tr>
+<td align="center" colspan="3">
+
+📚 **Zotero integration**
+
+Push results directly into your Zotero library — local API (Zotero running on your machine) or web API (api.zotero.org). Organise into collections, link downloaded PDFs as attachments, and sync across devices — all with a single `--zotero` flag.
+
+![Zotero integration screenshot](docs/public/zotero-01.png)
 
 </td>
 </tr>
@@ -253,6 +264,26 @@ mosaic get --from references.csv --oa-only
 ```
 
 Extracts all DOIs from the file, deduplicates, and downloads with the same fallback chain (direct PDF → Unpaywall → browser session).
+
+### Export to Zotero
+
+```bash
+# Push to your Zotero library (Zotero must be running — no config needed)
+mosaic search "CRISPR" --oa-only --zotero
+
+# Push to a named collection (created automatically if missing)
+mosaic search "transformers" --zotero --zotero-collection "Deep Learning"
+
+# Download PDFs and link them as Zotero attachments (local mode)
+mosaic search "diffusion models" --download --zotero --zotero-collection "Generative AI"
+```
+
+For the **web API** (Zotero not running locally), configure once:
+```bash
+mosaic config --zotero-key YOUR_API_KEY
+```
+
+![MOSAIC Zotero integration demo](docs/public/gifs/09_zotero.gif)
 
 ### Configuration
 

@@ -32,6 +32,7 @@ _DEFAULTS: dict = {
         "pmc": {"enabled": True, "api_key": ""},
     },
     "unpaywall": {"email": ""},
+    "zotero": {"api_key": "", "user_id": 0},
     "custom_sources": [],
 }
 

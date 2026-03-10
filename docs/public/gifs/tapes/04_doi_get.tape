@@ -1,4 +1,4 @@
-Output gifs/04_doi_get.gif
+Output public/gifs/04_doi_get.gif
 Set FontSize 12
 Set Width 1100
 Set Height 180

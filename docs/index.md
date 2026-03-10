@@ -42,6 +42,9 @@ features:
   - icon: 🔌
     title: Custom Sources
     details: Wire any number of JSON REST APIs as new search sources directly in config.toml — one block per source, no Python required. Supports GET and POST, nested field paths, API keys, and author objects.
+  - icon: 📚
+    title: Zotero Integration
+    details: Push results directly into your Zotero library with --zotero. Works with Zotero desktop (local API) and Zotero web (api.zotero.org). Organise into named collections and link downloaded PDFs as attachments.
 ---
 
 ## Quick start
