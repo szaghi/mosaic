@@ -25,7 +25,8 @@ flowchart TD
     Q --> DBLP[DBLP]
     Q --> HAL[HAL]
     Q --> PM[PubMed]
-    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM --> I{Deduplicate\nby DOI}
+    Q --> PMC[PubMed Central]
+    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM & PMC --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -446,6 +447,34 @@ mosaic config --ncbi-key YOUR_KEY
 ::: tip CLI shorthand
 ```bash
 mosaic search "CRISPR gene editing" --source pubmed --year 2020-2024
+```
+:::
+
+## PubMed Central
+
+| Property | Value |
+|----------|-------|
+| Auth | None (API key optional for higher rate limits) |
+| Content | 5 M+ free full-text biomedical articles |
+| PDF | Direct PDF URL for every record (all PMC articles are open access) |
+| Rate limit | 3 req/s (no key) · 10 req/s (with key) |
+| Base URL | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/` |
+
+PubMed Central is the NIH's free full-text archive of biomedical and life-science literature. Every article in PMC is open access by definition and carries a direct PDF URL. Two E-utilities calls are made per search: `esearch?db=pmc` to retrieve numeric PMC IDs, then `esummary?db=pmc` to fetch metadata.
+
+Compared to PubMed, PMC has a smaller corpus (5 M vs 35 M records) but guarantees a downloadable PDF for every result. Use PubMed for broad discovery and PMC when you need full text. Results from both sources are deduplicated by DOI automatically.
+
+::: tip Optional API key
+The same NCBI API key works for both PubMed and PMC. Configure it once:
+
+```bash
+mosaic config --ncbi-key YOUR_KEY
+```
+:::
+
+::: tip CLI shorthand
+```bash
+mosaic search "RNA splicing mechanisms" --source pmc --year 2020-2024
 ```
 :::
 

@@ -68,6 +68,7 @@ mosaic search [OPTIONS] QUERY
 | `dblp` | DBLP | — |
 | `hal` | HAL | — |
 | `pubmed` | PubMed | — (API key optional) |
+| `pmc` | PubMed Central | — (API key optional) |
 
 **`--year` / `-y` formats:**
 

@@ -31,7 +31,7 @@
 ## What MOSAIC does
 
 ```bash
-# Search 18 sources at once, deduplicate, download OA PDFs
+# Search 19 sources at once, deduplicate, download OA PDFs
 mosaic search "attention is all you need" --oa-only --download
 
 # Discover related literature from any DOI or arXiv ID — no query needed
@@ -49,9 +49,9 @@ mosaic notebook create "Transformers" --query "transformer architecture" --oa-on
 <tr>
 <td align="center" width="33%">
 
-🌐 **18 sources, one command**
+🌐 **19 sources, one command**
 
-arXiv · Semantic Scholar · OpenAlex · PubMed · Europe PMC · DOAJ · Crossref · Springer · IEEE · NASA ADS · Zenodo · BASE · CORE · DBLP · HAL · ScienceDirect · and more
+arXiv · Semantic Scholar · OpenAlex · PubMed · PubMed Central · Europe PMC · DOAJ · Crossref · Springer · IEEE · NASA ADS · Zenodo · BASE · CORE · DBLP · HAL · ScienceDirect · and more
 
 </td>
 <td align="center" width="33%">
@@ -138,6 +138,7 @@ Wire any JSON REST API as a new source with a few lines of TOML — no Python ne
 | **DBLP** | `dblp` | 6 M+ CS publications (journals, conferences) | None | Via `ee` field (arXiv/OA links) |
 | **HAL** | `hal` | 1.5 M+ OA documents, strong for French academic output | None | Direct PDF when deposited |
 | **PubMed** | `pubmed` | 35 M+ biomedical citations (NCBI) | None (API key optional) | PMC PDF for OA articles |
+| **PubMed Central** | `pmc` | 5 M+ free full-text biomedical articles | None (API key optional) | Always — all PMC articles are OA |
 | **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
 
 ## Installation
@@ -301,8 +302,8 @@ MOSAIC uploads local PDFs when available, falls back to URLs otherwise, and resp
 ```mermaid
 flowchart LR
     CLI -->|query + filters| Search
-    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer browser] & SPN[Springer API] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & IEEE[IEEE Xplore] & ZEN[Zenodo] & CR[Crossref] & DBLP[DBLP] & HAL[HAL] & PM[PubMed]
-    arXiv & SS & SD & SP & SPN & DOAJ & EPMC & OA & BASE & CORE & ADS & IEEE & ZEN & CR & DBLP & HAL & PM -->|Paper list| Dedup{Deduplicate\nby DOI}
+    Search --> arXiv & SS[Semantic Scholar] & SD[ScienceDirect] & SP[Springer browser] & SPN[Springer API] & DOAJ & EPMC[Europe PMC] & OA[OpenAlex] & BASE & CORE & ADS[NASA ADS] & IEEE[IEEE Xplore] & ZEN[Zenodo] & CR[Crossref] & DBLP[DBLP] & HAL[HAL] & PM[PubMed] & PMC[PubMed Central]
+    arXiv & SS & SD & SP & SPN & DOAJ & EPMC & OA & BASE & CORE & ADS & IEEE & ZEN & CR & DBLP & HAL & PM & PMC -->|Paper list| Dedup{Deduplicate\nby DOI}
     Dedup --> Cache[(SQLite\ncache)]
     Dedup --> Table[Rich table]
     Table -->|--download| DL[Downloader]

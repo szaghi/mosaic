@@ -64,7 +64,7 @@ class TestDownload:
         p.url = "https://sciencedirect.com/article/pii/S123"
         with patch("mosaic.sources.unpaywall.resolve", return_value=None), \
              patch("mosaic.auth.find_session_for_url", return_value="elsevier"), \
-             patch("mosaic.auth.browser_download", return_value=True) as mock_bd, \
+             patch("mosaic.auth.browser_download", new=MagicMock(return_value=True)) as mock_bd, \
              patch("asyncio.run", side_effect=lambda coro: True):
             result = download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         assert result is not None
@@ -84,6 +84,7 @@ class TestDownload:
         p.url = "https://sciencedirect.com/article/pii/S123"
         with patch("mosaic.sources.unpaywall.resolve", return_value=None), \
              patch("mosaic.auth.find_session_for_url", return_value="elsevier"), \
+             patch("mosaic.auth.browser_download", MagicMock(return_value=True)), \
              patch("asyncio.run", return_value=True):
             download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         rec = tmp_cache.get_download(p.uid)
@@ -92,6 +93,8 @@ class TestDownload:
     def test_all_steps_fail_returns_none(self, tmp_path, tmp_cache):
         p = _paper(doi="10.1/x", pdf_url=None)
         with patch("mosaic.sources.unpaywall.resolve", return_value=None), \
-             patch("mosaic.auth.find_session_for_url", return_value=None):
+             patch("mosaic.auth.find_session_for_url", return_value=None), \
+             patch("mosaic.auth.list_sessions", return_value=[]), \
+             patch("mosaic.downloader._resolve_redirect", side_effect=lambda u: u):
             result = download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         assert result is None

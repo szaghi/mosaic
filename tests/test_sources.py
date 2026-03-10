@@ -1438,3 +1438,174 @@ class TestPubMedSource:
         with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
             self._source().search("q", max_results=500)
         assert mock.call_args.kwargs["params"]["retmax"] == 200
+
+# ── PubMed Central (PMC) ──────────────────────────────────────────────────────
+
+_PMC_ESEARCH = {
+    "esearchresult": {
+        "idlist": ["11111111", "22222222"],
+    }
+}
+
+_PMC_ESUMMARY = {
+    "result": {
+        "uids": ["11111111", "22222222"],
+        "11111111": {
+            "uid": "11111111",
+            "title": "Single-cell RNA sequencing reveals heterogeneity",
+            "authors": [{"name": "Smith A"}, {"name": "Jones B"}],
+            "pubdate": "2023 Feb 10",
+            "fulljournalname": "Nature Methods",
+            "source": "Nat Methods",
+            "volume": "20",
+            "issue": "2",
+            "pages": "200-215",
+            "articleids": [
+                {"idtype": "pmcid",  "value": "PMC11111111"},
+                {"idtype": "doi",    "value": "10.1038/s41592-023-test"},
+                {"idtype": "pubmed", "value": "36700001"},
+            ],
+        },
+        "22222222": {
+            "uid": "22222222",
+            "title": "Spatial transcriptomics of brain tissue",
+            "authors": [{"name": "Lee C"}],
+            "pubdate": "2022 Nov",
+            "fulljournalname": "Cell",
+            "source": "Cell",
+            "volume": "185",
+            "issue": "22",
+            "pages": "4300-4315",
+            "articleids": [
+                {"idtype": "pmcid",  "value": "PMC22222222"},
+                {"idtype": "doi",    "value": "10.1016/j.cell.2022.test"},
+            ],
+        },
+    }
+}
+
+
+class TestPMCSource:
+    def _source(self, api_key=""):
+        from mosaic.sources.pmc import PMCSource
+        return PMCSource(api_key=api_key)
+
+    def _mock_two_step(self, esearch=_PMC_ESEARCH, esummary=_PMC_ESUMMARY):
+        return [
+            _mock_get(json_data=esearch),
+            _mock_get(json_data=esummary),
+        ]
+
+    def test_always_available(self):
+        assert self._source().available()
+        assert self._source(api_key="key").available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", side_effect=self._mock_two_step()):
+            papers = self._source().search("single-cell")
+        assert len(papers) == 2
+        p = papers[0]
+        assert p.title == "Single-cell RNA sequencing reveals heterogeneity"
+        assert "Smith A" in p.authors
+        assert p.year == 2023
+        assert p.doi == "10.1038/s41592-023-test"
+        assert p.journal == "Nature Methods"
+        assert p.volume == "20"
+        assert p.issue == "2"
+        assert p.pages == "200-215"
+        assert p.source == "PubMed Central"
+
+    def test_all_results_are_open_access(self):
+        with patch("httpx.get", side_effect=self._mock_two_step()):
+            papers = self._source().search("single-cell")
+        assert all(p.is_open_access for p in papers)
+
+    def test_pdf_url_built_from_uid(self):
+        with patch("httpx.get", side_effect=self._mock_two_step()):
+            papers = self._source().search("single-cell")
+        assert papers[0].pdf_url == "https://pmc.ncbi.nlm.nih.gov/articles/PMC11111111/pdf/"
+        assert papers[1].pdf_url == "https://pmc.ncbi.nlm.nih.gov/articles/PMC22222222/pdf/"
+
+    def test_url_points_to_pmc_article(self):
+        with patch("httpx.get", side_effect=self._mock_two_step()):
+            papers = self._source().search("single-cell")
+        assert "PMC11111111" in papers[0].url
+
+    def test_uses_db_pmc_in_esearch(self):
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("single-cell")
+        assert mock.call_args.kwargs["params"]["db"] == "pmc"
+
+    def test_uses_db_pmc_in_esummary(self):
+        calls = []
+        def fake_get(url, **kwargs):
+            calls.append(kwargs.get("params", {}))
+            if len(calls) == 1:
+                return _mock_get(json_data=_PMC_ESEARCH)
+            return _mock_get(json_data=_PMC_ESUMMARY)
+        with patch("httpx.get", side_effect=fake_get):
+            self._source().search("single-cell")
+        assert calls[1]["db"] == "pmc"
+
+    def test_empty_idlist_returns_empty(self):
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)):
+            papers = self._source().search("nothing")
+        assert papers == []
+
+    def test_year_filter_appended_to_query(self):
+        f = SearchFilters(year_from=2021, year_to=2023)
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("RNA", filters=f)
+        term = mock.call_args.kwargs["params"]["term"]
+        assert "pdat" in term and "2021" in term and "2023" in term
+
+    def test_author_filter_appended_to_query(self):
+        f = SearchFilters(authors=["Smith"])
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("RNA", filters=f)
+        assert '"Smith"[au]' in mock.call_args.kwargs["params"]["term"]
+
+    def test_journal_filter_appended_to_query(self):
+        f = SearchFilters(journal="Nature")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("RNA", filters=f)
+        assert '"Nature"[ta]' in mock.call_args.kwargs["params"]["term"]
+
+    def test_field_title_uses_ti_tag(self):
+        f = SearchFilters(field="title")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("splicing", filters=f)
+        assert mock.call_args.kwargs["params"]["term"] == "splicing[ti]"
+
+    def test_field_abstract_uses_ab_tag(self):
+        f = SearchFilters(field="abstract")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("splicing", filters=f)
+        assert mock.call_args.kwargs["params"]["term"] == "splicing[ab]"
+
+    def test_raw_query_overrides_term(self):
+        f = SearchFilters(raw_query="splicing[ti] AND Smith[au]")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("anything", filters=f)
+        assert mock.call_args.kwargs["params"]["term"] == "splicing[ti] AND Smith[au]"
+
+    def test_api_key_sent_in_params(self):
+        src = self._source(api_key="mykey")
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            src.search("RNA")
+        assert mock.call_args.kwargs["params"].get("api_key") == "mykey"
+
+    def test_max_results_capped_at_200(self):
+        esearch = {"esearchresult": {"idlist": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
+            self._source().search("q", max_results=999)
+        assert mock.call_args.kwargs["params"]["retmax"] == 200

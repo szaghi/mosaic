@@ -29,6 +29,7 @@ _DEFAULTS: dict = {
         "dblp": {"enabled": True},
         "hal": {"enabled": True},
         "pubmed": {"enabled": True, "api_key": ""},
+        "pmc": {"enabled": True, "api_key": ""},
     },
     "unpaywall": {"email": ""},
     "custom_sources": [],

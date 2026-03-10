@@ -17,6 +17,7 @@ from mosaic.sources.custom import CustomSource
 from mosaic.sources.dblp import DBLPSource
 from mosaic.sources.hal import HALSource
 from mosaic.sources.pubmed import PubMedSource
+from mosaic.sources.pmc import PMCSource
 
 __all__ = [
     "ArxivSource",
@@ -38,4 +39,5 @@ __all__ = [
     "DBLPSource",
     "HALSource",
     "PubMedSource",
+    "PMCSource",
 ]

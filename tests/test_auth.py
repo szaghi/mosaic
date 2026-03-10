@@ -242,7 +242,7 @@ class TestRequirePlaywright:
 
 class TestFindPdfUrl:
     def _run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.run(coro)
 
     def _mock_page(self, selector_result=None, links=None):
         page = AsyncMock()
@@ -289,7 +289,7 @@ class TestFindPdfUrl:
 
 class TestBrowserDownload:
     def _run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        return asyncio.run(coro)
 
     def test_returns_false_when_session_missing(self, tmp_path):
         import mosaic.auth as auth_mod

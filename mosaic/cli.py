@@ -19,7 +19,7 @@ from mosaic.sources import (
     ScienceDirectBrowserSource, SpringerBrowserSource,
     DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
     NASAADSSource, IEEEXploreSource, ZenodoSource, CrossrefSource,
-    SpringerAPISource, CustomSource, DBLPSource, HALSource, PubMedSource,
+    SpringerAPISource, CustomSource, DBLPSource, HALSource, PubMedSource, PMCSource,
 )
 
 def _version_callback(value: bool) -> None:
@@ -90,6 +90,8 @@ def _build_sources(cfg: dict) -> list:
         sources.append(HALSource())
     if src_cfg.get("pubmed", {}).get("enabled", True):
         sources.append(PubMedSource(api_key=src_cfg.get("pubmed", {}).get("api_key", "")))
+    if src_cfg.get("pmc", {}).get("enabled", True):
+        sources.append(PMCSource(api_key=src_cfg.get("pmc", {}).get("api_key", "")))
     if src_cfg.get("springer", {}).get("enabled", True):
         springer_src = SpringerBrowserSource()
         if springer_src.available():
@@ -133,7 +135,7 @@ def search(
         "sp": "Springer", "springer": "Springer Nature",
         "ads": "NASA ADS", "ieee": "IEEE Xplore",
         "zenodo": "Zenodo", "crossref": "Crossref",
-        "dblp": "DBLP", "hal": "HAL", "pubmed": "PubMed",
+        "dblp": "DBLP", "hal": "HAL", "pubmed": "PubMed", "pmc": "PubMed Central",
     }
     if source:
         key = source.lower()
@@ -329,6 +331,7 @@ def config(
         cfg["sources"]["semantic_scholar"]["api_key"] = ss_key
     if ncbi_key:
         cfg["sources"]["pubmed"]["api_key"] = ncbi_key
+        cfg["sources"]["pmc"]["api_key"] = ncbi_key
     if unpaywall_email:
         cfg["unpaywall"]["email"] = unpaywall_email
     if download_dir:
