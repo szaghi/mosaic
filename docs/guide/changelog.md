@@ -2,6 +2,15 @@
 title: Changelog
 ---
 
+## [1.2.11] — 2026-03-10
+### Added
+- **search**: Add --sort flag to rank results by citations or year
+
+
+### Documentation
+- Add terminal demo GIFs and VHS recording script
+
+
 ## [1.2.10] — 2026-03-10
 ### Fixed
 - **security**: Restrict config and session file permissions to owner
