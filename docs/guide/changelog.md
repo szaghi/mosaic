@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.9] — 2026-03-10
+### Added
+- **sources**: Add HAL open archive source
+
+
 ## [1.2.8] — 2026-03-09
 ### Added
 - **sources**: Add DBLP computer science bibliography source
