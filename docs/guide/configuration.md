@@ -30,6 +30,8 @@ mosaic config --filename-pattern "{author}_{year}_{title}"
 mosaic config --show
 ```
 
+![Configuration setup demo](/gifs/05_config.gif)
+
 ## Full config reference
 
 ```toml

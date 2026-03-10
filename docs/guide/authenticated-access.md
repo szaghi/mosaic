@@ -179,6 +179,8 @@ mosaic auth status
 - **Domain** — which URLs the session will be tried for during automatic download.
 - **Valid** — MOSAIC inspects cookie expiry timestamps in the saved file. ✓ means at least one timed cookie is still active; ✗ expired means all timed cookies have passed their expiry date and the session will be excluded from active sources until refreshed.
 
+![Auth status demo](/gifs/06_auth_status.gif)
+
 ### `mosaic auth logout`
 
 Remove a saved session:

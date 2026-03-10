@@ -174,6 +174,8 @@ mosaic search "diffusion models" -y 2023-2025 --oa-only \
   --output results.md --output refs.bib --output results.json
 ```
 
+![Output formats demo](/gifs/08_output_formats.gif)
+
 ---
 
 ### `get`

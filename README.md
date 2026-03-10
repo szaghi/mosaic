@@ -37,6 +37,8 @@ mosaic search "attention is all you need" --oa-only --download
 mosaic notebook create "Attention Papers" --query "attention is all you need" --oa-only --podcast
 ```
 
+![MOSAIC quick search demo](docs/public/gifs/01_quick_search.gif)
+
 ## Why MOSAIC?
 
 Finding scientific papers across databases is tedious:
@@ -124,6 +126,8 @@ mosaic config --elsevier-key YOUR_KEY
 # 3. Search and download
 mosaic search "transformer architecture" --oa-only --download
 ```
+
+![MOSAIC search and download demo](docs/public/gifs/02_search_download.gif)
 
 ---
 

@@ -22,6 +22,8 @@ Queries all enabled sources and prints a results table:
 
 Duplicate entries (same DOI) are merged automatically.
 
+![Basic search demo](/gifs/01_quick_search.gif)
+
 ## Limit results per source
 
 ```bash
@@ -68,6 +70,8 @@ For each result that has a PDF link (or a DOI that Unpaywall can resolve), the f
 
 Already-downloaded files are skipped automatically.
 
+![Search and download demo](/gifs/02_search_download.gif)
+
 ## Download by DOI
 
 ```bash
@@ -75,6 +79,8 @@ mosaic get 10.48550/arXiv.1706.03762
 ```
 
 Fetches a single paper by DOI. MOSAIC first checks the local cache, then tries Unpaywall if no PDF URL is known.
+
+![Download by DOI demo](/gifs/04_doi_get.gif)
 
 ## Filter by year
 
@@ -125,3 +131,5 @@ mosaic search "CRISPR" -j Nature -y 2020-2023 --source epmc -n 25
 # Broad search, open-access only, download everything, from arXiv
 mosaic search "large language model" -n 50 --source arxiv --oa-only --download
 ```
+
+![Multi-filter search demo](/gifs/03_filter_search.gif)
