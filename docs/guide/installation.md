@@ -48,6 +48,18 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
+## Optional: Web UI
+
+MOSAIC includes a browser-based graphical interface. Install the `ui` extra:
+
+```bash
+pipx inject mosaic-search "flask>=3.0" "waitress>=3.0"   # pipx
+uv tool inject mosaic-search "flask>=3.0" "waitress>=3.0" # uv
+pip install 'mosaic-search[ui]'                            # pip / venv
+```
+
+Then launch with `mosaic ui`. See the [Web UI guide](./web-ui) for details.
+
 ## Optional: NotebookLM integration
 
 To use `mosaic notebook create` you need [notebooklm-py](https://github.com/teng-lin/notebooklm-py), an unofficial Python client for Google NotebookLM.

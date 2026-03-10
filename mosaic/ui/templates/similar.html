@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Similar Papers &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Find Similar Papers</h2>
+
+<form id="similar-form">
+  <div class="grid">
+    <input type="text" name="identifier" value="{{ identifier }}"
+           placeholder="DOI or arXiv ID (e.g. 10.48550/arXiv.1706.03762)" required>
+    <button type="submit"
+            hx-post="{{ url_for('ui.similar_submit') }}"
+            hx-target="#results"
+            hx-include="#similar-form"
+            hx-indicator="#similar-spinner">
+      Find Similar
+    </button>
+  </div>
+
+  <div class="grid">
+    <label>
+      Max results
+      <input type="number" name="max_results" value="10" min="1" max="50">
+    </label>
+    <label>
+      Sort by
+      <select name="sort_by">
+        <option value="">Default</option>
+        <option value="citations">Citations (most cited)</option>
+        <option value="year">Year (newest)</option>
+      </select>
+    </label>
+    <fieldset>
+      <label><input type="checkbox" name="oa_only" role="switch"> Open Access only</label>
+      <label><input type="checkbox" name="pdf_only" role="switch"> PDF available only</label>
+    </fieldset>
+  </div>
+</form>
+
+<span id="similar-spinner" class="htmx-indicator" aria-busy="true">Searching...</span>
+
+<div id="results"></div>
+{% endblock %}

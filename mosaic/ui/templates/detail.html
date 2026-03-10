@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ paper.title[:60] }} &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<hgroup>
+  <h2>{{ paper.title }}</h2>
+  <p>{{ paper.short_authors }}{% if paper.year %} ({{ paper.year }}){% endif %}</p>
+</hgroup>
+
+<div class="action-bar">
+  {% if paper.pdf_url %}
+  <a href="{{ paper.pdf_url }}" target="_blank" role="button" class="outline">Open PDF</a>
+  {% endif %}
+  {% if paper.url %}
+  <a href="{{ paper.url }}" target="_blank" role="button" class="outline secondary">Open URL</a>
+  {% endif %}
+  {% if paper.doi %}
+  <a href="https://doi.org/{{ paper.doi }}" target="_blank" role="button" class="outline secondary">DOI Link</a>
+  {% endif %}
+
+  <button hx-post="{{ url_for('ui.download_paper', uid=quote(paper.uid, safe='')) }}"
+          hx-target="#download-status"
+          class="outline">
+    Download PDF
+  </button>
+
+  {% if paper.doi or paper.arxiv_id %}
+  <a href="{{ url_for('ui.similar_page', identifier=paper.doi or paper.arxiv_id) }}" role="button" class="outline contrast">
+    Find Similar
+  </a>
+  {% endif %}
+</div>
+
+<div id="download-status">
+  {% if download_status and download_status.status == 'ok' %}
+  <mark>Previously downloaded: {{ download_status.path }}</mark>
+  {% endif %}
+</div>
+
+<dl class="paper-meta">
+  {% if paper.authors %}
+  <dt>Authors</dt>
+  <dd>{{ paper.authors | join(', ') }}</dd>
+  {% endif %}
+
+  {% if paper.journal %}
+  <dt>Journal</dt>
+  <dd>
+    {{ paper.journal }}
+    {% if paper.volume %}, vol. {{ paper.volume }}{% endif %}
+    {% if paper.issue %} ({{ paper.issue }}){% endif %}
+    {% if paper.pages %}, pp. {{ paper.pages }}{% endif %}
+  </dd>
+  {% endif %}
+
+  {% if paper.doi %}
+  <dt>DOI</dt>
+  <dd><a href="https://doi.org/{{ paper.doi }}" target="_blank">{{ paper.doi }}</a></dd>
+  {% endif %}
+
+  {% if paper.arxiv_id %}
+  <dt>arXiv ID</dt>
+  <dd><a href="https://arxiv.org/abs/{{ paper.arxiv_id }}" target="_blank">{{ paper.arxiv_id }}</a></dd>
+  {% endif %}
+
+  <dt>Source</dt>
+  <dd>{{ paper.source }}</dd>
+
+  <dt>Open Access</dt>
+  <dd>{% if paper.is_open_access %}<span class="badge-oa">Yes</span>{% else %}<span class="badge-closed">No</span>{% endif %}</dd>
+
+  {% if paper.citation_count is not none %}
+  <dt>Citations</dt>
+  <dd>{{ paper.citation_count }}</dd>
+  {% endif %}
+
+  {% if paper.url %}
+  <dt>URL</dt>
+  <dd><a href="{{ paper.url }}" target="_blank">{{ paper.url[:80] }}{% if paper.url | length > 80 %}&hellip;{% endif %}</a></dd>
+  {% endif %}
+</dl>
+
+{% if paper.abstract %}
+<h3>Abstract</h3>
+<blockquote>{{ paper.abstract }}</blockquote>
+{% endif %}
+
+<p><a href="{{ url_for('ui.search_page') }}">&larr; Back to search</a></p>
+{% endblock %}

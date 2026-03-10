@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MOSAIC{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('ui.static', filename='pico.min.css') }}">
+  <style>
+    .htmx-indicator { display: none; }
+    .htmx-request .htmx-indicator,
+    .htmx-request.htmx-indicator { display: inline-block; }
+    .badge-oa { color: var(--pico-ins-color); font-weight: bold; }
+    .badge-closed { color: var(--pico-del-color); }
+    nav ul li a[aria-current="page"] { font-weight: bold; text-decoration: underline; }
+    table td, table th { padding: .4rem .6rem; font-size: .9em; }
+    table td:first-child { white-space: nowrap; }
+    .export-bar { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+    .export-bar a { font-size: .85em; }
+    details summary { cursor: pointer; }
+    .filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .5rem; }
+    .source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .25rem .5rem; }
+    .source-grid label { font-size: .9em; margin-bottom: 0; }
+    .stats-line { font-size: .85em; color: var(--pico-muted-color); margin-bottom: .5rem; }
+    .paper-meta dt { font-weight: bold; }
+    .paper-meta dd { margin-bottom: .5rem; }
+    fieldset { margin-bottom: 1.5rem; }
+    .action-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul>
+        <li><strong>MOSAIC</strong></li>
+      </ul>
+      <ul>
+        <li><a href="{{ url_for('ui.search_page') }}" {% if request.path == '/' %}aria-current="page"{% endif %}>Search</a></li>
+        <li><a href="{{ url_for('ui.similar_page') }}" {% if '/similar' in request.path %}aria-current="page"{% endif %}>Similar</a></li>
+        <li><a href="{{ url_for('ui.history_page') }}" {% if '/history' in request.path %}aria-current="page"{% endif %}>History</a></li>
+        <li><a href="{{ url_for('ui.config_page') }}" {% if '/config' in request.path %}aria-current="page"{% endif %}>Config</a></li>
+        <li><a href="#" id="theme-toggle" onclick="toggleTheme();return false" title="Toggle dark/light mode">&#9681;</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <article {% if category == 'warning' %}class="pico-background-yellow-100"{% endif %}>
+          {{ message }}
+        </article>
+      {% endfor %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="container">
+    <small>MOSAIC v{{ version }} &mdash; Multi-source Scientific Article Indexer and Collector</small>
+  </footer>
+
+  <script src="{{ url_for('ui.static', filename='htmx.min.js') }}"></script>
+  <script>
+    // Theme toggle (persisted to localStorage)
+    function toggleTheme() {
+      var themes = ["auto", "light", "dark"];
+      var cur = document.documentElement.dataset.theme || "auto";
+      var next = themes[(themes.indexOf(cur) + 1) % themes.length];
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem("mosaic-theme", next);
+    }
+    (function() {
+      var saved = localStorage.getItem("mosaic-theme");
+      if (saved) document.documentElement.dataset.theme = saved;
+    })();
+
+    // Keyboard shortcuts
+    document.addEventListener("keydown", function(e) {
+      // Ctrl/Cmd+Enter → submit
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        var btn = document.querySelector("form button[type=submit], form button:not([type])");
+        if (btn) { btn.click(); e.preventDefault(); }
+      }
+      // "/" → focus search input
+      if (e.key === "/" && !["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName)) {
+        var q = document.querySelector("input[type=search], input[name=query], input[name=identifier]");
+        if (q) { q.focus(); e.preventDefault(); }
+      }
+    });
+  </script>
+</body>
+</html>

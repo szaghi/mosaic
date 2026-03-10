@@ -1,0 +1,25 @@
+<div hx-get="{{ status_url }}"
+     hx-trigger="every 1s"
+     hx-target="#results"
+     hx-swap="innerHTML">
+  <article aria-busy="true">
+    {% if job_type == 'search' and source_count %}
+      Searching across {{ source_count }} source(s)&hellip;
+    {% elif job_type == 'similar' %}
+      Finding similar papers&hellip;
+    {% else %}
+      Working&hellip;
+    {% endif %}
+    {% if progress %}
+    <div class="source-progress" style="margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.3rem;">
+      {% for name, status in progress.items() %}
+      <small style="padding:.15rem .4rem;border-radius:4px;
+        {% if status == 'done' %}background:var(--pico-ins-color);color:#fff;
+        {% elif status == 'error' %}background:var(--pico-del-color);color:#fff;
+        {% else %}background:var(--pico-secondary-background);
+        {% endif %}">{{ name }}</small>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </article>
+</div>

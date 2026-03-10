@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Search &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Search Papers</h2>
+
+<form id="search-form" onsubmit="return false">
+  <div class="grid">
+    <input type="text" name="query" placeholder="Search for papers..." autofocus required
+           value="{{ prefill_query or '' }}">
+    <button type="submit"
+            hx-post="{{ url_for('ui.search_submit') }}"
+            hx-target="#results"
+            hx-include="#search-form"
+            hx-indicator="#search-spinner">
+      Search
+    </button>
+  </div>
+
+  <div class="grid">
+    <label>
+      Max per source
+      <input type="number" name="max_results" value="10" min="1" max="100">
+    </label>
+    <label>
+      Sort by
+      <select name="sort_by">
+        <option value="">Default</option>
+        <option value="citations">Citations (most cited)</option>
+        <option value="year">Year (newest)</option>
+      </select>
+    </label>
+    <fieldset>
+      <label><input type="checkbox" name="oa_only" role="switch"> Open Access only</label>
+      <label><input type="checkbox" name="pdf_only" role="switch"> PDF available only</label>
+    </fieldset>
+  </div>
+
+  <details>
+    <summary>Filters</summary>
+    <div class="filter-grid">
+      <label>
+        Year
+        <input type="text" name="year" placeholder="2020, 2020-2024, or 2020,2022">
+      </label>
+      <label>
+        Author
+        <input type="text" name="author" placeholder="Last name(s), comma-separated">
+      </label>
+      <label>
+        Journal
+        <input type="text" name="journal" placeholder="Journal name (substring)">
+      </label>
+      <label>
+        Field
+        <select name="field">
+          <option value="all">All fields</option>
+          <option value="title">Title only</option>
+          <option value="abstract">Abstract only</option>
+        </select>
+      </label>
+    </div>
+  </details>
+
+  <details>
+    <summary>Sources ({{ sources | length }})</summary>
+    <div style="margin-bottom: .5rem;">
+      <small>
+        <a href="#" onclick="document.querySelectorAll('#source-checks input').forEach(c=>c.checked=true);return false">Select all</a>
+        &middot;
+        <a href="#" onclick="document.querySelectorAll('#source-checks input').forEach(c=>c.checked=false);return false">Deselect all</a>
+      </small>
+    </div>
+    <div id="source-checks" class="source-grid">
+      {% for s in sources %}
+      <label>
+        <input type="checkbox" name="sources" value="{{ s.key }}" {% if s.enabled %}checked{% endif %}>
+        {{ s.name }}
+      </label>
+      {% endfor %}
+    </div>
+  </details>
+</form>
+
+<span id="search-spinner" class="htmx-indicator" aria-busy="true">Searching...</span>
+
+<div id="results"></div>
+
+{% if prefill_query %}
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    // Set value via JS to override any browser form-restoration
+    var q = document.querySelector("input[name=query]");
+    if (q) q.value = {{ prefill_query | tojson }};
+    // Small delay ensures HTMX has initialised its event handlers
+    setTimeout(function() {
+      var btn = document.querySelector("#search-form button[type=submit]");
+      if (btn) btn.click();
+    }, 50);
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -9,7 +9,7 @@ from mosaic.models import Paper
 def _connect(db_path: str) -> sqlite3.Connection:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(db_path)
+    con = sqlite3.connect(db_path, check_same_thread=False)
     con.row_factory = sqlite3.Row
     _init(con)
     return con
@@ -41,6 +41,14 @@ def _init(con: sqlite3.Connection) -> None:
             local_path TEXT,
             status     TEXT,
             downloaded_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS searches (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            query        TEXT NOT NULL,
+            filters_json TEXT,
+            sources_json TEXT,
+            created_at   TEXT DEFAULT (datetime('now')),
+            result_count INTEGER DEFAULT 0
         );
     """)
     con.commit()
@@ -120,9 +128,27 @@ class Cache:
     def get_download(self, uid: str) -> sqlite3.Row | None:
         return get_download(self.con, uid)
 
+    def get_by_uid(self, uid: str) -> Paper | None:
+        row = self.con.execute("SELECT * FROM papers WHERE uid=?", (uid,)).fetchone()
+        return row_to_paper(row) if row else None
+
     def search_local(self, query: str) -> list[Paper]:
         rows = self.con.execute("""
             SELECT * FROM papers
             WHERE title LIKE ? OR abstract LIKE ?
         """, (f"%{query}%", f"%{query}%")).fetchall()
         return [row_to_paper(r) for r in rows]
+
+    def save_search(self, query: str, filters_json: str = "",
+                    sources_json: str = "", result_count: int = 0) -> None:
+        self.con.execute(
+            "INSERT INTO searches(query, filters_json, sources_json, result_count) VALUES (?,?,?,?)",
+            (query, filters_json, sources_json, result_count),
+        )
+        self.con.commit()
+
+    def list_searches(self, limit: int = 50) -> list[dict]:
+        rows = self.con.execute(
+            "SELECT * FROM searches ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]

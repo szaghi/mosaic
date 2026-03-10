@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Search History &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Search History</h2>
+
+{% if searches %}
+<table role="grid">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Query</th>
+      <th>Results</th>
+      <th>Date</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in searches %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ s.query }}</td>
+      <td>{{ s.result_count }}</td>
+      <td><small>{{ s.created_at }}</small></td>
+      <td>
+        <a href="{{ url_for('ui.search_page', q=s.query) }}"
+           role="button" class="outline secondary"
+           style="padding:.2rem .5rem;font-size:.8em;">Re-run</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No searches yet. <a href="{{ url_for('ui.search_page') }}">Start searching!</a></p>
+{% endif %}
+{% endblock %}
