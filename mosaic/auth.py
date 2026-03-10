@@ -39,7 +39,10 @@ def _meta_path(name: str) -> Path:
 
 def _save_meta(name: str, login_url: str) -> None:
     meta = {"login_url": login_url, "domain": urlparse(login_url).netloc}
-    with open(_meta_path(name), "w") as f:
+    # 0o600: meta file lives alongside session cookies — restrict to owner only
+    import os as _os
+    raw_fd = _os.open(str(_meta_path(name)), _os.O_WRONLY | _os.O_CREAT | _os.O_TRUNC, 0o600)
+    with _os.fdopen(raw_fd, "w") as f:
         json.dump(meta, f)
 
 
@@ -177,6 +180,7 @@ async def login(name: str, url: str) -> None:
         await loop.run_in_executor(None, input, "Press Enter when you have finished logging in… ")
 
         await context.storage_state(path=str(out))
+        out.chmod(0o600)  # session JSON contains auth cookies — restrict to owner
         await browser.close()
 
     _save_meta(name, url)

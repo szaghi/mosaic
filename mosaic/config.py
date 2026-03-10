@@ -1,5 +1,6 @@
 """Configuration management (~/.config/mosaic/config.toml)."""
 from __future__ import annotations
+import os
 import tomllib
 import tomli_w
 from pathlib import Path
@@ -44,7 +45,9 @@ def load() -> dict:
 
 def save(cfg: dict) -> None:
     _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_CONFIG_PATH, "wb") as f:
+    # 0o600: config contains API keys — restrict to owner only, set atomically
+    raw_fd = os.open(str(_CONFIG_PATH), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(raw_fd, "wb") as f:
         tomli_w.dump(cfg, f)
 
 
