@@ -220,17 +220,41 @@ mosaic similar 10.1038/s41586-021-03819-2 --oa-only --download
 
 ### `get`
 
-Download a paper by DOI. Uses Unpaywall as fallback if no PDF URL is known.
+Download a paper by DOI, or bulk-download all DOIs from a BibTeX or CSV file.
 
 ```
-mosaic get [OPTIONS] DOI
+mosaic get [OPTIONS] [DOI]
 ```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--from` | path | | BibTeX (`.bib`) or CSV (`.csv`) file containing DOIs to bulk-download |
+| `--oa-only` | flag | off | In bulk mode: treat unresolvable papers as skipped rather than failed |
+| `--download-dir` | path | config | Override PDF download directory for this run |
+
+Provide either a `DOI` positional argument (single download) or `--from <file>` (bulk download) — not both.
+
+**Bulk mode behaviour:**
+- For `.bib` files: extracts all `doi = {…}` fields (case-insensitive, no extra dependency)
+- For `.csv` files: reads the `doi` column (case-insensitive header)
+- Duplicate DOIs within the file are downloaded only once
+- Entries without a DOI are silently skipped
+- Prints a per-entry result line and a final summary: N downloaded, M failed, K skipped
 
 **Examples:**
 
 ```bash
+# Single DOI
 mosaic get 10.48550/arXiv.1706.03762
-mosaic get 10.1038/s41586-021-03819-2
+
+# Bulk from BibTeX — download all resolvable PDFs
+mosaic get --from refs.bib
+
+# Bulk from CSV, skip non-OA entries instead of counting them as failures
+mosaic get --from references.csv --oa-only
+
+# Override download directory for this run
+mosaic get --from refs.bib --download-dir ~/papers
 ```
 
 ---

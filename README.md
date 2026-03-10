@@ -37,6 +37,9 @@ mosaic search "attention is all you need" --oa-only --download
 # Discover related literature from any DOI or arXiv ID — no query needed
 mosaic similar 10.48550/arXiv.1706.03762 --sort citations
 
+# Bulk-download your entire Zotero / JabRef library
+mosaic get --from refs.bib --oa-only
+
 # Turn results into an AI-powered notebook: podcast, slides, quiz, mind map…
 mosaic notebook create "Transformers" --query "transformer architecture" --oa-only --podcast
 ```
@@ -74,7 +77,7 @@ Results merged by DOI: best citation count, richest abstract, earliest PDF URL w
 
 📥 **OA PDF downloads**
 
-Direct links · Unpaywall fallback · browser-session authenticated access
+Direct links · Unpaywall fallback · browser-session authenticated access · bulk download from `.bib`/`.csv`
 
 </td>
 <td align="center">
@@ -238,6 +241,18 @@ mosaic get 10.48550/arXiv.1706.03762
 ```
 
 Checks the local cache first, then tries Unpaywall if no PDF URL is known.
+
+### Bulk download from BibTeX / CSV
+
+```bash
+# Export your Zotero/JabRef/Mendeley library and download everything
+mosaic get --from refs.bib
+
+# CSV with a 'doi' column works too
+mosaic get --from references.csv --oa-only
+```
+
+Extracts all DOIs from the file, deduplicates, and downloads with the same fallback chain (direct PDF → Unpaywall → browser session).
 
 ### Configuration
 

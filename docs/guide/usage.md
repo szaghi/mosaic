@@ -84,6 +84,34 @@ Fetches a single paper by DOI. MOSAIC first checks the local cache, then tries U
 
 ![Download by DOI demo](/gifs/04_doi_get.gif)
 
+## Bulk download from BibTeX or CSV
+
+```bash
+# Download all DOIs found in a BibTeX export (Zotero, JabRef, Mendeley…)
+mosaic get --from refs.bib
+
+# Download from a CSV with a 'doi' column
+mosaic get --from references.csv
+
+# Mark unresolvable papers as skipped instead of failed
+mosaic get --from refs.bib --oa-only
+
+# Save to a custom directory
+mosaic get --from refs.bib --download-dir ~/papers
+```
+
+MOSAIC extracts every `doi = {…}` field from `.bib` files (no extra dependency) or reads the `doi` column from `.csv` files, deduplicates, and prints a per-entry result followed by a summary:
+
+```
+Found 42 DOI(s) in refs.bib
+  ✓ 2017_arXiv_Vaswani_Attention_Is_All_You_Need.pdf
+  ✓ 2019_Semantic_Scholar_Devlin_BERT.pdf
+  – 10.1016/j.celrep.2020.107834 (no OA copy)
+  …
+
+Done: 35 downloaded, 4 failed, 3 skipped (no OA copy)
+```
+
 ## Filter by year
 
 ```bash

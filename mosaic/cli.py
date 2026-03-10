@@ -297,11 +297,29 @@ def similar(
 
 @app.command()
 def get(
-    doi: Annotated[str, typer.Argument(help="DOI of the paper to download")],
+    doi: Annotated[Optional[str], typer.Argument(help="DOI of the paper to download")] = None,
+    from_file: Annotated[Optional[Path], typer.Option("--from", help="BibTeX (.bib) or CSV (.csv) file containing DOIs to bulk-download")] = None,
+    oa_only: Annotated[bool, typer.Option("--oa-only", help="Treat unresolvable papers as skipped rather than failed")] = False,
+    download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
 ):
-    """Download a paper by DOI (uses Unpaywall if no direct PDF known)."""
+    """Download a paper by DOI, or bulk-download all DOIs from a .bib/.csv file."""
     cfg = cfg_mod.load()
+    if download_dir:
+        cfg["download_dir"] = download_dir
     cache = Cache(cfg["db_path"])
+
+    if from_file and doi:
+        rprint("[red]Provide either a DOI argument or --from, not both.[/red]")
+        raise typer.Exit(1)
+
+    if from_file:
+        _bulk_download(from_file, cfg, cache, oa_only)
+        return
+
+    if doi is None:
+        rprint("[red]Provide a DOI argument or use --from <file> for bulk download.[/red]")
+        raise typer.Exit(1)
+
     from mosaic.models import Paper
     paper = Paper(title=doi, doi=doi, source="manual")
     path = dl_paper(paper, cfg["download_dir"], cache, cfg.get("unpaywall", {}).get("email", ""),
@@ -346,6 +364,55 @@ def config(
     if show or not any([elsevier_key, ss_key, unpaywall_email, download_dir, filename_pattern]):
         import tomli_w
         console.print_json(data=cfg)
+
+
+def _bulk_download(from_file: Path, cfg: dict, cache: Cache, oa_only: bool) -> None:
+    from mosaic.bulk import read_dois
+    from mosaic.models import Paper
+
+    if not from_file.exists():
+        rprint(f"[red]File not found: {from_file}[/red]")
+        raise typer.Exit(1)
+
+    try:
+        dois = read_dois(from_file)
+    except ValueError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    if not dois:
+        rprint(f"[yellow]No DOIs found in {from_file.name}[/yellow]")
+        raise typer.Exit()
+
+    rprint(f"[dim]Found {len(dois)} DOI(s) in {from_file.name}[/dim]")
+
+    email = cfg.get("unpaywall", {}).get("email", "")
+    download_dir = cfg["download_dir"]
+    pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
+    ok = fail = skip = 0
+
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False) as prog:
+        for doi in dois:
+            paper = Paper(title=doi, doi=doi, source="manual")
+            task = prog.add_task(f"{doi}…")
+            path = dl_paper(paper, download_dir, cache, email, pattern)
+            prog.remove_task(task)
+            if path:
+                ok += 1
+                rprint(f"  [green]✓[/green] {Path(path).name}")
+            elif oa_only:
+                skip += 1
+                rprint(f"  [dim]–[/dim] {doi} (no OA copy)")
+            else:
+                fail += 1
+                rprint(f"  [red]✗[/red] {doi}")
+
+    parts = [f"[bold]{ok}[/bold] downloaded"]
+    if fail:
+        parts.append(f"[red]{fail} failed[/red]")
+    if skip:
+        parts.append(f"[dim]{skip} skipped (no OA copy)[/dim]")
+    console.print(f"\n[bold]Done:[/bold] {', '.join(parts)}")
 
 
 def _print_search_stats(stats: dict, filters) -> None:
