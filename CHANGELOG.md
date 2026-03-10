@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.16] — 2026-03-10
+### Added
+- **get**: Add bulk download from BibTeX and CSV files
+
+
 ## [1.2.15] — 2026-03-10
 ### Added
 - **sources**: Add PubMed Central search source via NCBI E-utilities
