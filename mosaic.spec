@@ -59,6 +59,7 @@ a = Analysis(
         "mosaic.ui",
         "mosaic.ui.routes",
         "mosaic.ui.jobs",
+        "webview",
     ],
     hookspath=[],
     hooksconfig={},

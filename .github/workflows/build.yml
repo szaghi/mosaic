@@ -34,7 +34,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e ".[ui,dev]"
+        run: pip install -e ".[desktop,dev]"
 
       - name: Build with PyInstaller
         run: pyinstaller mosaic.spec
