@@ -179,6 +179,42 @@ mosaic search "diffusion models" -y 2023-2025 --oa-only \
 
 ---
 
+### `similar`
+
+Find papers related to a given DOI or arXiv ID.
+
+```
+mosaic similar [OPTIONS] IDENTIFIER
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--max` | `-n` | int | `10` | Max similar papers to return |
+| `--download` | `-d` | flag | off | Download available PDFs |
+| `--oa-only` | | flag | off | Show only open-access papers |
+| `--pdf-only` | | flag | off | Show only papers with a known PDF URL |
+| `--sort` | | str | | Sort: `citations` or `year` |
+| `--output` | `-o` | path | | Save results to file (repeatable) |
+| `--download-dir` | | path | config | Override PDF download directory |
+
+`IDENTIFIER` accepts the same formats as `mosaic get`: a bare DOI, `doi:10.xxx`, `DOI:10.xxx`, `arxiv:NNNN.NNNNN`, or `ARXIV:NNNN.NNNNN`.
+
+Sources used:
+- **OpenAlex** `related_works` — always queried; no key required.
+- **Semantic Scholar** recommendations — queried when `ss-key` is set in config.
+
+See the [Find Similar Papers guide](./similar) for a full walkthrough and workflow examples.
+
+**Examples:**
+
+```bash
+mosaic similar 10.48550/arXiv.1706.03762
+mosaic similar arxiv:1706.03762 -n 20 --sort citations
+mosaic similar 10.1038/s41586-021-03819-2 --oa-only --download
+```
+
+---
+
 ### `get`
 
 Download a paper by DOI. Uses Unpaywall as fallback if no PDF URL is known.

@@ -28,42 +28,94 @@
 
 ---
 
-## What is MOSAIC?
-
-Instead of visiting a dozen or more different websites to hunt for a paper, MOSAIC queries them all simultaneously, deduplicates results by DOI, and downloads open-access PDFs — including those found via [Unpaywall](https://unpaywall.org/) — in one shot. Results can also be sent directly to a [Google NotebookLM](https://notebooklm.google.com/) notebook for AI-powered Q&A, audio overviews, video summaries, slide decks, mind maps, flashcards, quizzes, infographics, study guides, and more.
+## What MOSAIC does
 
 ```bash
+# Search 17 sources at once, deduplicate, download OA PDFs
 mosaic search "attention is all you need" --oa-only --download
-mosaic notebook create "Attention Papers" --query "attention is all you need" --oa-only --podcast
+
+# Discover related literature from any DOI or arXiv ID — no query needed
+mosaic similar 10.48550/arXiv.1706.03762 --sort citations
+
+# Turn results into an AI-powered notebook: podcast, slides, quiz, mind map…
+mosaic notebook create "Transformers" --query "transformer architecture" --oa-only --podcast
 ```
 
 ![MOSAIC quick search demo](docs/public/gifs/01_quick_search.gif)
 
-## Why MOSAIC?
+## Key features
 
-Finding scientific papers across databases is tedious:
+<table>
+<tr>
+<td align="center" width="33%">
 
-- Each database has its own search syntax and web interface
-- The same paper often appears in multiple databases under slightly different metadata
-- Locating a free legal PDF requires checking the journal site, arXiv, PubMed Central, and institutional repositories
-- There is no programmatic way to keep a local archive of your searches
-- There is no automatic summary creation for bibliographics collections
+🌐 **17 sources, one command**
 
-MOSAIC solves all of this in a single command.
+arXiv · Semantic Scholar · OpenAlex · Europe PMC · DOAJ · Crossref · Springer · IEEE · NASA ADS · Zenodo · BASE · CORE · DBLP · HAL · ScienceDirect · and more
 
-## Design principles
+</td>
+<td align="center" width="33%">
 
-- **One command, many sources** — fan-out search with transparent deduplication
-- **Legal open-access only by default** — no paywall circumvention
-- **Closed-access** — supported by users API key (if provided, e.g. Elsevier source)
-- **Authenticated access** — save a browser session once with `mosaic auth login`; the downloader reuses it silently on future runs
-- **Minimal dependencies** — `httpx`, `typer`, `rich`, `tomli-w`; no heavy frameworks
-- **Offline-friendly** — local SQLite cache means repeated queries are instant
-- **Extensible** — each source is an independent class; adding a new one takes ~50 lines
-- **Custom sources** — wire any number of JSON REST APIs as new sources with a few lines of TOML each, no Python needed
-- **AI-powered artifacts creation (summary, presentation, podcast, ecc...)** by [Google NotebookLM](https://notebooklm.google.com/)
+🔭 **Find similar papers**
 
----
+`mosaic similar <doi>` — discover related literature from any DOI or arXiv ID via OpenAlex graph + Semantic Scholar ML, no query needed
+
+</td>
+<td align="center" width="33%">
+
+✨ **Smart deduplication**
+
+Results merged by DOI: best citation count, richest abstract, earliest PDF URL wins
+
+</td>
+</tr>
+<tr>
+<td align="center">
+
+📥 **OA PDF downloads**
+
+Direct links · Unpaywall fallback · browser-session authenticated access
+
+</td>
+<td align="center">
+
+🎛️ **Sort & filter**
+
+Year · author · journal · open-access · citation count — composable, applied at API level where supported
+
+</td>
+<td align="center">
+
+📤 **Export anywhere**
+
+Markdown · CSV · JSON · BibTeX — one flag, any combination
+
+</td>
+</tr>
+<tr>
+<td align="center">
+
+🤖 **NotebookLM integration**
+
+Podcast · video · slides · quiz · mind map · flashcards · briefing — queued in one command
+
+</td>
+<td align="center">
+
+⚡ **Offline-first cache**
+
+SQLite — repeated queries are instant, no re-fetching
+
+</td>
+<td align="center">
+
+🧩 **Custom sources**
+
+Wire any JSON REST API as a new source with a few lines of TOML — no Python needed
+
+</td>
+</tr>
+</table>
 
 ## Sources
 
@@ -86,8 +138,6 @@ MOSAIC solves all of this in a single command.
 | **DBLP** | `dblp` | 6 M+ CS publications (journals, conferences) | None | Via `ee` field (arXiv/OA links) |
 | **HAL** | `hal` | 1.5 M+ OA documents, strong for French academic output | None | Direct PDF when deposited |
 | **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
-
----
 
 ## Installation
 
@@ -112,8 +162,6 @@ pip install -e .
 
 > Requires Python 3.11+
 
----
-
 ## Quick Start
 
 ```bash
@@ -128,8 +176,6 @@ mosaic search "transformer architecture" --oa-only --download
 ```
 
 ![MOSAIC search and download demo](docs/public/gifs/02_search_download.gif)
-
----
 
 ## Usage
 
@@ -167,6 +213,21 @@ mosaic search "CRISPR" --journal "Nature"
 # Combine freely
 mosaic search "graph neural" -y 2021-2023 -a Kipf -j "ICLR" --oa-only --download
 ```
+
+### Find similar papers
+
+```bash
+# Discover related literature from any DOI or arXiv ID
+mosaic similar 10.48550/arXiv.1706.03762
+
+# Sort by citation count, open-access only
+mosaic similar arxiv:1706.03762 -n 20 --sort citations --oa-only
+
+# Save to BibTeX
+mosaic similar 10.1038/s41586-021-03819-2 --output related.bib
+```
+
+Uses **OpenAlex** `related_works` (always) and **Semantic Scholar** recommendations (when `ss-key` is configured). Results are deduplicated and merged — the higher citation count and richer metadata always win.
 
 ### Download by DOI
 
@@ -234,8 +295,6 @@ mosaic notebook create "My Papers" --from-dir ~/mosaic-papers/
 
 MOSAIC uploads local PDFs when available, falls back to URLs otherwise, and respects NotebookLM's 50-source limit. With `--podcast`, an Audio Overview is queued automatically.
 
----
-
 ## Architecture
 
 ```mermaid
@@ -254,8 +313,6 @@ flowchart LR
     DL -->|mosaic notebook create| NLM[NotebookLM]
 ```
 
----
-
 ## Development
 
 ```bash
@@ -273,8 +330,6 @@ cd docs && npm install && npm run docs:dev
 ```
 
 Coverage report and badge JSON are written to `docs/public/` after every test run.
-
----
 
 ## License
 

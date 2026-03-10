@@ -150,3 +150,35 @@ mosaic search "protein folding" --oa-only --sort citations -n 20
 ```
 
 When `--sort citations` is active, the results table gains a **Cited** column showing the citation count for each paper. Papers from sources that do not return citation data (arXiv, DOAJ, …) show `–` and are placed after all papers with known counts.
+
+## Find similar papers
+
+`mosaic similar` discovers related literature from any DOI or arXiv ID — no search query needed.
+
+```bash
+mosaic similar 10.48550/arXiv.1706.03762
+```
+
+```
+Similar to: Attention Is All You Need
+
+ #   Title                                       Authors           Year   Source     OA    PDF
+ 1   BERT: Pre-training of Deep Bidirectional…   Devlin et al.     2019   OpenAlex   yes   ✓
+ 2   Language Models are Few-Shot Learners       Brown et al.      2020   OpenAlex   no    –
+...
+```
+
+```bash
+# arXiv prefix, sort by citations, open-access only
+mosaic similar arxiv:1706.03762 -n 20 --sort citations --oa-only
+
+# Save to BibTeX for Zotero / LaTeX
+mosaic similar 10.48550/arXiv.1706.03762 --output related.bib
+```
+
+Two sources contribute results:
+
+- **OpenAlex** `related_works` — always queried, no key required
+- **Semantic Scholar** recommendations — used when `ss-key` is set in config (dramatically increases recall)
+
+See the [Find Similar Papers guide](./similar) for the full reference, identifier formats, and workflow tips.

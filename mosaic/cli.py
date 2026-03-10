@@ -208,6 +208,85 @@ def search(
 
 
 @app.command()
+def similar(
+    identifier: Annotated[str, typer.Argument(help="DOI or arXiv ID of the seed paper (e.g. 10.48550/arXiv.1706.03762 or arxiv:1706.03762)")],
+    max_results: Annotated[int, typer.Option("--max", "-n", help="Max similar papers to return")] = 10,
+    download: Annotated[bool, typer.Option("--download", "-d", help="Download available PDFs")] = False,
+    oa_only: Annotated[bool, typer.Option("--oa-only", help="Show only open-access papers")] = False,
+    pdf_only: Annotated[bool, typer.Option("--pdf-only", help="Show only papers with a downloadable PDF")] = False,
+    sort_by: Annotated[str, typer.Option("--sort", help='Sort results: "citations" (most cited first) or "year" (newest first)')] = "",
+    output: Annotated[list[Path], typer.Option("--output", "-o", help="Save results to file (.md, .markdown, .csv, .json, .bib); repeatable")] = [],
+    download_dir: Annotated[str, typer.Option("--download-dir", help="Override PDF download directory for this run")] = "",
+):
+    """Find papers similar to a given paper by DOI or arXiv ID."""
+    from mosaic.similar import find_similar
+
+    cfg = cfg_mod.load()
+    if download_dir:
+        cfg["download_dir"] = download_dir
+    cache = Cache(cfg["db_path"])
+
+    oa_email = cfg.get("unpaywall", {}).get("email", "")
+    ss_api_key = cfg.get("sources", {}).get("semantic_scholar", {}).get("api_key", "")
+
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True) as prog:
+        prog.add_task(f"Finding papers similar to [bold]{identifier}[/bold]…")
+        try:
+            seed_title, papers = find_similar(
+                identifier,
+                max_results=max_results,
+                oa_email=oa_email,
+                ss_api_key=ss_api_key,
+            )
+        except Exception as e:
+            rprint(f"[red]Error looking up paper: {e}[/red]")
+            raise typer.Exit(1)
+
+    if seed_title is None:
+        rprint(f"[red]Paper not found:[/red] {identifier}")
+        rprint("[dim]Check that the DOI or arXiv ID is correct.[/dim]")
+        raise typer.Exit(1)
+
+    rprint(f"[bold]Similar to:[/bold] {seed_title}\n")
+
+    if oa_only:
+        papers = [p for p in papers if p.is_open_access or p.pdf_url]
+    if pdf_only:
+        papers = [p for p in papers if p.pdf_url]
+
+    if sort_by:
+        if sort_by == "citations":
+            papers.sort(key=lambda p: p.citation_count or 0, reverse=True)
+        elif sort_by == "year":
+            papers.sort(key=lambda p: p.year or 0, reverse=True)
+        else:
+            rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year[/red]')
+            raise typer.Exit(1)
+
+    if not papers:
+        rprint("[yellow]No similar papers found.[/yellow]")
+        raise typer.Exit()
+
+    for p in papers:
+        cache.save(p)
+
+    _print_results(papers)
+
+    if output:
+        from mosaic.exporter import export
+        for path in output:
+            try:
+                export(papers, path)
+                rprint(f"[green]Saved:[/green] {path}")
+            except ValueError as e:
+                rprint(f"[red]{e}[/red]")
+                raise typer.Exit(1)
+
+    if download:
+        _download_all(papers, cfg, cache)
+
+
+@app.command()
 def get(
     doi: Annotated[str, typer.Argument(help="DOI of the paper to download")],
 ):
