@@ -66,3 +66,9 @@ Tests use `unittest.mock` to patch `httpx` calls — no real network requests. `
 ### Docs
 
 VitePress site in `docs/`. Build with `npm run docs:build` from the `docs/` directory.
+
+## Workflow rules
+
+- **Never run `git commit`** — generate commit messages with `/semantic-commit`
+  and let the user paste them in their own terminal (GPG signing requires a TTY
+  that Claude Code does not have).
