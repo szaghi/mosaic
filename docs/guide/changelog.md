@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.15] — 2026-03-10
+### Added
+- **sources**: Add PubMed Central search source via NCBI E-utilities
+
+
 ## [1.2.14] — 2026-03-10
 ### Added
 - **sources**: Add PubMed search source via NCBI E-utilities
