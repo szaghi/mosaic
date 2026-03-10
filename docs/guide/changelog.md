@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.18] — 2026-03-10
+### Added
+- **sources**: Add bioRxiv/medRxiv preprint source
+
+
 ## [1.2.17] — 2026-03-10
 ### Added
 - **zotero**: Add Zotero integration with local and web API support

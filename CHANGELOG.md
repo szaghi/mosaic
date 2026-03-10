@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.18] — 2026-03-10
+### Added
+- **sources**: Add bioRxiv/medRxiv preprint source
+
+
 ## [1.2.17] — 2026-03-10
 ### Added
 - **zotero**: Add Zotero integration with local and web API support
