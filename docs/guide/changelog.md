@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.14] — 2026-03-10
+### Added
+- **sources**: Add PubMed search source via NCBI E-utilities
+
+
 ## [1.2.13] — 2026-03-10
 ### Added
 - **search**: Add --verbose flag with per-source deduplication stats

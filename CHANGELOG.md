@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.14] — 2026-03-10
+### Added
+- **sources**: Add PubMed search source via NCBI E-utilities
+
+
 ## [1.2.13] — 2026-03-10
 ### Added
 - **search**: Add --verbose flag with per-source deduplication stats
