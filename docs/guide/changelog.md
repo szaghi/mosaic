@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.2.17] — 2026-03-10
+### Added
+- **zotero**: Add Zotero integration with local and web API support
+
+
 ## [1.2.16] — 2026-03-10
 ### Added
 - **get**: Add bulk download from BibTeX and CSV files
