@@ -4,6 +4,29 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.0] — 2026-03-11
+### Added
+- **ui**: Add web interface with Waitress server, parallel search, and HTMX dashboard
+
+- **build**: Add PyInstaller packaging for standalone macOS/Linux/Windows executables
+
+- **build**: Add PyInstaller packaging for standalone macOS/Linux/Windows executables
+
+- **desktop**: Replace browser launch with native pywebview window
+
+- **ui**: Add missing CLI features to web interface
+
+
+### Documentation
+- Add authors section to README and docs index
+
+
+### Fixed
+- **ci**: Install UI deps in test job so test_ui.py can import Flask
+
+- **ci**: Install UI extra so test_ui.py can import Flask
+
+
 ## [1.2.18] — 2026-03-10
 ### Added
 - **sources**: Add bioRxiv/medRxiv preprint source
