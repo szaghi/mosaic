@@ -31,6 +31,8 @@ trim = true
 [git]
 commit_preprocessors = [
     { pattern = "^\\s+", replace = "" },
+    { pattern = "^Merge pull request.*", replace = "chore: merge" },
+    { pattern = "^Merge branch.*", replace = "chore: merge" },
 ]
 conventional_commits = true
 filter_unconventional = true
