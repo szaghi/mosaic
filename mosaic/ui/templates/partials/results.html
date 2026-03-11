@@ -7,12 +7,21 @@
 {% endfor %}
 
 {% if stats and stats.get('per_source') %}
-<p class="stats-line">
-  {{ stats.get('raw_total', 0) }} raw results from {{ stats['per_source'] | length }} source(s)
-  &rarr; {{ stats.get('unique', 0) }} unique
-  {% if stats.get('merged', 0) %}({{ stats['merged'] }} merged){% endif %}
-  {% if stats.get('after_filters') is not none %}&rarr; {{ stats['after_filters'] }} after filters{% endif %}
-</p>
+<details open>
+  <summary class="stats-line" style="cursor:pointer;">
+    {{ stats.get('raw_total', 0) }} raw results from {{ stats['per_source'] | length }} source(s)
+    &rarr; {{ stats.get('unique', 0) }} unique
+    {% if stats.get('merged', 0) %}({{ stats['merged'] }} merged){% endif %}
+    {% if stats.get('after_filters') is not none %}&rarr; {{ stats['after_filters'] }} after filters{% endif %}
+  </summary>
+  <div style="display:flex;flex-wrap:wrap;gap:.3rem;margin:.5rem 0;">
+    {% for name, count in stats['per_source'].items() %}
+    <small style="padding:.15rem .4rem;border-radius:4px;background:var(--pico-secondary-background);">
+      <strong>{{ name }}</strong>={{ count }}
+    </small>
+    {% endfor %}
+  </div>
+</details>
 {% endif %}
 
 {% if papers %}
@@ -23,7 +32,18 @@
   <a href="{{ url_for('ui.export_results', job_id=job_id, format='json') }}" role="button" class="outline secondary">JSON</a>
   <a href="{{ url_for('ui.export_results', job_id=job_id, format='bib') }}" role="button" class="outline secondary">BibTeX</a>
   <a href="{{ url_for('ui.export_results', job_id=job_id, format='md') }}" role="button" class="outline secondary">Markdown</a>
+  <span style="margin-left:.5rem;">|</span>
+  <form style="display:inline-flex;gap:.3rem;align-items:center;margin:0;" onsubmit="return false;">
+    <input type="text" name="zotero_collection" placeholder="Collection (optional)" style="padding:.2rem .4rem;font-size:.85em;width:150px;margin:0;">
+    <button hx-post="{{ url_for('ui.zotero_export', job_id=job_id) }}"
+            hx-include="closest form"
+            hx-target="#zotero-status"
+            class="outline" style="padding:.2rem .5rem;font-size:.85em;margin:0;">
+      Send to Zotero
+    </button>
+  </form>
 </div>
+<div id="zotero-status"></div>
 {% endif %}
 
 {% set has_citations = papers | selectattr('citation_count') | list %}

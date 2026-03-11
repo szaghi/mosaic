@@ -29,7 +29,19 @@
     Find Similar
   </a>
   {% endif %}
+
+  <form style="display:inline-flex;gap:.3rem;align-items:center;margin:0;" onsubmit="return false;">
+    <input type="text" name="zotero_collection" placeholder="Collection (optional)" style="padding:.2rem .4rem;font-size:.85em;width:150px;margin:0;">
+    <button hx-post="{{ url_for('ui.zotero_export_paper', uid=quote(paper.uid, safe='')) }}"
+            hx-include="closest form"
+            hx-target="#zotero-status"
+            class="outline" style="padding:.2rem .5rem;font-size:.85em;margin:0;">
+      Send to Zotero
+    </button>
+  </form>
 </div>
+
+<div id="zotero-status"></div>
 
 <div id="download-status">
   {% if download_status and download_status.status == 'ok' %}

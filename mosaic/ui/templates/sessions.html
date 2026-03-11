@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Browser Sessions &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Browser Sessions</h2>
+<p>Saved browser sessions for authenticated PDF access to paywalled sources.</p>
+<p><small>To create a new session, use the CLI: <code>mosaic auth login &lt;name&gt; --url &lt;login-url&gt;</code></small></p>
+
+{% if sessions %}
+<table role="grid">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Domain</th>
+      <th>Saved</th>
+      <th>Valid</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in sessions %}
+    <tr>
+      <td><strong>{{ s.name }}</strong></td>
+      <td>{{ s.domain }}</td>
+      <td><small>{{ s.saved }}</small></td>
+      <td>
+        {% if s.valid %}
+        <span class="badge-oa">&#10003;</span>
+        {% else %}
+        <span class="badge-closed">&#10007; expired</span>
+        {% endif %}
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('ui.session_delete', name=s.name) }}"
+              onsubmit="return confirm('Delete session {{ s.name }}?');" style="margin:0;">
+          <button type="submit" class="outline secondary" style="padding:.2rem .5rem;font-size:.8em;">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No saved sessions. Use <code>mosaic auth login &lt;name&gt; --url &lt;url&gt;</code> in the CLI to create one.</p>
+{% endif %}
+{% endblock %}
