@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Bulk Download &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Bulk Download</h2>
+<p>Upload a <strong>.bib</strong> (BibTeX) or <strong>.csv</strong> file containing DOIs to download all papers at once.</p>
+
+<form id="bulk-form" enctype="multipart/form-data" onsubmit="return false;">
+  <label>
+    Select file
+    <input type="file" name="file" accept=".bib,.csv" required>
+  </label>
+  <button type="submit"
+          hx-post="{{ url_for('ui.bulk_submit') }}"
+          hx-target="#results"
+          hx-include="#bulk-form"
+          hx-encoding="multipart/form-data"
+          hx-indicator="#bulk-spinner">
+    Download All DOIs
+  </button>
+</form>
+
+<span id="bulk-spinner" class="htmx-indicator" aria-busy="true">Processing&hellip;</span>
+
+<div id="results"></div>
+
+<details style="margin-top:2rem;">
+  <summary>File format help</summary>
+  <h4>BibTeX (.bib)</h4>
+  <p>Any standard BibTeX file with <code>doi = {10.xxxx/...}</code> entries.</p>
+  <h4>CSV (.csv)</h4>
+  <p>A CSV file with a <code>doi</code> column header. Example:</p>
+  <pre>doi,title
+10.1038/s41586-020-2649-2,Some paper title
+10.1126/science.abc4346,Another paper</pre>
+</details>
+{% endblock %}
