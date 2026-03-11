@@ -46,6 +46,17 @@ mosaic notebook create "Transformers" --query "transformer architecture" --oa-on
 
 ![MOSAIC quick search demo](docs/public/gifs/01_quick_search.gif)
 
+## Authors
+
+**[Stefano Zaghi](https://github.com/szaghi)** · stefano.zaghi@gmail.com
+> *Creator & Maintainer*
+
+**[Andrea Giulianini](https://github.com/AndreaGiulianini)**
+>*Grand Pixel Overlord & Architect of the Sacred Button* — world-class web UI designer, responsible for making MOSAIC actually look good
+
+**[Claude](https://claude.ai)** (Anthropic)
+>*Omniscient Code Oracle & Tireless Rubber Duck* — AI pair programmer, responsible for writing the boring parts so humans don't have to
+
 ## Key features
 
 <table>
