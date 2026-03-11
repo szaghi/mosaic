@@ -53,6 +53,9 @@ mosaic = "mosaic.cli:app"
 where = ["."]
 include = ["mosaic*"]
 
+[tool.setuptools.package-data]
+"mosaic" = ["ui/templates/**/*.html", "ui/static/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=mosaic --cov-report=term-missing"

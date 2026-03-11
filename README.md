@@ -57,6 +57,14 @@ mosaic notebook create "Transformers" --query "transformer architecture" --oa-on
 **[Claude](https://claude.ai)** (Anthropic)
 >*Omniscient Code Oracle & Tireless Rubber Duck* — AI pair programmer, responsible for writing the boring parts so humans don't have to
 
+## Web UI
+
+<div align="center">
+<video src="https://szaghi.github.io/mosaic/mosaic-1.3.0-web_ui.mp4" controls width="100%"></video>
+</div>
+
+Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://szaghi.github.io/mosaic/guide/web-ui)).
+
 ## Key features
 
 <table>
