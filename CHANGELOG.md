@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.1] — 2026-03-11
+### Fixed
+- **ui**: Include templates/static in wheel and add web UI demo
+
+
 ## [1.3.0] — 2026-03-11
 ### Added
 - **ui**: Add web interface with Waitress server, parallel search, and HTMX dashboard

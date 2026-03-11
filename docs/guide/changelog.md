@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.3.1] — 2026-03-11
+### Fixed
+- **ui**: Include templates/static in wheel and add web UI demo
+
+
 ## [1.3.0] — 2026-03-11
 ### Added
 - **ui**: Add web interface with Waitress server, parallel search, and HTMX dashboard
