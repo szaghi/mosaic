@@ -4,6 +4,15 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.4] — 2026-03-12
+### Added
+- Add Obsidian vault integration and complete web UI parity
+
+
+### Fixed
+- **test**: Mock _require_playwright in scopus browser exception test
+
+
 ## [1.3.3] — 2026-03-12
 ### Added
 - **sources**: Add Scopus API and browser search sources
