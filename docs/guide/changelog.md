@@ -2,6 +2,15 @@
 title: Changelog
 ---
 
+## [1.3.3] — 2026-03-12
+### Added
+- **sources**: Add Scopus API and browser search sources
+
+
+### Fixed
+- **cli**: Add scopus to --source help text and enable tab completion
+
+
 ## [1.3.2] — 2026-03-12
 ### Added
 - **sources**: Add PEDro physiotherapy evidence database source
