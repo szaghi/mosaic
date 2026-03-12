@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.3.2] — 2026-03-12
+### Added
+- **sources**: Add PEDro physiotherapy evidence database source
+
+
 ## [1.3.1] — 2026-03-11
 ### Fixed
 - **ui**: Include templates/static in wheel and add web UI demo
