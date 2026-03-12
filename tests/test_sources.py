@@ -1823,7 +1823,8 @@ class TestScopusBrowserSource:
         assert result == []
 
     def test_search_returns_empty_on_exception(self):
-        with patch("mosaic.auth.find_session_for_url", side_effect=ImportError):
+        with patch("mosaic.auth._require_playwright"), \
+             patch("mosaic.auth.find_session_for_url", side_effect=ImportError):
             result = self._source().search("test")
         assert result == []
 
