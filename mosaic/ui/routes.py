@@ -128,6 +128,7 @@ def search_page():
             "springer": "springer_api", "ads": "nasa_ads", "ieee": "ieee",
             "zenodo": "zenodo", "crossref": "crossref", "dblp": "dblp",
             "hal": "hal", "pubmed": "pubmed", "pmc": "pmc", "rxiv": "biorxiv",
+            "pedro": "pedro",
         }
         cfg_key = cfg_key_map.get(key, key)
         enabled = src_cfg.get(cfg_key, {}).get("enabled", True)
@@ -477,11 +478,22 @@ def config_save():
             "springer_api": "springer_api", "nasa_ads": "nasa_ads",
             "ieee": "ieee", "zenodo": "zenodo", "crossref": "crossref",
             "dblp": "dblp", "hal": "hal", "pubmed": "pubmed",
-            "pmc": "pmc", "biorxiv": "biorxiv",
+            "pmc": "pmc", "biorxiv": "biorxiv", "pedro": "pedro",
         }
         enabled_sources = request.form.getlist("enabled_sources")
         for cfg_key in cfg_key_map.values():
             src_cfg.setdefault(cfg_key, {})["enabled"] = cfg_key in enabled_sources
+
+    # PEDro fair-use acknowledgement (separate from the enabled toggle)
+    pedro_fair_use = request.form.get("pedro_acknowledge_fair_use") == "on"
+    if request.form.get("_pedro_section"):
+        cfg.setdefault("sources", {}).setdefault("pedro", {})["acknowledge_fair_use"] = pedro_fair_use
+        pedro_delay = request.form.get("pedro_rate_limit_delay", "").strip()
+        if pedro_delay:
+            try:
+                cfg["sources"]["pedro"]["rate_limit_delay"] = float(pedro_delay)
+            except ValueError:
+                pass
 
     cfg_mod.save(cfg)
 

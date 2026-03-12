@@ -133,6 +133,15 @@ enabled = true
 [sources.hal]
 enabled = true
 # No credentials required. French open archive — strong for French academic output and grey literature.
+
+[sources.pedro]
+enabled = true
+# Disabled until you explicitly acknowledge PEDro's Fair Use policy.
+# Set acknowledge_fair_use = true to enable.
+acknowledge_fair_use = false
+# Seconds between HTTP requests. 3.0 s is the safe-fair default.
+# Lower only if your usage stays within PEDro's acceptable-use terms.
+rate_limit_delay = 3.0
 ```
 
 ## Source credentials
@@ -325,3 +334,26 @@ enabled = false
 ### arXiv, DOAJ, Europe PMC, BASE, DBLP, HAL
 
 These sources require no credentials and are ready to use out of the box. DBLP is particularly useful for computer science conference and journal papers; note that it does not provide abstracts. HAL is the French national open archive, strong for French academic output and grey literature.
+
+### PEDro — explicit fair-use opt-in required
+
+PEDro is the specialised physiotherapy evidence database (~67 700 RCTs, systematic reviews, and clinical practice guidelines).  It is **disabled by default** because its [Fair Use policy](https://pedro.org.au/fair-use/) prohibits automated bulk downloading.
+
+To enable it, edit the config file directly:
+
+```toml
+# ~/.config/mosaic/config.toml
+[sources.pedro]
+enabled = true
+acknowledge_fair_use = true   # required — confirms you will use small, targeted queries only
+
+# Optional: adjust the delay between HTTP requests (default: 3.0 s)
+# Lower this only if you have verified your usage stays within PEDro's fair-use terms.
+rate_limit_delay = 3.0
+```
+
+Once enabled, PEDro appears in all multi-source searches and can also be targeted directly:
+
+```bash
+mosaic search "chronic low back pain" --source pedro --field title
+```

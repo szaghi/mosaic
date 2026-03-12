@@ -97,6 +97,7 @@
         ('pubmed', 'PubMed'),
         ('pmc', 'PubMed Central'),
         ('biorxiv', 'bioRxiv/medRxiv'),
+        ('pedro', 'PEDro'),
       ] %}
       <label>
         <input type="checkbox" name="enabled_sources" value="{{ cfg_key }}"
@@ -105,6 +106,28 @@
       </label>
       {% endfor %}
     </div>
+  </fieldset>
+
+  <fieldset>
+    <legend><strong>PEDro Fair Use Policy</strong></legend>
+    <input type="hidden" name="_pedro_section" value="1">
+    <p>
+      <small>PEDro's <a href="https://pedro.org.au/fair-use/" target="_blank">Fair Use policy</a>
+      prohibits automated bulk downloading. You must explicitly acknowledge this before MOSAIC
+      will query PEDro.</small>
+    </p>
+    {% set pedro_cfg = cfg.get('sources', {}).get('pedro', {}) %}
+    <label>
+      <input type="checkbox" name="pedro_acknowledge_fair_use"
+             {% if pedro_cfg.get('acknowledge_fair_use', false) %}checked{% endif %}>
+      I acknowledge PEDro's Fair Use policy and will only perform small, targeted queries
+    </label>
+    <label>
+      Rate limit delay (seconds between requests)
+      <input type="number" name="pedro_rate_limit_delay" step="0.5" min="1"
+             value="{{ pedro_cfg.get('rate_limit_delay', 3.0) }}"
+             placeholder="3.0">
+    </label>
   </fieldset>
 
   <button type="submit">Save Configuration</button>

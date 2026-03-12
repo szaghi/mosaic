@@ -31,6 +31,11 @@ _DEFAULTS: dict = {
         "pubmed": {"enabled": True, "api_key": ""},
         "pmc": {"enabled": True, "api_key": ""},
         "biorxiv": {"enabled": True},
+        "pedro": {
+            "enabled": True,
+            "acknowledge_fair_use": False,
+            "rate_limit_delay": 3.0,
+        },
     },
     "unpaywall": {"email": ""},
     "zotero": {"api_key": "", "user_id": 0},

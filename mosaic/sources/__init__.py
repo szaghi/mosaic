@@ -19,6 +19,7 @@ from mosaic.sources.hal import HALSource
 from mosaic.sources.pubmed import PubMedSource
 from mosaic.sources.pmc import PMCSource
 from mosaic.sources.biorxiv import BioRxivSource
+from mosaic.sources.pedro import PEDroSource
 
 __all__ = [
     "ArxivSource",
@@ -42,4 +43,5 @@ __all__ = [
     "PubMedSource",
     "PMCSource",
     "BioRxivSource",
+    "PEDroSource",
 ]

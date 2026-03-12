@@ -7,6 +7,7 @@ from mosaic.sources import (
     BioRxivSource, DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
     NASAADSSource, IEEEXploreSource, ZenodoSource, CrossrefSource,
     SpringerAPISource, CustomSource, DBLPSource, HALSource, PubMedSource, PMCSource,
+    PEDroSource,
 )
 
 # Source shorthand → display name mapping
@@ -19,6 +20,7 @@ SRC_MAP: dict[str, str] = {
     "zenodo": "Zenodo", "crossref": "Crossref",
     "dblp": "DBLP", "hal": "HAL", "pubmed": "PubMed", "pmc": "PubMed Central",
     "rxiv": "bioRxiv/medRxiv",
+    "pedro": "PEDro",
 }
 
 
@@ -70,6 +72,12 @@ def build_sources(cfg: dict) -> list:
         sources.append(PMCSource(api_key=src_cfg.get("pmc", {}).get("api_key", "")))
     if src_cfg.get("biorxiv", {}).get("enabled", True):
         sources.append(BioRxivSource())
+    pedro_cfg = src_cfg.get("pedro", {})
+    if pedro_cfg.get("enabled", True) and pedro_cfg.get("acknowledge_fair_use", False):
+        sources.append(PEDroSource(
+            acknowledge_fair_use=True,
+            rate_limit_delay=pedro_cfg.get("rate_limit_delay", 3.0),
+        ))
     if src_cfg.get("springer", {}).get("enabled", True):
         springer_src = SpringerBrowserSource()
         if springer_src.available():

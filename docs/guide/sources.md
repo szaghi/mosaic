@@ -26,7 +26,8 @@ flowchart TD
     Q --> HAL[HAL]
     Q --> PM[PubMed]
     Q --> PMC[PubMed Central]
-    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM & PMC --> I{Deduplicate\nby DOI}
+    Q --> PED[PEDro]
+    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM & PMC & PED --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -475,6 +476,51 @@ mosaic config --ncbi-key YOUR_KEY
 ::: tip CLI shorthand
 ```bash
 mosaic search "RNA splicing mechanisms" --source pmc --year 2020-2024
+```
+:::
+
+## PEDro (Physiotherapy Evidence Database)
+
+| Property | Value |
+|----------|-------|
+| Auth | None |
+| Content | ~67 700 RCTs, systematic reviews, and clinical practice guidelines in physiotherapy |
+| PDF | None (links to record pages only) |
+| Rate limit | Configurable delay between requests (default 3 s) |
+| Base URL | `https://search.pedro.org.au/advanced-search/results` |
+
+PEDro is a free specialised database that indexes clinical evidence for physiotherapy interventions. Every record carries an independently validated **PEDro Scale score** (0–10) that rates methodological quality — a feature unique to this source.
+
+::: warning Fair Use policy — opt-in required
+PEDro's [Fair Use policy](https://pedro.org.au/fair-use/) explicitly prohibits
+automated bulk downloading.  This source is **disabled by default** and must be
+enabled only after you acknowledge that you will use it for small, targeted
+queries only:
+
+```toml
+# ~/.config/mosaic/config.toml
+[sources.pedro]
+acknowledge_fair_use = true
+```
+
+A rate-limiting delay (default 3 s) is enforced between every HTTP request.
+:::
+
+**What metadata is returned:** title, study type / method (as `journal`), PEDro scale score (as a brief `abstract` note), and the record URL.  Authors, year, and DOI are not present in the search-result list and would require per-record requests; they are not fetched automatically in order to stay within fair-use limits.
+
+**Search fields:** general keyword search uses `abstract_with_title`; `--field title` switches to a title-only search.  Year filters map to `year_of_publication`.
+
+**Customising the rate limit:** lower the delay only if you have confirmed your usage remains within PEDro's acceptable-use terms:
+
+```toml
+[sources.pedro]
+acknowledge_fair_use = true
+rate_limit_delay = 5.0   # seconds between HTTP requests (default: 3.0)
+```
+
+::: tip CLI shorthand
+```bash
+mosaic search "chronic low back pain" --source pedro --field title
 ```
 :::
 
