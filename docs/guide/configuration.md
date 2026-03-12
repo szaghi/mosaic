@@ -134,6 +134,22 @@ enabled = true
 enabled = true
 # No credentials required. French open archive — strong for French academic output and grey literature.
 
+[sources.pubmed]
+enabled = true
+# Optional. NCBI API key raises rate limit from 3 req/s to 10 req/s.
+# One key works for both PubMed and PubMed Central.
+# Register free at https://www.ncbi.nlm.nih.gov/account/
+api_key = ""
+
+[sources.pmc]
+enabled = true
+# Optional. Same NCBI API key as [sources.pubmed].
+api_key = ""
+
+[sources.biorxiv]
+enabled = true
+# No credentials required. Searches bioRxiv and medRxiv preprint servers.
+
 [sources.pedro]
 enabled = true
 # Disabled until you explicitly acknowledge PEDro's Fair Use policy.
@@ -142,6 +158,17 @@ acknowledge_fair_use = false
 # Seconds between HTTP requests. 3.0 s is the safe-fair default.
 # Lower only if your usage stays within PEDro's acceptable-use terms.
 rate_limit_delay = 3.0
+
+[sources.scopus]
+enabled = true
+# Free API key from https://dev.elsevier.com — same account as ScienceDirect.
+# If omitted, MOSAIC falls back to a saved browser session for search
+# (see Authenticated Access → Scopus). Disabled when both are absent.
+api_key = ""
+# Optional institutional token — unlocks full abstracts and complete author
+# lists for subscribers. Request from Elsevier support if your institution
+# has a Scopus subscription.
+inst_token = ""
 ```
 
 ## Source credentials
@@ -330,6 +357,25 @@ To disable the source entirely:
 [sources.crossref]
 enabled = false
 ```
+
+### Scopus — API key or browser session
+
+Scopus supports two access modes (same as ScienceDirect):
+
+| Credentials | What MOSAIC does |
+|---|---|
+| **Elsevier API key** | Uses the Scopus Search API. Free key returns partial metadata; add `inst_token` for full abstracts. |
+| **Browser session** (no API key) | Searches via headless Firefox. Shares the `id.elsevier.com` SSO with ScienceDirect. |
+| **Neither** | Source is skipped. |
+
+The Elsevier API key is the same one used for ScienceDirect. If you have already run `mosaic config --elsevier-key YOUR_KEY`, add the same key to the Scopus config:
+
+```toml
+[sources.scopus]
+api_key = "YOUR_KEY"
+```
+
+For browser-session setup see [Authenticated Access → Scopus](./authenticated-access#scopus). The full API key registration procedure is documented in [Sources → Scopus](./sources#scopus--shorthand-scopus).
 
 ### arXiv, DOAJ, Europe PMC, BASE, DBLP, HAL
 

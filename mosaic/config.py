@@ -36,6 +36,7 @@ _DEFAULTS: dict = {
             "acknowledge_fair_use": False,
             "rate_limit_delay": 3.0,
         },
+        "scopus": {"enabled": True, "api_key": "", "inst_token": ""},
     },
     "unpaywall": {"email": ""},
     "zotero": {"api_key": "", "user_id": 0},

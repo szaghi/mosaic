@@ -1609,3 +1609,255 @@ class TestPMCSource:
         with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
             self._source().search("q", max_results=999)
         assert mock.call_args.kwargs["params"]["retmax"] == 200
+
+
+# ── Scopus API ─────────────────────────────────────────────────────────────────
+
+_SCOPUS_API_JSON = {
+    "search-results": {
+        "opensearch:totalResults": "1",
+        "entry": [
+            {
+                "dc:identifier": "SCOPUS_ID:85123456789",
+                "dc:title": "Attention Is All You Need",
+                "dc:creator": "Vaswani A.",
+                "author": [
+                    {"authname": "Vaswani A.", "@seq": "1"},
+                    {"authname": "Shazeer N.", "@seq": "2"},
+                ],
+                "prism:publicationName": "Advances in Neural Information Processing Systems",
+                "prism:coverDate": "2017-12-01",
+                "prism:doi": "10.48550/arXiv.1706.03762",
+                "prism:volume": "30",
+                "prism:issueIdentifier": "1",
+                "prism:pageRange": "5998-6008",
+                "citedby-count": "42000",
+                "openaccess": "1",
+                "dc:description": "We propose the Transformer architecture.",
+                "link": [
+                    {"@ref": "self", "@href": "https://api.elsevier.com/content/abstract/scopus_id/85123456789"},
+                    {"@ref": "scopus", "@href": "https://www.scopus.com/inward/record.uri?partnerID=HzOxMe3b&scp=85123456789&origin=inward"},
+                ],
+            }
+        ],
+    }
+}
+
+
+class TestScopusAPISource:
+    def _source(self, api_key="test-key", inst_token=""):
+        from mosaic.sources.scopus_api import ScopusAPISource
+        return ScopusAPISource(api_key=api_key, inst_token=inst_token)
+
+    def test_unavailable_without_api_key(self):
+        from mosaic.sources.scopus_api import ScopusAPISource
+        assert not ScopusAPISource(api_key="").available()
+
+    def test_available_with_api_key(self):
+        assert self._source().available()
+
+    def test_parses_paper_fields(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_SCOPUS_API_JSON)):
+            papers = self._source().search("transformer")
+        assert len(papers) == 1
+        p = papers[0]
+        assert p.title == "Attention Is All You Need"
+        assert "Vaswani A." in p.authors
+        assert "Shazeer N." in p.authors
+        assert p.year == 2017
+        assert p.doi == "10.48550/arXiv.1706.03762"
+        assert p.abstract == "We propose the Transformer architecture."
+        assert p.journal == "Advances in Neural Information Processing Systems"
+        assert p.volume == "30"
+        assert p.issue == "1"
+        assert p.pages == "5998-6008"
+        assert p.url == "https://www.scopus.com/inward/record.uri?partnerID=HzOxMe3b&scp=85123456789&origin=inward"
+        assert p.pdf_url is None
+        assert p.is_open_access is True
+        assert p.citation_count == 42000
+        assert p.source == "Scopus"
+
+    def test_api_key_in_header(self):
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source(api_key="mykey").search("test")
+        headers = mock.call_args.kwargs["headers"]
+        assert headers["X-ELS-APIKey"] == "mykey"
+
+    def test_inst_token_in_header(self):
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source(api_key="mykey", inst_token="mytoken").search("test")
+        headers = mock.call_args.kwargs["headers"]
+        assert headers["X-ELS-Insttoken"] == "mytoken"
+
+    def test_no_inst_token_header_when_empty(self):
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("test")
+        headers = mock.call_args.kwargs["headers"]
+        assert "X-ELS-Insttoken" not in headers
+
+    def test_field_title_uses_TITLE_syntax(self):
+        f = SearchFilters(field="title")
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("neural networks", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["query"].startswith('TITLE("')
+
+    def test_field_abstract_uses_ABS_syntax(self):
+        f = SearchFilters(field="abstract")
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("neural networks", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["query"].startswith('ABS("')
+
+    def test_default_field_uses_TITLE_ABS_KEY(self):
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("neural networks")
+        params = mock.call_args.kwargs["params"]
+        assert params["query"].startswith('TITLE-ABS-KEY("')
+
+    def test_raw_query_overrides_field_transform(self):
+        f = SearchFilters(raw_query="TITLE(foo) AND AUTH(bar)")
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("ignored", filters=f)
+        params = mock.call_args.kwargs["params"]
+        assert params["query"] == "TITLE(foo) AND AUTH(bar)"
+
+    def test_year_range_appended_as_PUBYEAR(self):
+        f = SearchFilters(year_from=2020, year_to=2024)
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("transformers", filters=f)
+        q = mock.call_args.kwargs["params"]["query"]
+        assert "PUBYEAR > 2019" in q
+        assert "PUBYEAR < 2025" in q
+
+    def test_author_filter_appended_as_AUTH(self):
+        f = SearchFilters(authors=["Vaswani"])
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("attention", filters=f)
+        q = mock.call_args.kwargs["params"]["query"]
+        assert 'AUTH("Vaswani")' in q
+
+    def test_journal_filter_appended_as_SRCTITLE(self):
+        f = SearchFilters(journal="Nature")
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("protein", filters=f)
+        q = mock.call_args.kwargs["params"]["query"]
+        assert 'SRCTITLE("Nature")' in q
+
+    def test_max_results_capped_at_200(self):
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("q", max_results=999)
+        assert mock.call_args.kwargs["params"]["count"] == 200
+
+    def test_entry_without_title_skipped(self):
+        data = {"search-results": {"entry": [{"error": "Result set was empty"}]}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("nothing")
+        assert papers == []
+
+    def test_fallback_to_dc_creator_when_no_author_list(self):
+        entry = {**_SCOPUS_API_JSON["search-results"]["entry"][0]}
+        entry = dict(entry)
+        del entry["author"]
+        data = {"search-results": {"entry": [entry]}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("transformer")
+        assert papers[0].authors == ["Vaswani A."]
+
+    def test_openaccess_integer_1_detected(self):
+        entry = {**_SCOPUS_API_JSON["search-results"]["entry"][0], "openaccess": 1}
+        data = {"search-results": {"entry": [entry]}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("transformer")
+        assert papers[0].is_open_access is True
+
+    def test_openaccess_string_0_is_false(self):
+        entry = {**_SCOPUS_API_JSON["search-results"]["entry"][0], "openaccess": "0"}
+        data = {"search-results": {"entry": [entry]}}
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            papers = self._source().search("transformer")
+        assert papers[0].is_open_access is False
+
+    def test_citation_count_parsed(self):
+        with patch("httpx.get", return_value=_mock_get(json_data=_SCOPUS_API_JSON)):
+            papers = self._source().search("transformer")
+        assert papers[0].citation_count == 42000
+
+
+# ── Scopus browser ─────────────────────────────────────────────────────────────
+
+class TestScopusBrowserSource:
+    def _source(self):
+        from mosaic.sources.scopus_browser import ScopusBrowserSource
+        return ScopusBrowserSource()
+
+    def test_unavailable_without_session(self):
+        with patch("mosaic.auth.find_session_for_url", return_value=None):
+            assert not self._source().available()
+
+    def test_available_with_valid_session(self):
+        with patch("mosaic.auth.find_session_for_url", return_value="scopus"), \
+             patch("mosaic.auth.session_is_valid", return_value=True):
+            assert self._source().available()
+
+    def test_unavailable_when_session_expired(self):
+        with patch("mosaic.auth.find_session_for_url", return_value="scopus"), \
+             patch("mosaic.auth.session_is_valid", return_value=False):
+            assert not self._source().available()
+
+    def test_search_returns_empty_when_no_session(self):
+        with patch("mosaic.auth.find_session_for_url", return_value=None), \
+             patch("mosaic.auth._require_playwright"):
+            result = self._source().search("test")
+        assert result == []
+
+    def test_search_returns_empty_on_exception(self):
+        with patch("mosaic.auth.find_session_for_url", side_effect=ImportError):
+            result = self._source().search("test")
+        assert result == []
+
+    def test_build_query_default(self):
+        q = self._source()._build_query("machine learning", None)
+        assert q == 'TITLE-ABS-KEY("machine learning")'
+
+    def test_build_query_title_field(self):
+        f = SearchFilters(field="title")
+        q = self._source()._build_query("neural", f)
+        assert q == 'TITLE("neural")'
+
+    def test_build_query_abstract_field(self):
+        f = SearchFilters(field="abstract")
+        q = self._source()._build_query("neural", f)
+        assert q == 'ABS("neural")'
+
+    def test_build_query_raw_overrides(self):
+        f = SearchFilters(raw_query="TITLE(foo) AND AUTH(bar)")
+        q = self._source()._build_query("ignored", f)
+        assert q == "TITLE(foo) AND AUTH(bar)"
+
+    def test_build_query_year_range(self):
+        f = SearchFilters(year_from=2020, year_to=2023)
+        q = self._source()._build_query("test", f)
+        assert "PUBYEAR > 2019" in q
+        assert "PUBYEAR < 2024" in q
+
+    def test_build_query_author_filter(self):
+        f = SearchFilters(authors=["Smith"])
+        q = self._source()._build_query("test", f)
+        assert 'AUTH("Smith")' in q
+
+    def test_build_query_journal_filter(self):
+        f = SearchFilters(journal="Nature")
+        q = self._source()._build_query("test", f)
+        assert 'SRCTITLE("Nature")' in q

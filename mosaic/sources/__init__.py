@@ -20,6 +20,8 @@ from mosaic.sources.pubmed import PubMedSource
 from mosaic.sources.pmc import PMCSource
 from mosaic.sources.biorxiv import BioRxivSource
 from mosaic.sources.pedro import PEDroSource
+from mosaic.sources.scopus_api import ScopusAPISource
+from mosaic.sources.scopus_browser import ScopusBrowserSource
 
 __all__ = [
     "ArxivSource",
@@ -44,4 +46,6 @@ __all__ = [
     "PMCSource",
     "BioRxivSource",
     "PEDroSource",
+    "ScopusAPISource",
+    "ScopusBrowserSource",
 ]

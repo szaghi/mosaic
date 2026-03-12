@@ -7,7 +7,7 @@ from mosaic.sources import (
     BioRxivSource, DoajSource, EuropePMCSource, OpenAlexSource, BASESource, CORESource,
     NASAADSSource, IEEEXploreSource, ZenodoSource, CrossrefSource,
     SpringerAPISource, CustomSource, DBLPSource, HALSource, PubMedSource, PMCSource,
-    PEDroSource,
+    PEDroSource, ScopusAPISource, ScopusBrowserSource,
 )
 
 # Source shorthand → display name mapping
@@ -21,6 +21,7 @@ SRC_MAP: dict[str, str] = {
     "dblp": "DBLP", "hal": "HAL", "pubmed": "PubMed", "pmc": "PubMed Central",
     "rxiv": "bioRxiv/medRxiv",
     "pedro": "PEDro",
+    "scopus": "Scopus",
 }
 
 
@@ -82,6 +83,15 @@ def build_sources(cfg: dict) -> list:
         springer_src = SpringerBrowserSource()
         if springer_src.available():
             sources.append(springer_src)
+    if src_cfg.get("scopus", {}).get("enabled", True):
+        scopus_api_key = src_cfg.get("scopus", {}).get("api_key", "")
+        scopus_inst_token = src_cfg.get("scopus", {}).get("inst_token", "")
+        if scopus_api_key:
+            sources.append(ScopusAPISource(api_key=scopus_api_key, inst_token=scopus_inst_token))
+        else:
+            scopus_browser = ScopusBrowserSource()
+            if scopus_browser.available():
+                sources.append(scopus_browser)
     for custom_cfg in cfg.get("custom_sources", []):
         if custom_cfg.get("enabled", True):
             sources.append(CustomSource(custom_cfg))

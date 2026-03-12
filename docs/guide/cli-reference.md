@@ -73,6 +73,7 @@ mosaic search [OPTIONS] QUERY
 | `pubmed` | PubMed | — (API key optional) |
 | `pmc` | PubMed Central | — (API key optional) |
 | `rxiv` | bioRxiv / medRxiv | — |
+| `scopus` | Scopus | API key or browser session |
 
 **`--year` / `-y` formats:**
 

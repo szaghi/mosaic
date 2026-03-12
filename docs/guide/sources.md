@@ -27,7 +27,8 @@ flowchart TD
     Q --> PM[PubMed]
     Q --> PMC[PubMed Central]
     Q --> PED[PEDro]
-    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM & PMC & PED --> I{Deduplicate\nby DOI}
+    Q --> SC[Scopus]
+    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM & PMC & PED & SC --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -522,6 +523,67 @@ rate_limit_delay = 5.0   # seconds between HTTP requests (default: 3.0)
 ```bash
 mosaic search "chronic low back pain" --source pedro --field title
 ```
+:::
+
+## Scopus — shorthand `scopus`
+
+| Property | Value |
+|----------|-------|
+| Auth | API key **or** saved browser session |
+| Content | 90 M+ records — peer-reviewed journals, conference proceedings, and book series across all disciplines |
+| PDF | None (Scopus does not expose PDF links) |
+| Rate limit | 20 000 req/week, 9 req/s (API) · browser-paced (session) |
+| Base URL | `https://api.elsevier.com/content/search/scopus` (API) · `https://www.scopus.com/search/form.uri#advanced` (browser) |
+
+MOSAIC selects the access mode automatically:
+
+- **API key configured** — uses the Elsevier Scopus Search API. Fast and reliable. Full metadata (abstracts, complete author lists) requires an institutional subscription alongside the API key; a free key returns title, first author, journal, year, DOI, citation count, and open-access flag.
+- **Browser session saved, no API key** — uses headless Firefox to search Scopus with your institutional credentials via the advanced-search form. Because Scopus and ScienceDirect share the same `id.elsevier.com` SSO, a single browser login covers both.
+- **Neither** — source is skipped entirely.
+
+Supports `--field title` (Scopus `TITLE()` operator), `--field abstract` (`ABS()`), `--year`, `--author`, and `--journal` natively in both modes.
+
+::: warning API key required for API mode
+Scopus is disabled in API mode until you set a key:
+
+1. Sign in or register at [dev.elsevier.com](https://dev.elsevier.com)
+2. Click **My API Key** (top-right) → **Create API key**
+3. Choose **Scopus** (or **All Elsevier APIs**) as the product
+4. Copy the generated key and add it to the config file:
+
+```toml
+# ~/.config/mosaic/config.toml
+[sources.scopus]
+api_key = "YOUR_KEY"
+```
+
+The same key also works for ScienceDirect (set it via `mosaic config --elsevier-key YOUR_KEY`).
+
+**Optional institutional token** — if your institution has a Scopus subscription you can request an `InstToken` from Elsevier support. Add it alongside the API key to unlock full abstracts and complete author lists:
+
+```toml
+[sources.scopus]
+api_key    = "YOUR_KEY"
+inst_token = "YOUR_INST_TOKEN"
+```
+:::
+
+::: tip Browser session (no API key)
+If you have institutional access through a university login, you can use a browser session instead of an API key:
+```bash
+mosaic auth login scopus --url https://www.scopus.com
+```
+See [Authenticated Access → Scopus](./authenticated-access#scopus) for the full setup guide.
+:::
+
+::: tip CLI shorthand
+```bash
+mosaic search "transformer attention mechanism" --source scopus --field title --year 2020-2025
+```
+:::
+
+::: info No PDF links
+Scopus is a metadata index only — it does not expose PDF download URLs. For open-access papers, Unpaywall resolves a PDF link by DOI automatically during download.
 :::
 
 ## Unpaywall (PDF resolver)

@@ -81,6 +81,7 @@ publishers that use standard cookie-based session management.
 | **Taylor & Francis** | — | ✅ | Standard cookie session |
 | **Cambridge University Press** | — | ✅ | Standard cookie session |
 | **ScienceDirect (Elsevier)** | ✅ | ⚠️ | Search works via browser session. PDF download blocked by Cloudflare on the `/pdfft/` endpoint — falls back to Unpaywall. See [ScienceDirect notes](#sciencedirect-elsevier) below. |
+| **Scopus (Elsevier)** | ✅ | — | Search works via browser session (shares `id.elsevier.com` SSO with ScienceDirect). Scopus does not expose PDF links; Unpaywall is used as fallback. See [Scopus notes](#scopus) below. |
 
 ::: info Wiley, Taylor & Francis, Cambridge
 These publishers do not yet have a dedicated browser-based search source.
@@ -257,6 +258,49 @@ To refresh the session:
 ```bash
 mosaic auth login elsevier --url https://www.sciencedirect.com
 ```
+
+## Scopus (Elsevier) {#scopus}
+
+Scopus and ScienceDirect are both Elsevier products that use the **same
+`id.elsevier.com` SSO**. A single browser session can be used for both.
+
+| Credentials | What MOSAIC does |
+|---|---|
+| API key | Uses the Elsevier Scopus Search API (fast, reliable). |
+| Browser session (no API key) | Uses headless Firefox to search via the advanced-search form. |
+| Neither | Scopus source is skipped entirely. |
+
+### Saving the Scopus session
+
+```bash
+mosaic auth login scopus --url https://www.scopus.com
+```
+
+Complete the full institutional SSO flow until the Scopus homepage shows
+your name, then press **Enter**.
+
+::: tip Share the session with ScienceDirect
+Because both sites use `id.elsevier.com` for authentication, a Scopus login
+will also enable the ScienceDirect browser source (and vice versa). You only
+need to save one session — MOSAIC matches saved sessions by domain, and the
+Elsevier SSO cookies are valid across `scopus.com` and `sciencedirect.com`.
+:::
+
+::: warning Same browser for login and search
+Use Firefox for both headed login and headless search (same as ScienceDirect).
+Install it before logging in: `playwright install firefox`.
+:::
+
+### Notes on search and selectors
+
+Scopus uses a heavily JavaScript-rendered interface. The browser source
+submits queries via the advanced-search form using full Scopus boolean
+syntax (e.g. `TITLE-ABS-KEY("transformer") AND PUBYEAR > 2019`). Because
+the Scopus frontend can change independently of MOSAIC releases, the CSS
+selectors used to extract result rows may occasionally need updating.
+
+If search returns empty results after a known-working login, open an issue at
+[github.com/szaghi/mosaic](https://github.com/szaghi/mosaic).
 
 ## Legal and ethical notice
 
