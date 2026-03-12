@@ -128,7 +128,7 @@ def search_page():
             "springer": "springer_api", "ads": "nasa_ads", "ieee": "ieee",
             "zenodo": "zenodo", "crossref": "crossref", "dblp": "dblp",
             "hal": "hal", "pubmed": "pubmed", "pmc": "pmc", "rxiv": "biorxiv",
-            "pedro": "pedro",
+            "pedro": "pedro", "scopus": "scopus",
         }
         cfg_key = cfg_key_map.get(key, key)
         enabled = src_cfg.get(cfg_key, {}).get("enabled", True)
@@ -442,6 +442,8 @@ def config_save():
         ("ieee_key", ("sources", "ieee", "api_key")),
         ("ncbi_key", ("sources", "pubmed", "api_key")),
         ("springer_key", ("sources", "springer_api", "api_key")),
+        ("scopus_key", ("sources", "scopus", "api_key")),
+        ("scopus_inst_token", ("sources", "scopus", "inst_token")),
     ]:
         val = request.form.get(key_name, "").strip()
         if val:
@@ -479,6 +481,7 @@ def config_save():
             "ieee": "ieee", "zenodo": "zenodo", "crossref": "crossref",
             "dblp": "dblp", "hal": "hal", "pubmed": "pubmed",
             "pmc": "pmc", "biorxiv": "biorxiv", "pedro": "pedro",
+            "scopus": "scopus",
         }
         enabled_sources = request.form.getlist("enabled_sources")
         for cfg_key in cfg_key_map.values():
@@ -494,6 +497,20 @@ def config_save():
                 cfg["sources"]["pedro"]["rate_limit_delay"] = float(pedro_delay)
             except ValueError:
                 pass
+
+    # Obsidian
+    if request.form.get("_obsidian_section"):
+        obs = cfg.setdefault("obsidian", {})
+        vault_path = request.form.get("obsidian_vault_path", "").strip()
+        obs["vault_path"] = vault_path
+        subfolder = request.form.get("obsidian_subfolder", "papers").strip()
+        obs["subfolder"] = subfolder
+        fn_pattern = request.form.get("obsidian_filename_pattern", "").strip()
+        if fn_pattern:
+            obs["filename_pattern"] = fn_pattern
+        tags_raw = request.form.get("obsidian_tags", "paper").strip()
+        obs["tags"] = [t.strip() for t in tags_raw.split(",") if t.strip()] or ["paper"]
+        obs["wikilinks"] = request.form.get("obsidian_wikilinks") == "on"
 
     cfg_mod.save(cfg)
 
@@ -643,10 +660,212 @@ def zotero_export_paper(uid):
     )
 
 
+# ---------------------------------------------------------------------------
+# Obsidian export
+# ---------------------------------------------------------------------------
+
+def _run_obsidian_export(papers_data, cfg):
+    """Executed in a worker thread."""
+    from mosaic.obsidian import ObsidianVault
+
+    obs_cfg = cfg.get("obsidian", {})
+    vault_path = obs_cfg.get("vault_path", "")
+    if not vault_path:
+        return {"ok": False, "msg": "Obsidian vault path is not configured. Set it in Config."}
+
+    vault = ObsidianVault(
+        vault_path=vault_path,
+        subfolder=obs_cfg.get("subfolder", "papers"),
+        filename_pattern=obs_cfg.get("filename_pattern", "{year}_{author}_{title}"),
+        tags=obs_cfg.get("tags", ["paper"]),
+        wikilinks=obs_cfg.get("wikilinks", True),
+    )
+    papers = [Paper(**d) for d in papers_data]
+    added, skipped = vault.export_papers(papers)
+    msg = f"{added} note(s) added"
+    if skipped:
+        msg += f", {skipped} skipped (already exist)"
+    msg += f" → {vault.notes_dir}"
+    return {"ok": True, "msg": msg}
+
+
+@bp.route("/obsidian/export/<job_id>", methods=["POST"])
+def obsidian_export(job_id):
+    papers = current_app.config.get(f"export_{job_id}")
+    if not papers:
+        return "<mark>No results to export. Run a search first.</mark>"
+
+    cfg = _cfg()
+    papers_data = [_paper_to_dict(p) for p in papers]
+    obs_job_id = _jobs().submit(_run_obsidian_export, papers_data, cfg)
+    status_url = url_for("ui.obsidian_export_status", job_id=obs_job_id)
+    return (
+        f'<div hx-get="{status_url}" hx-trigger="every 1s" hx-target="#obsidian-status" hx-swap="innerHTML">'
+        f'<span aria-busy="true">Exporting to Obsidian&hellip;</span></div>'
+    )
+
+
+@bp.route("/obsidian/export/status/<job_id>")
+def obsidian_export_status(job_id):
+    job = _jobs().get(job_id)
+    if job is None:
+        return "<mark>Obsidian export job not found.</mark>"
+    if job.status == "running":
+        status_url = url_for("ui.obsidian_export_status", job_id=job_id)
+        return (
+            f'<div hx-get="{status_url}" hx-trigger="every 1s" hx-target="#obsidian-status" hx-swap="innerHTML">'
+            f'<span aria-busy="true">Exporting to Obsidian&hellip;</span></div>'
+        )
+    _jobs().pop(job_id)
+    if job.status == "error":
+        return f"<mark>Obsidian export failed: {job.error_message}</mark>"
+    result = job.result
+    if result["ok"]:
+        return f'<ins>{result["msg"]}</ins>'
+    return f'<mark>{result["msg"]}</mark>'
+
+
 def _paper_to_dict(paper: Paper) -> dict:
     """Serialise a Paper dataclass to a plain dict for thread-safe passing."""
     from dataclasses import asdict
     return asdict(paper)
+
+
+# ---------------------------------------------------------------------------
+# NotebookLM
+# ---------------------------------------------------------------------------
+
+def _run_notebook_from_query(name, query, max_results, filters, oa_only, pdf_only,
+                              artifacts, cfg):
+    """Executed in a worker thread — search → download → create notebook."""
+    import asyncio
+    from mosaic.notebooklm_bridge import _require_notebooklm, create_notebook
+    from mosaic.db import Cache
+    from mosaic.downloader import download as dl_paper
+
+    _require_notebooklm()
+
+    sources = build_sources(cfg)
+    errors: list[str] = []
+    papers = search_all(sources, query, max_per_source=max_results,
+                        filters=filters, errors=errors)
+    if oa_only:
+        papers = [p for p in papers if p.is_open_access or p.pdf_url]
+    if pdf_only:
+        papers = [p for p in papers if p.pdf_url]
+
+    if not papers:
+        return {"ok": False, "msg": "No papers found for this query."}
+
+    cache = Cache(cfg["db_path"])
+    email = cfg.get("unpaywall", {}).get("email", "")
+    dl_dir = cfg["download_dir"]
+    pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
+
+    papers_with_paths = []
+    for p in papers:
+        path = dl_paper(p, dl_dir, cache, email, pattern)
+        papers_with_paths.append((p, Path(path) if path else None))
+
+    nb_id = asyncio.run(create_notebook(name, papers_with_paths, artifacts=artifacts))
+    added = sum(1 for _, path in papers_with_paths if path)
+    return {
+        "ok": True,
+        "nb_id": nb_id,
+        "paper_count": len(papers),
+        "downloaded": added,
+    }
+
+
+def _run_notebook_from_dir(name, from_dir, artifacts, cfg):
+    """Executed in a worker thread — import PDFs from directory."""
+    import asyncio
+    from mosaic.notebooklm_bridge import _require_notebooklm, create_notebook_from_dir
+
+    _require_notebooklm()
+
+    directory = Path(from_dir).expanduser()
+    if not directory.is_dir():
+        return {"ok": False, "msg": f"Directory not found: {from_dir}"}
+
+    try:
+        nb_id = asyncio.run(create_notebook_from_dir(name, directory, artifacts=artifacts))
+    except ValueError as e:
+        return {"ok": False, "msg": str(e)}
+
+    return {"ok": True, "nb_id": nb_id}
+
+
+@bp.route("/notebook")
+def notebook_page():
+    return render_template("notebook.html", version=_version())
+
+
+@bp.route("/notebook", methods=["POST"])
+def notebook_submit():
+    _purge_stale()
+    name = request.form.get("name", "").strip()
+    if not name:
+        return '<article>Please enter a notebook name.</article>'
+
+    input_mode = request.form.get("input_mode", "query")
+    artifacts: set[str] = set(request.form.getlist("artifacts"))
+    cfg = _cfg()
+
+    if input_mode == "dir":
+        from_dir = request.form.get("from_dir", "").strip()
+        if not from_dir:
+            return '<article>Please enter a PDF directory path.</article>'
+        job_id = _jobs().submit(_run_notebook_from_dir, name, from_dir, artifacts, cfg)
+    else:
+        query = request.form.get("query", "").strip()
+        if not query:
+            return '<article>Please enter a search query.</article>'
+        max_results = int(request.form.get("max_results", 10))
+        filters = _build_filters(request.form)
+        oa_only = request.form.get("oa_only") == "on"
+        pdf_only = request.form.get("pdf_only") == "on"
+        job_id = _jobs().submit(_run_notebook_from_query, name, query, max_results,
+                                filters, oa_only, pdf_only, artifacts, cfg)
+
+    status_url = url_for("ui.notebook_status", job_id=job_id)
+    return (
+        f'<div hx-get="{status_url}" hx-trigger="every 2s" hx-target="#nb-results" hx-swap="innerHTML">'
+        f'<article aria-busy="true">Creating notebook <strong>{name}</strong>&hellip; '
+        f'(this may take a minute)</article></div>'
+    )
+
+
+@bp.route("/notebook/status/<job_id>")
+def notebook_status(job_id):
+    job = _jobs().get(job_id)
+    if job is None:
+        return '<article>Job not found.</article>'
+
+    if job.status == "running":
+        status_url = url_for("ui.notebook_status", job_id=job_id)
+        return (
+            f'<div hx-get="{status_url}" hx-trigger="every 2s" hx-target="#nb-results" hx-swap="innerHTML">'
+            f'<article aria-busy="true">Creating notebook&hellip; (this may take a minute)</article></div>'
+        )
+
+    _jobs().pop(job_id)
+    if job.status == "error":
+        return f'<article><mark>Notebook creation failed: {job.error_message}</mark></article>'
+
+    result = job.result
+    if not result["ok"]:
+        return f'<article><mark>{result["msg"]}</mark></article>'
+
+    nb_id = result["nb_id"]
+    nb_url = f"https://notebooklm.google.com/notebook/{nb_id}"
+    lines = [f'<ins>Notebook created successfully!</ins>']
+    if "paper_count" in result:
+        lines.append(f'<p>{result["paper_count"]} paper(s) found, '
+                     f'{result["downloaded"]} PDF(s) added.</p>')
+    lines.append(f'<p><a href="{nb_url}" target="_blank" rel="noopener">'
+                 f'Open in NotebookLM &rarr;</a></p>')
+    return "".join(lines)
 
 
 # ---------------------------------------------------------------------------

@@ -42,8 +42,15 @@
       Send to Zotero
     </button>
   </form>
+  <span style="margin-left:.5rem;">|</span>
+  <button hx-post="{{ url_for('ui.obsidian_export', job_id=job_id) }}"
+          hx-target="#obsidian-status"
+          class="outline" style="padding:.2rem .5rem;font-size:.85em;margin:0;">
+    Export to Obsidian
+  </button>
 </div>
 <div id="zotero-status"></div>
+<div id="obsidian-status"></div>
 {% endif %}
 
 {% set has_citations = papers | selectattr('citation_count') | list %}

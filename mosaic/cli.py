@@ -63,6 +63,8 @@ def search(
     zotero: Annotated[bool, typer.Option("--zotero", help="Export results to Zotero")] = False,
     zotero_collection: Annotated[str, typer.Option("--zotero-collection", help="Zotero collection name (created if missing)")] = "",
     zotero_local: Annotated[bool, typer.Option("--zotero-local", help="Force Zotero local API even when an API key is configured")] = False,
+    obsidian: Annotated[bool, typer.Option("--obsidian", help="Export results as notes to an Obsidian vault")] = False,
+    obsidian_folder: Annotated[str, typer.Option("--obsidian-folder", help="Override Obsidian vault subfolder for this run")] = "",
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -155,6 +157,9 @@ def search(
         _push_to_zotero(papers, cfg, collection_name=zotero_collection,
                         force_local=zotero_local, pdf_map=pdf_map)
 
+    if obsidian:
+        _push_to_obsidian(papers, cfg, subfolder_override=obsidian_folder)
+
 
 @app.command()
 def similar(
@@ -169,6 +174,8 @@ def similar(
     zotero: Annotated[bool, typer.Option("--zotero", help="Export results to Zotero")] = False,
     zotero_collection: Annotated[str, typer.Option("--zotero-collection", help="Zotero collection name (created if missing)")] = "",
     zotero_local: Annotated[bool, typer.Option("--zotero-local", help="Force Zotero local API even when an API key is configured")] = False,
+    obsidian: Annotated[bool, typer.Option("--obsidian", help="Export results as notes to an Obsidian vault")] = False,
+    obsidian_folder: Annotated[str, typer.Option("--obsidian-folder", help="Override Obsidian vault subfolder for this run")] = "",
 ):
     """Find papers similar to a given paper by DOI or arXiv ID."""
     from mosaic.similar import find_similar
@@ -242,6 +249,9 @@ def similar(
         _push_to_zotero(papers, cfg, collection_name=zotero_collection,
                         force_local=zotero_local, pdf_map=pdf_map)
 
+    if obsidian:
+        _push_to_obsidian(papers, cfg, subfolder_override=obsidian_folder)
+
 
 @app.command()
 def get(
@@ -252,6 +262,8 @@ def get(
     zotero: Annotated[bool, typer.Option("--zotero", help="Export downloaded paper(s) to Zotero")] = False,
     zotero_collection: Annotated[str, typer.Option("--zotero-collection", help="Zotero collection name (created if missing)")] = "",
     zotero_local: Annotated[bool, typer.Option("--zotero-local", help="Force Zotero local API even when an API key is configured")] = False,
+    obsidian: Annotated[bool, typer.Option("--obsidian", help="Export paper(s) as notes to an Obsidian vault")] = False,
+    obsidian_folder: Annotated[str, typer.Option("--obsidian-folder", help="Override Obsidian vault subfolder for this run")] = "",
 ):
     """Download a paper by DOI, or bulk-download all DOIs from a .bib/.csv file."""
     cfg = cfg_mod.load()
@@ -266,7 +278,8 @@ def get(
     if from_file:
         _bulk_download(from_file, cfg, cache, oa_only,
                        zotero=zotero, zotero_collection=zotero_collection,
-                       zotero_local=zotero_local)
+                       zotero_local=zotero_local,
+                       obsidian=obsidian, obsidian_folder=obsidian_folder)
         return
 
     if doi is None:
@@ -286,6 +299,9 @@ def get(
         pdf_map = {paper.uid: path} if path else {}
         _push_to_zotero([paper], cfg, collection_name=zotero_collection,
                         force_local=zotero_local, pdf_map=pdf_map)
+
+    if obsidian:
+        _push_to_obsidian([paper], cfg, subfolder_override=obsidian_folder)
 
 
 @app.command()
@@ -344,6 +360,8 @@ def _bulk_download(
     zotero: bool = False,
     zotero_collection: str = "",
     zotero_local: bool = False,
+    obsidian: bool = False,
+    obsidian_folder: str = "",
 ) -> None:
     from mosaic.bulk import read_dois
     from mosaic.models import Paper
@@ -399,6 +417,9 @@ def _bulk_download(
     if zotero and papers_list:
         _push_to_zotero(papers_list, cfg, collection_name=zotero_collection,
                         force_local=zotero_local, pdf_map=pdf_map)
+
+    if obsidian and papers_list:
+        _push_to_obsidian(papers_list, cfg, subfolder_override=obsidian_folder)
 
 
 def _print_search_stats(stats: dict, filters) -> None:
@@ -546,6 +567,36 @@ def _push_to_zotero(
                     attached += 1
         if attached:
             rprint(f"[dim]{attached} PDF(s) linked.[/dim]")
+
+
+def _push_to_obsidian(
+    papers: list,
+    cfg: dict,
+    *,
+    subfolder_override: str = "",
+) -> None:
+    """Export *papers* as Obsidian notes to the configured vault."""
+    from mosaic.obsidian import ObsidianVault
+
+    obs_cfg = cfg.get("obsidian", {})
+    vault_path = obs_cfg.get("vault_path", "")
+    if not vault_path:
+        rprint("[red]Obsidian vault path is not configured.[/red]")
+        rprint("[dim]Set it in ~/.config/mosaic/config.toml:[/dim]")
+        rprint("[dim]  [obsidian]\\n  vault_path = \"/path/to/your/vault\"[/dim]")
+        raise typer.Exit(1)
+
+    vault = ObsidianVault(
+        vault_path=vault_path,
+        subfolder=subfolder_override or obs_cfg.get("subfolder", "papers"),
+        filename_pattern=obs_cfg.get("filename_pattern", "{year}_{author}_{title}"),
+        tags=obs_cfg.get("tags", ["paper"]),
+        wikilinks=obs_cfg.get("wikilinks", True),
+    )
+    added, skipped = vault.export_papers(papers)
+    rprint(f"[green]Obsidian:[/green] {added} note(s) added" +
+           (f", {skipped} skipped (already exist)" if skipped else "") +
+           f" → {vault.notes_dir}")
 
 
 @notebook_app.command("create")

@@ -62,6 +62,16 @@
         <input type="password" name="zotero_key" value="{{ cfg.get('zotero', {}).get('api_key', '') }}" placeholder="Web API key">
       </label>
     </div>
+    <div class="grid">
+      <label>
+        Scopus API key
+        <input type="password" name="scopus_key" value="{{ cfg.get('sources', {}).get('scopus', {}).get('api_key', '') }}" placeholder="API key (same account as Elsevier)">
+      </label>
+      <label>
+        Scopus institutional token <small>(optional — unlocks full abstracts)</small>
+        <input type="password" name="scopus_inst_token" value="{{ cfg.get('sources', {}).get('scopus', {}).get('inst_token', '') }}" placeholder="Institution token">
+      </label>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -98,6 +108,7 @@
         ('pmc', 'PubMed Central'),
         ('biorxiv', 'bioRxiv/medRxiv'),
         ('pedro', 'PEDro'),
+        ('scopus', 'Scopus'),
       ] %}
       <label>
         <input type="checkbox" name="enabled_sources" value="{{ cfg_key }}"
@@ -127,6 +138,34 @@
       <input type="number" name="pedro_rate_limit_delay" step="0.5" min="1"
              value="{{ pedro_cfg.get('rate_limit_delay', 3.0) }}"
              placeholder="3.0">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend><strong>Obsidian Integration</strong></legend>
+    <input type="hidden" name="_obsidian_section" value="1">
+    <label>
+      Vault path <small>(absolute path to your Obsidian vault root; leave empty to disable)</small>
+      <input type="text" name="obsidian_vault_path" value="{{ cfg.get('obsidian', {}).get('vault_path', '') }}" placeholder="/home/you/my-vault">
+    </label>
+    <div class="grid">
+      <label>
+        Subfolder <small>(inside the vault; empty = vault root)</small>
+        <input type="text" name="obsidian_subfolder" value="{{ cfg.get('obsidian', {}).get('subfolder', 'papers') }}" placeholder="papers">
+      </label>
+      <label>
+        Filename pattern
+        <input type="text" name="obsidian_filename_pattern" value="{{ cfg.get('obsidian', {}).get('filename_pattern', '{year}_{author}_{title}') }}" placeholder="{year}_{author}_{title}">
+      </label>
+    </div>
+    <label>
+      Tags <small>(comma-separated, added to every note's frontmatter)</small>
+      <input type="text" name="obsidian_tags" value="{{ cfg.get('obsidian', {}).get('tags', ['paper']) | join(', ') }}" placeholder="paper">
+    </label>
+    <label>
+      <input type="checkbox" name="obsidian_wikilinks"
+             {% if cfg.get('obsidian', {}).get('wikilinks', true) %}checked{% endif %}>
+      Add <code>[[wikilinks]]</code> between papers exported in the same batch
     </label>
   </fieldset>
 

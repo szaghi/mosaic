@@ -38,6 +38,7 @@
         <li><a href="{{ url_for('ui.search_page') }}" {% if request.path == '/' %}aria-current="page"{% endif %}>Search</a></li>
         <li><a href="{{ url_for('ui.similar_page') }}" {% if '/similar' in request.path %}aria-current="page"{% endif %}>Similar</a></li>
         <li><a href="{{ url_for('ui.bulk_page') }}" {% if '/bulk' in request.path %}aria-current="page"{% endif %}>Bulk</a></li>
+        <li><a href="{{ url_for('ui.notebook_page') }}" {% if '/notebook' in request.path %}aria-current="page"{% endif %}>NotebookLM</a></li>
         <li><a href="{{ url_for('ui.history_page') }}" {% if '/history' in request.path %}aria-current="page"{% endif %}>History</a></li>
         <li><a href="{{ url_for('ui.sessions_page') }}" {% if '/sessions' in request.path %}aria-current="page"{% endif %}>Sessions</a></li>
         <li><a href="{{ url_for('ui.config_page') }}" {% if '/config' in request.path %}aria-current="page"{% endif %}>Config</a></li>

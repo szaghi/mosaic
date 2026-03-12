@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}NotebookLM &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Create NotebookLM Notebook</h2>
+
+<p>
+  <small>
+    Requires: <code>pip install 'mosaic-search[notebooklm]'</code> and a prior
+    <code>notebooklm login</code> to authenticate. Up to 50 sources per notebook.
+  </small>
+</p>
+
+<form id="notebook-form" onsubmit="return false">
+  <label>
+    Notebook name
+    <input type="text" name="name" placeholder="My Research Notebook" required autofocus>
+  </label>
+
+  <fieldset>
+    <legend><strong>Input source</strong></legend>
+    <div style="display:flex;gap:1.5rem;margin-bottom:.75rem;flex-wrap:wrap;">
+      <label style="margin:0;">
+        <input type="radio" name="input_mode" value="query" checked
+               onchange="document.getElementById('query-section').style.display='';document.getElementById('dir-section').style.display='none';">
+        Search papers
+      </label>
+      <label style="margin:0;">
+        <input type="radio" name="input_mode" value="dir"
+               onchange="document.getElementById('dir-section').style.display='';document.getElementById('query-section').style.display='none';">
+        Local PDF directory
+      </label>
+    </div>
+
+    <div id="query-section">
+      <div class="grid">
+        <input type="text" name="query" placeholder="Search query&hellip;">
+        <label>
+          Max per source
+          <input type="number" name="max_results" value="10" min="1" max="100">
+        </label>
+      </div>
+      <details>
+        <summary>Search filters</summary>
+        <div class="filter-grid">
+          <label>
+            Year
+            <input type="text" name="year" placeholder="2020, 2020-2024, or 2020,2022">
+          </label>
+          <label>
+            Author
+            <input type="text" name="author" placeholder="Last name(s), comma-separated">
+          </label>
+          <label>
+            Journal
+            <input type="text" name="journal" placeholder="Journal name (substring)">
+          </label>
+          <label>
+            Field
+            <select name="field">
+              <option value="all">All fields</option>
+              <option value="title">Title only</option>
+              <option value="abstract">Abstract only</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Raw query <small>(bypass field transforms)</small>
+          <input type="text" name="raw_query" placeholder="Advanced: raw API query override">
+        </label>
+        <fieldset>
+          <label><input type="checkbox" name="oa_only" role="switch"> Open Access only</label>
+          <label><input type="checkbox" name="pdf_only" role="switch"> PDF available only</label>
+        </fieldset>
+      </details>
+    </div>
+
+    <div id="dir-section" style="display:none;">
+      <label>
+        PDF directory path <small>(absolute path to a local folder containing PDF files)</small>
+        <input type="text" name="from_dir" placeholder="/home/you/papers">
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend><strong>Generate artifacts</strong> <small>(optional — queued after import)</small></legend>
+    <div class="source-grid">
+      <label><input type="checkbox" name="artifacts" value="podcast"> Audio Overview</label>
+      <label><input type="checkbox" name="artifacts" value="video"> Video Overview</label>
+      <label><input type="checkbox" name="artifacts" value="briefing"> Briefing Doc</label>
+      <label><input type="checkbox" name="artifacts" value="study_guide"> Study Guide</label>
+      <label><input type="checkbox" name="artifacts" value="quiz"> Quiz</label>
+      <label><input type="checkbox" name="artifacts" value="flashcards"> Flashcards</label>
+      <label><input type="checkbox" name="artifacts" value="infographic"> Infographic</label>
+      <label><input type="checkbox" name="artifacts" value="slide_deck"> Slide Deck</label>
+      <label><input type="checkbox" name="artifacts" value="data_table"> Data Table</label>
+      <label><input type="checkbox" name="artifacts" value="mind_map"> Mind Map</label>
+    </div>
+  </fieldset>
+
+  <button type="submit"
+          hx-post="{{ url_for('ui.notebook_submit') }}"
+          hx-target="#nb-results"
+          hx-include="#notebook-form"
+          hx-indicator="#nb-spinner">
+    Create Notebook
+  </button>
+</form>
+
+<span id="nb-spinner" class="htmx-indicator" aria-busy="true">Creating notebook&hellip;</span>
+
+<div id="nb-results"></div>
+{% endblock %}

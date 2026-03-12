@@ -40,6 +40,13 @@ _DEFAULTS: dict = {
     },
     "unpaywall": {"email": ""},
     "zotero": {"api_key": "", "user_id": 0},
+    "obsidian": {
+        "vault_path": "",
+        "subfolder": "papers",
+        "filename_pattern": "{year}_{author}_{title}",
+        "tags": ["paper"],
+        "wikilinks": True,
+    },
     "custom_sources": [],
 }
 
