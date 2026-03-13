@@ -4,6 +4,17 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.9] — 2026-03-13
+### Added
+- **sources**: Enhance PEDro source with full metadata and CLI controls
+
+
+### Fixed
+- **desktop**: Use Chrome/Edge app mode for native window instead of browser tab
+
+- **release**: Prevent dangling tag when push fails
+
+
 ## [1.3.8] — 2026-03-13
 ### Fixed
 - **desktop**: Replace pywebview with browser launch to fix Windows bundling
