@@ -4,6 +4,15 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.6] — 2026-03-13
+### Documentation
+- Add --output export section to usage guide and update web UI demo
+
+
+### Fixed
+- **build**: Use edgechromium backend to avoid pythonnet DLL failure on Windows
+
+
 ## [1.3.5] — 2026-03-13
 ### Fixed
 - **docs**: Escape mustache syntax in obsidian plugin compat table
