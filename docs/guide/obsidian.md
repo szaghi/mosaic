@@ -99,7 +99,7 @@ tags:
 |---|---|---|
 | **Obsidian Properties** (core) | ✅ | YAML frontmatter is standard Obsidian property format |
 | **Dataview** (community) | ✅ | Query by `year`, `doi`, `source`, `citation_count`, etc. |
-| **Templates** (core) | ✅ | Notes contain no `{{…}}` syntax — not processed as templates |
+| **Templates** (core) | ✅ | Notes contain no <span v-pre>`{{…}}`</span> syntax — not processed as templates |
 | **Templater** (community) | ✅ | Notes contain no `<%…%>` syntax — not processed as templates |
 
 ## Configuration reference
