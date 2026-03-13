@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.8] — 2026-03-13
+### Fixed
+- **desktop**: Replace pywebview with browser launch to fix Windows bundling
+
+
 ## [1.3.7] — 2026-03-13
 ### Fixed
 - **build**: Fix pythonnet coreclr runtime for Windows PyInstaller bundle
