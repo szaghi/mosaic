@@ -71,9 +71,9 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD)
 # working tree must be clean
 [[ -z "$(git status --porcelain)" ]] || die "working tree is not clean; commit or stash changes first"
 
-# tag must not already exist
+# tag must not already exist on remote
 git fetch --tags -q
-git tag | grep -qx "v${NEW}" && die "tag v${NEW} already exists"
+git ls-remote --tags origin "refs/tags/v${NEW}" | grep -q . && die "tag v${NEW} already exists on remote"
 
 # ── confirm ────────────────────────────────────────────────────────────────────
 
@@ -110,13 +110,15 @@ echo "--- committing version bump"
 git add pyproject.toml mosaic/__init__.py CHANGELOG.md docs/guide/changelog.md
 git commit -m "chore(release): bump version to ${NEW}"
 
+# ── push ───────────────────────────────────────────────────────────────────────
+
+echo "--- pushing commit to origin"
+git push origin main
+
 echo "--- creating annotated tag v${NEW}"
 git tag -a "v${NEW}" -m "Release v${NEW}"
 
-# ── push ───────────────────────────────────────────────────────────────────────
-
-echo "--- pushing commit and tag to origin"
-git push origin main
+echo "--- pushing tag to origin"
 git push origin "v${NEW}"
 
 echo ""
