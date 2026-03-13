@@ -34,7 +34,8 @@ class PubMedSource(BaseSource):
 
         Args:
             query: Free-text search query.
-            max_results: Maximum number of results (capped at 200).
+            max_results: Maximum number of results (capped at 10 000,
+                the NCBI E-utilities hard limit for esearch).
             filters: Optional filters; ``raw_query`` overrides the default
                 mapping when set.
 
@@ -57,20 +58,24 @@ class PubMedSource(BaseSource):
                     pm_query += f' AND "{author}"[au]'
             if filters.journal:
                 pm_query += f' AND "{filters.journal}"[ta]'
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
-            if y_from or y_to:
-                lo = y_from or y_to
-                hi = y_to   or y_from
-                pm_query += f' AND ("{lo}/01/01"[pdat] : "{hi}/12/31"[pdat])'
 
         # ── step 1: esearch → PMIDs ────────────────────────────────────
         params: dict = {
             "db": "pubmed",
             "term": pm_query,
-            "retmax": min(max_results, 200),
+            "retmax": min(max_results, 10_000),
             "retmode": "json",
         }
+
+        # Date filtering: use mindate/maxdate API params rather than
+        # embedding [pdat] in the query string — far more reliable.
+        if filters:
+            y_from = filters.year_from or (min(filters.years) if filters.years else None)
+            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            if y_from or y_to:
+                params["datetype"] = "pdat"
+                params["mindate"]  = str(y_from or y_to)
+                params["maxdate"]  = str(y_to   or y_from)
         if self._api_key:
             params["api_key"] = self._api_key
 
@@ -80,16 +85,16 @@ class PubMedSource(BaseSource):
         if not pmids:
             return []
 
-        # ── step 2: esummary → metadata ────────────────────────────────
-        sum_params: dict = {
+        # ── step 2: esummary → metadata (POST avoids URL-length limits) ──
+        sum_data: dict = {
             "db": "pubmed",
             "id": ",".join(pmids),
             "retmode": "json",
         }
         if self._api_key:
-            sum_params["api_key"] = self._api_key
+            sum_data["api_key"] = self._api_key
 
-        resp2 = httpx.get(_ESUMMARY, params=sum_params, timeout=30)
+        resp2 = httpx.post(_ESUMMARY, data=sum_data, timeout=60)
         resp2.raise_for_status()
         result = resp2.json().get("result", {})
 
@@ -111,13 +116,19 @@ class PubMedSource(BaseSource):
         # authors
         authors = [a.get("name", "") for a in (item.get("authors") or [])]
 
-        # year: pubdate can be "2021 Jan 15", "2021 Jan", "2021", "2021 Winter"
-        pubdate = str(item.get("pubdate") or "")
+        # year: prefer the earliest of pubdate and epubdate so that the year
+        # shown is consistent with PubMed's pdat filter (which uses epubdate
+        # for epub-ahead-of-print articles).
+        # Both fields can be "2021 Jan 15", "2021 Jan", "2021", "2021 Winter".
         year: int | None = None
-        if pubdate:
-            part = pubdate.split()[0]
-            if part.isdigit() and len(part) == 4:
-                year = int(part)
+        for field in ("epubdate", "pubdate"):
+            raw = str(item.get(field) or "")
+            if raw:
+                part = raw.split()[0]
+                if part.isdigit() and len(part) == 4:
+                    y = int(part)
+                    if year is None or y < year:
+                        year = y
 
         # extract DOI and PMC ID from articleids list
         doi: str | None = None

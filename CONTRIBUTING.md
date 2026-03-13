@@ -105,6 +105,33 @@ pytest                              # all tests should pass
 mosaic --version                    # should print the current version
 ```
 
+### Testing local changes when using a pipx install
+
+If you installed MOSAIC with pipx (`pipx install mosaic-search`) and want to
+keep that install as your daily driver while iterating on source changes, use
+the `make dev` target instead of editing files in the pipx venv by hand:
+
+```bash
+make dev
+```
+
+This reinstalls the package from the local source tree into the pipx venv
+(`~/.local/share/pipx/venvs/mosaic-search/`) with `pip install --no-deps`.
+The installed `mosaic` command on your `PATH` immediately reflects every
+change — no manual file copying needed.
+
+Run it after every edit session before testing with the CLI:
+
+```bash
+# edit source files …
+make dev
+mosaic search "…" --source pubmed
+```
+
+`pipx upgrade mosaic-search` continues to work normally and will overwrite the
+local build with the latest PyPI release whenever you want to go back to a
+stable version.
+
 ---
 
 ## Project structure
@@ -418,32 +445,25 @@ merges to `main` and version tags respectively.
 
 ## Release process
 
-Releases are managed by the maintainer. The process is:
+Releases are managed by the maintainer using `release.sh`:
 
-1. Determine the next version following [Semantic Versioning](https://semver.org/):
-   - `PATCH` — bug fixes only
-   - `MINOR` — new features, backwards-compatible
-   - `MAJOR` — breaking changes
+```bash
+./release.sh patch   # 1.2.3 → 1.2.4
+./release.sh minor   # 1.2.3 → 1.3.0
+./release.sh major   # 1.2.3 → 2.0.0
+./release.sh 2.5.0   # exact version
+```
 
-2. Update `version` in `pyproject.toml`.
+The script validates the working tree is clean, bumps the version in
+`pyproject.toml` and `mosaic/__init__.py`, regenerates `CHANGELOG.md` via
+`git-cliff`, commits, pushes the commit, then tags and pushes the tag.
+The CI pipeline picks up the tag, builds the distribution, and publishes
+to PyPI automatically via OIDC Trusted Publisher (no API token needed).
 
-3. Regenerate the changelog:
-   ```bash
-   git cliff -o CHANGELOG.md
-   { printf -- "---\ntitle: Changelog\n---\n\n"; awk '/^## \[/{found=1} found' CHANGELOG.md; } \
-     > docs/guide/changelog.md
-   ```
-
-4. Commit with `chore(release): bump version to X.Y.Z`.
-
-5. Tag the commit:
-   ```bash
-   git tag vX.Y.Z
-   git push origin main --tags
-   ```
-
-6. The CI pipeline picks up the tag, builds the distribution, and publishes
-   to PyPI automatically via OIDC Trusted Publisher (no API token needed).
+Semantic Versioning rules:
+- `patch` — bug fixes only
+- `minor` — new features, backwards-compatible
+- `major` — breaking changes
 
 ---
 

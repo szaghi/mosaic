@@ -34,7 +34,8 @@ class PMCSource(BaseSource):
 
         Args:
             query: Free-text search query.
-            max_results: Maximum number of results (capped at 200).
+            max_results: Maximum number of results (capped at 10 000,
+                the NCBI E-utilities hard limit for esearch).
             filters: Optional filters; ``raw_query`` overrides the default
                 mapping when set.
 
@@ -58,20 +59,24 @@ class PMCSource(BaseSource):
                     pmc_query += f' AND "{author}"[au]'
             if filters.journal:
                 pmc_query += f' AND "{filters.journal}"[ta]'
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
-            if y_from or y_to:
-                lo = y_from or y_to
-                hi = y_to   or y_from
-                pmc_query += f' AND ("{lo}/01/01"[pdat] : "{hi}/12/31"[pdat])'
 
         # ── step 1: esearch (db=pmc) → numeric PMC IDs ─────────────────
         params: dict = {
             "db": "pmc",
             "term": pmc_query,
-            "retmax": min(max_results, 200),
+            "retmax": min(max_results, 10_000),
             "retmode": "json",
         }
+
+        # Date filtering: use mindate/maxdate API params rather than
+        # embedding [pdat] in the query string — far more reliable.
+        if filters:
+            y_from = filters.year_from or (min(filters.years) if filters.years else None)
+            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            if y_from or y_to:
+                params["datetype"] = "pdat"
+                params["mindate"]  = str(y_from or y_to)
+                params["maxdate"]  = str(y_to   or y_from)
         if self._api_key:
             params["api_key"] = self._api_key
 
@@ -81,16 +86,16 @@ class PMCSource(BaseSource):
         if not pmc_ids:
             return []
 
-        # ── step 2: esummary (db=pmc) → metadata ───────────────────────
-        sum_params: dict = {
+        # ── step 2: esummary (db=pmc) → metadata (POST avoids URL-length limits)
+        sum_data: dict = {
             "db": "pmc",
             "id": ",".join(pmc_ids),
             "retmode": "json",
         }
         if self._api_key:
-            sum_params["api_key"] = self._api_key
+            sum_data["api_key"] = self._api_key
 
-        resp2 = httpx.get(_ESUMMARY, params=sum_params, timeout=30)
+        resp2 = httpx.post(_ESUMMARY, data=sum_data, timeout=60)
         resp2.raise_for_status()
         result = resp2.json().get("result", {})
 
@@ -111,12 +116,16 @@ class PMCSource(BaseSource):
         """
         authors = [a.get("name", "") for a in (item.get("authors") or [])]
 
-        pubdate = str(item.get("pubdate") or "")
+        # year: prefer the earliest of pubdate and epubdate (see PubMedSource).
         year: int | None = None
-        if pubdate:
-            part = pubdate.split()[0]
-            if part.isdigit() and len(part) == 4:
-                year = int(part)
+        for field in ("epubdate", "pubdate"):
+            raw = str(item.get(field) or "")
+            if raw:
+                part = raw.split()[0]
+                if part.isdigit() and len(part) == 4:
+                    y = int(part)
+                    if year is None or y < year:
+                        year = y
 
         # extract DOI from articleids list
         doi: str | None = None
