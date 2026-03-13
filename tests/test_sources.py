@@ -1,4 +1,5 @@
 """Tests for each search source: query building and response parsing."""
+import contextlib
 from unittest.mock import patch, MagicMock
 from mosaic.models import SearchFilters
 
@@ -1323,19 +1324,19 @@ class TestPubMedSource:
         from mosaic.sources.pubmed import PubMedSource
         return PubMedSource(api_key=api_key)
 
+    @contextlib.contextmanager
     def _mock_two_step(self, esearch=_PUBMED_ESEARCH, esummary=_PUBMED_ESUMMARY):
-        """Return a side_effect list for the two httpx.get calls."""
-        return [
-            _mock_get(json_data=esearch),
-            _mock_get(json_data=esummary),
-        ]
+        """Context manager patching httpx.get (esearch) and httpx.post (esummary)."""
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)), \
+             patch("httpx.post", return_value=_mock_get(json_data=esummary)):
+            yield
 
     def test_always_available(self):
         assert self._source().available()
         assert self._source(api_key="key").available()
 
     def test_parses_paper_fields(self):
-        with patch("httpx.get", side_effect=self._mock_two_step()):
+        with self._mock_two_step():
             papers = self._source().search("CRISPR")
         assert len(papers) == 2
         p = papers[0]
@@ -1350,7 +1351,7 @@ class TestPubMedSource:
         assert p.source == "PubMed"
 
     def test_pmc_article_is_open_access_with_pdf_url(self):
-        with patch("httpx.get", side_effect=self._mock_two_step()):
+        with self._mock_two_step():
             papers = self._source().search("CRISPR")
         p = papers[0]  # has PMC ID
         assert p.is_open_access is True
@@ -1358,14 +1359,14 @@ class TestPubMedSource:
         assert "PMC11111111" in p.pdf_url
 
     def test_no_pmc_article_not_open_access(self):
-        with patch("httpx.get", side_effect=self._mock_two_step()):
+        with self._mock_two_step():
             papers = self._source().search("CRISPR")
         p = papers[1]  # no PMC ID
         assert p.is_open_access is False
         assert p.pdf_url is None
 
     def test_url_points_to_pubmed(self):
-        with patch("httpx.get", side_effect=self._mock_two_step()):
+        with self._mock_two_step():
             papers = self._source().search("CRISPR")
         assert "38123456" in papers[0].url
 
@@ -1380,10 +1381,10 @@ class TestPubMedSource:
         esearch = {"esearchresult": {"idlist": []}}
         with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
             self._source().search("CRISPR", filters=f)
-        term = mock.call_args.kwargs["params"]["term"]
-        assert "pdat" in term
-        assert "2020" in term
-        assert "2024" in term
+        params = mock.call_args.kwargs["params"]
+        assert params["datetype"] == "pdat"
+        assert params["mindate"] == "2020"
+        assert params["maxdate"] == "2024"
 
     def test_author_filter_appended_to_query(self):
         f = SearchFilters(authors=["Doudna"])
@@ -1433,11 +1434,11 @@ class TestPubMedSource:
         params = mock.call_args.kwargs["params"]
         assert params.get("api_key") == "mykey"
 
-    def test_max_results_capped_at_200(self):
+    def test_max_results_capped_at_10000(self):
         esearch = {"esearchresult": {"idlist": []}}
         with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
-            self._source().search("q", max_results=500)
-        assert mock.call_args.kwargs["params"]["retmax"] == 200
+            self._source().search("q", max_results=99999)
+        assert mock.call_args.kwargs["params"]["retmax"] == 10_000
 
 # ── PubMed Central (PMC) ──────────────────────────────────────────────────────
 
@@ -1490,18 +1491,19 @@ class TestPMCSource:
         from mosaic.sources.pmc import PMCSource
         return PMCSource(api_key=api_key)
 
+    @contextlib.contextmanager
     def _mock_two_step(self, esearch=_PMC_ESEARCH, esummary=_PMC_ESUMMARY):
-        return [
-            _mock_get(json_data=esearch),
-            _mock_get(json_data=esummary),
-        ]
+        """Context manager patching httpx.get (esearch) and httpx.post (esummary)."""
+        with patch("httpx.get", return_value=_mock_get(json_data=esearch)), \
+             patch("httpx.post", return_value=_mock_get(json_data=esummary)):
+            yield
 
     def test_always_available(self):
         assert self._source().available()
         assert self._source(api_key="key").available()
 
     def test_parses_paper_fields(self):
-        with patch("httpx.get", side_effect=self._mock_two_step()):
+        with self._mock_two_step():
             papers = self._source().search("single-cell")
         assert len(papers) == 2
         p = papers[0]
@@ -1516,18 +1518,18 @@ class TestPMCSource:
         assert p.source == "PubMed Central"
 
     def test_all_results_are_open_access(self):
-        with patch("httpx.get", side_effect=self._mock_two_step()):
+        with self._mock_two_step():
             papers = self._source().search("single-cell")
         assert all(p.is_open_access for p in papers)
 
     def test_pdf_url_built_from_uid(self):
-        with patch("httpx.get", side_effect=self._mock_two_step()):
+        with self._mock_two_step():
             papers = self._source().search("single-cell")
         assert papers[0].pdf_url == "https://pmc.ncbi.nlm.nih.gov/articles/PMC11111111/pdf/"
         assert papers[1].pdf_url == "https://pmc.ncbi.nlm.nih.gov/articles/PMC22222222/pdf/"
 
     def test_url_points_to_pmc_article(self):
-        with patch("httpx.get", side_effect=self._mock_two_step()):
+        with self._mock_two_step():
             papers = self._source().search("single-cell")
         assert "PMC11111111" in papers[0].url
 
@@ -1538,15 +1540,14 @@ class TestPMCSource:
         assert mock.call_args.kwargs["params"]["db"] == "pmc"
 
     def test_uses_db_pmc_in_esummary(self):
-        calls = []
-        def fake_get(url, **kwargs):
-            calls.append(kwargs.get("params", {}))
-            if len(calls) == 1:
-                return _mock_get(json_data=_PMC_ESEARCH)
+        post_data = []
+        def fake_post(url, data=None, **kwargs):
+            post_data.append(data or {})
             return _mock_get(json_data=_PMC_ESUMMARY)
-        with patch("httpx.get", side_effect=fake_get):
+        with patch("httpx.get", return_value=_mock_get(json_data=_PMC_ESEARCH)), \
+             patch("httpx.post", side_effect=fake_post):
             self._source().search("single-cell")
-        assert calls[1]["db"] == "pmc"
+        assert post_data[0]["db"] == "pmc"
 
     def test_empty_idlist_returns_empty(self):
         esearch = {"esearchresult": {"idlist": []}}
@@ -1559,8 +1560,10 @@ class TestPMCSource:
         esearch = {"esearchresult": {"idlist": []}}
         with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
             self._source().search("RNA", filters=f)
-        term = mock.call_args.kwargs["params"]["term"]
-        assert "pdat" in term and "2021" in term and "2023" in term
+        params = mock.call_args.kwargs["params"]
+        assert params["datetype"] == "pdat"
+        assert params["mindate"] == "2021"
+        assert params["maxdate"] == "2023"
 
     def test_author_filter_appended_to_query(self):
         f = SearchFilters(authors=["Smith"])
@@ -1604,11 +1607,11 @@ class TestPMCSource:
             src.search("RNA")
         assert mock.call_args.kwargs["params"].get("api_key") == "mykey"
 
-    def test_max_results_capped_at_200(self):
+    def test_max_results_capped_at_10000(self):
         esearch = {"esearchresult": {"idlist": []}}
         with patch("httpx.get", return_value=_mock_get(json_data=esearch)) as mock:
-            self._source().search("q", max_results=999)
-        assert mock.call_args.kwargs["params"]["retmax"] == 200
+            self._source().search("q", max_results=99999)
+        assert mock.call_args.kwargs["params"]["retmax"] == 10_000
 
 
 # ── Scopus API ─────────────────────────────────────────────────────────────────
