@@ -1,24 +1,24 @@
 """Entry point for the standalone MOSAIC app (PyInstaller)."""
 from __future__ import annotations
-import os
-import sys
+import threading
+import time
+import webbrowser
 
-# Must be set before pythonnet/clr is imported (triggered by pywebview on Windows).
-# pythonnet 3.x ships a CoreCLR build of Python.Runtime.dll; the netfx loader
-# fails in PyInstaller bundles with "Failed to resolve Python.Runtime.Loader.Initialize".
-# coreclr requires .NET 6+ Runtime to be installed on the target machine.
-if sys.platform == "win32":
-    os.environ.setdefault("PYTHONNET_RUNTIME", "coreclr")
+_PORT = 5555
 
 
 def main() -> None:
-    import webview
+    from waitress import serve
     from mosaic.ui import create_app
 
     app = create_app()
-    webview.create_window("MOSAIC", app, width=1200, height=800)
-    gui = "edgechromium" if sys.platform == "win32" else None
-    webview.start(gui=gui)
+
+    def _open_browser() -> None:
+        time.sleep(0.8)
+        webbrowser.open(f"http://127.0.0.1:{_PORT}")
+
+    threading.Thread(target=_open_browser, daemon=True).start()
+    serve(app, host="127.0.0.1", port=_PORT, threads=4)
 
 
 if __name__ == "__main__":

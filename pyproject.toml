@@ -38,7 +38,7 @@ dev = ["pytest>=8", "pytest-cov>=5", "build>=1.2", "pyinstaller>=6.0"]
 notebooklm = ["notebooklm-py[browser]>=0.10"]
 browser = ["playwright>=1.40"]
 ui = ["flask>=3.0", "waitress>=3.0"]
-desktop = ["flask>=3.0", "pywebview>=5.0"]
+desktop = ["flask>=3.0", "waitress>=3.0"]
 
 [project.urls]
 Homepage      = "https://szaghi.github.io/mosaic/"

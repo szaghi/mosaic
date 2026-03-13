@@ -99,6 +99,34 @@ Changes are saved to `~/.config/mosaic/config.toml`, the same file used by the C
 
 Click the **&#9681;** icon in the navigation bar to cycle between auto, light, and dark mode. The setting is persisted in your browser's local storage.
 
+## Standalone Desktop App (Windows / macOS / Linux)
+
+Pre-built standalone executables are attached to each [GitHub release](https://github.com/szaghi/mosaic/releases) — no Python installation required.
+
+| Platform | Download | Notes |
+|----------|----------|-------|
+| Windows | `MOSAIC-Windows.zip` | No extra runtime required |
+| macOS (Apple Silicon) | `MOSAIC-macOS-arm64.zip` | macOS 12+ |
+| Linux | `MOSAIC-Linux.tar.gz` | x86-64, glibc 2.31+ |
+
+The app starts a local server and opens your **default browser** automatically. No installation, no extra runtimes needed.
+
+### Extract and run
+
+```bash
+# Windows (PowerShell)
+Expand-Archive MOSAIC-Windows.zip .
+.\MOSAIC\MOSAIC.exe
+
+# macOS
+unzip MOSAIC-macOS-arm64.zip
+open MOSAIC.app   # or double-click in Finder
+
+# Linux
+tar xzf MOSAIC-Linux.tar.gz
+./MOSAIC/MOSAIC
+```
+
 ## Architecture Notes
 
 - **Server**: [Waitress](https://docs.pylonsproject.org/projects/waitress/) (pure-Python, multi-threaded WSGI server). `--debug` mode falls back to Flask's built-in dev server for hot-reload.
