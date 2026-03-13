@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.5] — 2026-03-13
+### Fixed
+- **docs**: Escape mustache syntax in obsidian plugin compat table
+
+
 ## [1.3.4] — 2026-03-12
 ### Added
 - Add Obsidian vault integration and complete web UI parity

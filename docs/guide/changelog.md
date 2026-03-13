@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.3.5] — 2026-03-13
+### Fixed
+- **docs**: Escape mustache syntax in obsidian plugin compat table
+
+
 ## [1.3.4] — 2026-03-12
 ### Added
 - Add Obsidian vault integration and complete web UI parity
