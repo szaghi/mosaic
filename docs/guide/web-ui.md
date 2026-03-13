@@ -6,7 +6,7 @@ title: Web UI
 
 MOSAIC includes an optional graphical web interface built with Flask, HTMX, and Pico CSS. It mirrors all the features of the CLI in a browser-based interface.
 
-<video src="/mosaic-1.3.0-web_ui.mp4" controls style="width:100%;border-radius:8px;margin:1rem 0"></video>
+<video src="/mosaic-1.3.5-web_ui.mp4" controls style="width:100%;border-radius:8px;margin:1rem 0"></video>
 
 ## Installation
 

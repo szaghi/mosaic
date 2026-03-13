@@ -201,6 +201,90 @@ mosaic search "protein folding" --oa-only --sort citations -n 20
 
 When `--sort citations` is active, the results table gains a **Cited** column showing the citation count for each paper. Papers from sources that do not return citation data (arXiv, DOAJ, …) show `–` and are placed after all papers with known counts.
 
+## Save results to a file
+
+Use `--output` / `-o` to write results to disk in any of five formats.  The
+format is inferred from the file extension:
+
+```bash
+mosaic search "transformer attention" --output results.csv
+mosaic search "diffusion models" -y 2022-2024 --oa-only --output refs.bib
+mosaic search "CRISPR" --output papers.json
+mosaic search "protein folding" --output summary.md
+mosaic search "RNA velocity" --output report.markdown
+```
+
+### Supported formats
+
+| Extension | Format | Best for |
+|-----------|--------|----------|
+| `.csv` | CSV table | Excel, Google Sheets, data analysis |
+| `.json` | JSON array | Scripting, pipelines, custom tooling |
+| `.bib` | BibTeX | LaTeX, Zotero, JabRef, Mendeley |
+| `.md` | Markdown table | Quick README or wiki table |
+| `.markdown` | Markdown sections | Detailed per-paper notes, static-site generators |
+
+### Format details
+
+**`.csv`** — 14 columns: `title`, `authors` (semicolon-separated), `year`, `doi`,
+`arxiv_id`, `journal`, `volume`, `issue`, `pages`, `source`, `is_open_access`,
+`citation_count`, `pdf_url`, `url`.
+
+**`.json`** — JSON array of objects; `authors` is a native JSON array; `null` for
+missing fields; pretty-printed with 2-space indentation.
+
+**`.bib`** — `@article` for papers with a journal, `@misc` for preprints.
+Auto-generated cite key: `LastName + Year + FirstTitleWord`
+(e.g. `Vaswani2017Attention`). ArXiv papers get `eprint` and `eprinttype=arXiv`
+fields. Open-access papers get `note={Open Access}`.
+
+**`.md`** — a single compact Markdown table (columns: #, Title, Authors, Year,
+DOI, Source, OA, PDF).
+
+**`.markdown`** — one `## Title` section per paper, each containing a key/value
+table of all available fields (abstract included); empty fields are omitted.
+
+### Export multiple formats in one command
+
+`--output` is **repeatable** — pass it more than once to write several files
+simultaneously without re-running the search:
+
+```bash
+# Write BibTeX, CSV, and a Markdown summary in one go
+mosaic search "large language models" -n 30 --oa-only \
+  --output refs.bib \
+  --output results.csv \
+  --output summary.md
+```
+
+### Combine with other flags
+
+```bash
+# Open-access papers from 2020–2024, sorted by citations, saved as BibTeX
+mosaic search "diffusion models" -y 2020-2024 --oa-only --sort citations \
+  --output diffusion.bib
+
+# Single-source search saved as JSON for scripting
+mosaic search "RNA splicing" --source epmc -n 50 --output splicing.json
+
+# Author filter + journal filter, saved as detailed Markdown notes
+mosaic search "graph neural" -a Kipf -j "ICLR" --output gnns.markdown
+```
+
+### Works with `mosaic similar` too
+
+`--output` is available on the `similar` command with the same formats:
+
+```bash
+# Find related papers and export to BibTeX for LaTeX
+mosaic similar 10.48550/arXiv.1706.03762 --output related.bib
+
+# Export to multiple formats at once
+mosaic similar arxiv:1706.03762 -n 30 --sort citations \
+  --output related.bib \
+  --output related.json
+```
+
 ## Export to Zotero
 
 Push results directly into your Zotero library — no copy-paste required.

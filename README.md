@@ -60,7 +60,7 @@ mosaic notebook create "Transformers" --query "transformer architecture" --oa-on
 ## Web UI
 
 <div align="center">
-<video src="https://szaghi.github.io/mosaic/mosaic-1.3.0-web_ui.mp4" controls width="100%"></video>
+<video src="https://szaghi.github.io/mosaic/mosaic-1.3.5-web_ui.mp4" controls width="100%"></video>
 </div>
 
 Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://szaghi.github.io/mosaic/guide/web-ui)).
