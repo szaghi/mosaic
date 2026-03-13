@@ -74,11 +74,14 @@ def build_sources(cfg: dict) -> list:
     if src_cfg.get("biorxiv", {}).get("enabled", True):
         sources.append(BioRxivSource())
     pedro_cfg = src_cfg.get("pedro", {})
-    if pedro_cfg.get("enabled", True) and pedro_cfg.get("acknowledge_fair_use", False):
-        sources.append(PEDroSource(
-            acknowledge_fair_use=True,
+    if pedro_cfg.get("enabled", True):
+        pedro_src = PEDroSource(
+            acknowledge_fair_use=pedro_cfg.get("acknowledge_fair_use", False),
             rate_limit_delay=pedro_cfg.get("rate_limit_delay", 3.0),
-        ))
+            fetch_details=pedro_cfg.get("fetch_details", False),
+        )
+        if pedro_src.available():
+            sources.append(pedro_src)
     if src_cfg.get("springer", {}).get("enabled", True):
         springer_src = SpringerBrowserSource()
         if springer_src.available():

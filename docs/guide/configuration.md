@@ -155,6 +155,9 @@ enabled = true
 # Disabled until you explicitly acknowledge PEDro's Fair Use policy.
 # Set acknowledge_fair_use = true to enable.
 acknowledge_fair_use = false
+# Fetch each record's detail page to populate authors, year, DOI, and abstract.
+# Issues one extra HTTP request per result — slower but richer metadata.
+fetch_details = false
 # Seconds between HTTP requests. 3.0 s is the safe-fair default.
 # Lower only if your usage stays within PEDro's acceptable-use terms.
 rate_limit_delay = 3.0
@@ -393,13 +396,28 @@ To enable it, edit the config file directly:
 enabled = true
 acknowledge_fair_use = true   # required — confirms you will use small, targeted queries only
 
+# Fetch each record's detail page to populate authors, year, DOI, and abstract.
+# Issues one extra HTTP request per result; with the default 3 s delay a 25-result
+# page will take ~75 s of additional wait time.
+fetch_details = false
+
 # Optional: adjust the delay between HTTP requests (default: 3.0 s)
 # Lower this only if you have verified your usage stays within PEDro's fair-use terms.
 rate_limit_delay = 3.0
+```
+
+Or via the CLI (persists to config):
+
+```bash
+mosaic config --pedro-fair-use
+mosaic config --pedro-fetch-details
 ```
 
 Once enabled, PEDro appears in all multi-source searches and can also be targeted directly:
 
 ```bash
 mosaic search "chronic low back pain" --source pedro --field title
+
+# With full metadata (authors, year, DOI, abstract):
+mosaic search "chronic low back pain" --source pedro --pedro-fetch-details
 ```

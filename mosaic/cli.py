@@ -65,11 +65,14 @@ def search(
     zotero_local: Annotated[bool, typer.Option("--zotero-local", help="Force Zotero local API even when an API key is configured")] = False,
     obsidian: Annotated[bool, typer.Option("--obsidian", help="Export results as notes to an Obsidian vault")] = False,
     obsidian_folder: Annotated[str, typer.Option("--obsidian-folder", help="Override Obsidian vault subfolder for this run")] = "",
+    pedro_fetch_details: Annotated[bool, typer.Option("--pedro-fetch-details", help="Fetch each PEDro record page to get authors, year, DOI and abstract (overrides config for this run)")] = False,
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
     if download_dir:
         cfg["download_dir"] = download_dir
+    if pedro_fetch_details:
+        cfg["sources"]["pedro"]["fetch_details"] = True
     cache = Cache(cfg["db_path"])
     sources = build_sources(cfg)
 
@@ -314,6 +317,8 @@ def config(
     unpaywall_email: Annotated[str, typer.Option(help="Set Unpaywall email")] = "",
     download_dir: Annotated[str, typer.Option(help="Set download directory")] = "",
     filename_pattern: Annotated[str, typer.Option(help="Set PDF filename pattern (placeholders: {year}, {source}, {author}, {title}, {doi})")] = "",
+    pedro_fair_use: Annotated[bool, typer.Option("--pedro-fair-use/--no-pedro-fair-use", help="Acknowledge PEDro fair-use policy to enable the source")] = None,
+    pedro_fetch_details: Annotated[bool, typer.Option("--pedro-fetch-details/--no-pedro-fetch-details", help="Fetch each PEDro record page to get authors, year, DOI and abstract (slower)")] = None,
 ):
     """View or update MOSAIC configuration."""
     cfg = cfg_mod.load()
@@ -342,12 +347,25 @@ def config(
         cfg["download_dir"] = download_dir
     if filename_pattern:
         cfg["filename_pattern"] = filename_pattern
+    if pedro_fair_use is not None:
+        cfg["sources"]["pedro"]["acknowledge_fair_use"] = pedro_fair_use
+        if pedro_fair_use:
+            rprint("[green]PEDro fair-use policy acknowledged. Source is now enabled.[/green]")
+        else:
+            rprint("[yellow]PEDro fair-use acknowledgement removed. Source is now disabled.[/yellow]")
+    if pedro_fetch_details is not None:
+        cfg["sources"]["pedro"]["fetch_details"] = pedro_fetch_details
+        if pedro_fetch_details:
+            rprint("[green]PEDro detail fetching enabled (authors, year, DOI, abstract).[/green]")
+        else:
+            rprint("[yellow]PEDro detail fetching disabled.[/yellow]")
 
-    if any([elsevier_key, ss_key, ncbi_key, zotero_key, unpaywall_email, download_dir, filename_pattern]):
+    _pedro_changed = pedro_fair_use is not None or pedro_fetch_details is not None
+    if any([elsevier_key, ss_key, ncbi_key, zotero_key, unpaywall_email, download_dir, filename_pattern, _pedro_changed]):
         cfg_mod.save(cfg)
         rprint(f"[green]Config saved to[/green] ~/.config/mosaic/config.toml")
 
-    if show or not any([elsevier_key, ss_key, ncbi_key, zotero_key, unpaywall_email, download_dir, filename_pattern]):
+    if show or not any([elsevier_key, ss_key, ncbi_key, zotero_key, unpaywall_email, download_dir, filename_pattern, _pedro_changed]):
         import tomli_w
         console.print_json(data=cfg)
 

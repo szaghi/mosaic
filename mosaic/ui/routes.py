@@ -432,6 +432,12 @@ def config_save():
     fn_pattern = request.form.get("filename_pattern", "").strip()
     if fn_pattern:
         cfg["filename_pattern"] = fn_pattern
+    rate_limit = request.form.get("rate_limit_delay", "").strip()
+    if rate_limit:
+        try:
+            cfg["rate_limit_delay"] = float(rate_limit)
+        except ValueError:
+            pass
 
     # API keys
     for key_name, cfg_path in [
@@ -444,6 +450,7 @@ def config_save():
         ("springer_key", ("sources", "springer_api", "api_key")),
         ("scopus_key", ("sources", "scopus", "api_key")),
         ("scopus_inst_token", ("sources", "scopus", "inst_token")),
+        ("zenodo_key", ("sources", "zenodo", "api_key")),
     ]:
         val = request.form.get(key_name, "").strip()
         if val:
@@ -487,14 +494,15 @@ def config_save():
         for cfg_key in cfg_key_map.values():
             src_cfg.setdefault(cfg_key, {})["enabled"] = cfg_key in enabled_sources
 
-    # PEDro fair-use acknowledgement (separate from the enabled toggle)
-    pedro_fair_use = request.form.get("pedro_acknowledge_fair_use") == "on"
+    # PEDro settings (separate from the enabled toggle)
     if request.form.get("_pedro_section"):
-        cfg.setdefault("sources", {}).setdefault("pedro", {})["acknowledge_fair_use"] = pedro_fair_use
+        pedro_cfg = cfg.setdefault("sources", {}).setdefault("pedro", {})
+        pedro_cfg["acknowledge_fair_use"] = request.form.get("pedro_acknowledge_fair_use") == "on"
+        pedro_cfg["fetch_details"] = request.form.get("pedro_fetch_details") == "on"
         pedro_delay = request.form.get("pedro_rate_limit_delay", "").strip()
         if pedro_delay:
             try:
-                cfg["sources"]["pedro"]["rate_limit_delay"] = float(pedro_delay)
+                pedro_cfg["rate_limit_delay"] = float(pedro_delay)
             except ValueError:
                 pass
 

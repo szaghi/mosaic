@@ -10,13 +10,20 @@
 
   <fieldset>
     <legend><strong>General</strong></legend>
+    <div class="grid">
+      <label>
+        Download directory
+        <input type="text" name="download_dir" value="{{ cfg.get('download_dir', '') }}" placeholder="~/mosaic-papers">
+      </label>
+      <label>
+        Filename pattern
+        <input type="text" name="filename_pattern" value="{{ cfg.get('filename_pattern', '{year}_{source}_{author}_{title}') }}" placeholder="{year}_{source}_{author}_{title}">
+      </label>
+    </div>
     <label>
-      Download directory
-      <input type="text" name="download_dir" value="{{ cfg.get('download_dir', '') }}" placeholder="~/mosaic-papers">
-    </label>
-    <label>
-      Filename pattern
-      <input type="text" name="filename_pattern" value="{{ cfg.get('filename_pattern', '{year}_{source}_{author}_{title}') }}" placeholder="{year}_{source}_{author}_{title}">
+      Global rate-limit delay <small>(seconds between requests across all sources; per-source overrides take precedence)</small>
+      <input type="number" name="rate_limit_delay" step="0.5" min="0"
+             value="{{ cfg.get('rate_limit_delay', 1.0) }}" placeholder="1.0">
     </label>
   </fieldset>
 
@@ -72,6 +79,13 @@
         <input type="password" name="scopus_inst_token" value="{{ cfg.get('sources', {}).get('scopus', {}).get('inst_token', '') }}" placeholder="Institution token">
       </label>
     </div>
+    <div class="grid">
+      <label>
+        Zenodo <small>(optional — raises anonymous rate limits)</small>
+        <input type="password" name="zenodo_key" value="{{ cfg.get('sources', {}).get('zenodo', {}).get('api_key', '') }}" placeholder="Personal access token">
+      </label>
+      <label></label>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -120,7 +134,7 @@
   </fieldset>
 
   <fieldset>
-    <legend><strong>PEDro Fair Use Policy</strong></legend>
+    <legend><strong>PEDro</strong></legend>
     <input type="hidden" name="_pedro_section" value="1">
     <p>
       <small>PEDro's <a href="https://pedro.org.au/fair-use/" target="_blank">Fair Use policy</a>
@@ -132,6 +146,12 @@
       <input type="checkbox" name="pedro_acknowledge_fair_use"
              {% if pedro_cfg.get('acknowledge_fair_use', false) %}checked{% endif %}>
       I acknowledge PEDro's Fair Use policy and will only perform small, targeted queries
+    </label>
+    <label>
+      <input type="checkbox" name="pedro_fetch_details"
+             {% if pedro_cfg.get('fetch_details', false) %}checked{% endif %}>
+      Fetch each record's detail page to populate authors, year, DOI and abstract
+      <small>(issues one extra request per result — slower but richer metadata)</small>
     </label>
     <label>
       Rate limit delay (seconds between requests)

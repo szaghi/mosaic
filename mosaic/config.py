@@ -35,6 +35,7 @@ _DEFAULTS: dict = {
             "enabled": True,
             "acknowledge_fair_use": False,
             "rate_limit_delay": 3.0,
+            "fetch_details": False,
         },
         "scopus": {"enabled": True, "api_key": "", "inst_token": ""},
     },

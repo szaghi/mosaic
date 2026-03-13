@@ -507,9 +507,25 @@ acknowledge_fair_use = true
 A rate-limiting delay (default 3 s) is enforced between every HTTP request.
 :::
 
-**What metadata is returned:** title, study type / method (as `journal`), PEDro scale score (as a brief `abstract` note), and the record URL.  Authors, year, and DOI are not present in the search-result list and would require per-record requests; they are not fetched automatically in order to stay within fair-use limits.
+**What metadata is returned:** title, study type / method (as `journal`), PEDro scale score (as a brief `abstract` note), and the record URL.  Authors, year, DOI, and abstract are not present in the search-result listing and require fetching each record's detail page individually (see below).
 
 **Search fields:** general keyword search uses `abstract_with_title`; `--field title` switches to a title-only search.  Year filters map to `year_of_publication`.
+
+**Fetching full metadata (authors, year, DOI, abstract):** enable `fetch_details` to issue one extra HTTP request per result and populate the missing fields:
+
+```toml
+[sources.pedro]
+acknowledge_fair_use = true
+fetch_details = true   # one extra request per result — slower but complete metadata
+```
+
+Or as a one-off override for a single run (does not persist to config):
+
+```bash
+mosaic search "chronic low back pain" --source pedro --pedro-fetch-details
+```
+
+With `fetch_details` enabled, a 25-result page issues ~25 additional requests; at the default 3 s rate-limit delay this adds roughly 75 s of wait time.
 
 **Customising the rate limit:** lower the delay only if you have confirmed your usage remains within PEDro's acceptable-use terms:
 
@@ -519,9 +535,11 @@ acknowledge_fair_use = true
 rate_limit_delay = 5.0   # seconds between HTTP requests (default: 3.0)
 ```
 
-::: tip CLI shorthand
+::: tip CLI shorthands
 ```bash
 mosaic search "chronic low back pain" --source pedro --field title
+mosaic config --pedro-fair-use          # acknowledge fair-use policy
+mosaic config --pedro-fetch-details     # enable full metadata (persists)
 ```
 :::
 

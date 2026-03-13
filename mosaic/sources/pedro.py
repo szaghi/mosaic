@@ -38,11 +38,11 @@ class PEDroSource(BaseSource):
     conservative safe-fair value.  You may lower it, but only if you have
     confirmed that your usage remains within PEDro's acceptable-use terms.
 
-    Because the search-result list does not include authors or year, those
-    fields are populated only from the ``abstract_with_title`` / ``title``
-    search and will be ``None`` / ``[]`` unless individual record pages are
-    fetched (which would multiply the request count).  Title, method type,
-    PEDro score, and record URL are always available.
+    The search-result listing does not include authors, year, DOI, or abstract.
+    Set ``sources.pedro.fetch_details = true`` (or pass ``--pedro-fetch-details``
+    to ``mosaic config``) to fetch each record's detail page and populate those
+    fields.  This issues one extra HTTP request per result, so with the default
+    3 s delay a 25-result page will take roughly 75 s of additional wait time.
 
     CLI shorthand: ``pedro``
     """
@@ -54,9 +54,11 @@ class PEDroSource(BaseSource):
         *,
         acknowledge_fair_use: bool = False,
         rate_limit_delay: float = _DEFAULT_DELAY,
+        fetch_details: bool = False,
     ) -> None:
         self._enabled = acknowledge_fair_use
         self._delay = rate_limit_delay
+        self._fetch_details = fetch_details
 
     def available(self) -> bool:
         """Return True only when the user has explicitly acknowledged the fair-use policy."""
@@ -142,7 +144,18 @@ class PEDroSource(BaseSource):
                     break
                 page += 1
 
-        papers = papers[:max_results]
+            papers = papers[:max_results]
+
+            if self._fetch_details:
+                for i, paper in enumerate(papers):
+                    if paper.url:
+                        time.sleep(self._delay)
+                        try:
+                            detail_resp = client.get(paper.url)
+                            detail_resp.raise_for_status()
+                            papers[i] = self._enrich_from_detail(paper, detail_resp.text)
+                        except Exception:
+                            pass  # keep partial data on failure
 
         if filters:
             papers = [p for p in papers if filters.match(p)]
@@ -226,6 +239,83 @@ class PEDroSource(BaseSource):
             ))
 
         return papers
+
+    @staticmethod
+    def _parse_detail_page(html: str) -> dict:
+        """Extract authors, year, DOI, abstract, and journal from a PEDro record page.
+
+        PEDro detail pages use a bare ``<table>`` with positional ``<tr><td>`` rows
+        and no class names:
+
+        * row 0 — title (``<strong>``)
+        * row 1 — authors as plain text, affiliation in trailing ``[...]``
+        * row 2 — citation: "Journal Name YYYY Mon;vol(issue):pages"
+        * row 3 — method type
+        * row 4 — abstract text followed by full-text links
+
+        DOI appears as ``<a href="https://dx.doi.org/...">DOI</a>`` inside row 4.
+
+        Returns a dict with keys: authors (list[str]), year (int|None),
+        doi (str|None), abstract (str|None), journal (str|None).
+        """
+        result: dict = {"authors": [], "year": None, "doi": None, "abstract": None, "journal": None}
+
+        # Extract all <td>…</td> cell contents in document order
+        td_re = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL | re.IGNORECASE)
+        cells = [m.group(1) for m in td_re.finditer(html)]
+
+        def _text(raw: str) -> str:
+            return _unescape(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', raw)).strip())
+
+        # Row 1 — authors
+        if len(cells) > 1:
+            authors_raw = _text(cells[1])
+            # Strip trailing affiliation like "[Ottawa Panel]"
+            authors_raw = re.sub(r'\s*\[.*?\]\s*$', '', authors_raw).strip()
+            if authors_raw:
+                # Split on ", " only where the next token starts with an uppercase letter
+                result["authors"] = [a.strip() for a in re.split(r',\s*(?=[A-Z])', authors_raw) if a.strip()]
+
+        # Row 2 — citation: "Journal Name 2019 Sep;49(9):CPG1-CPG95"
+        if len(cells) > 2:
+            citation = _text(cells[2])
+            if citation:
+                y_m = re.search(r'\b(19|20)\d{2}\b', citation)
+                if y_m:
+                    result["year"] = int(y_m.group())
+                    # Journal is everything before the year
+                    result["journal"] = citation[:y_m.start()].rstrip(' ,;') or None
+
+        # Row 4 — abstract (stop before the "Full text…" sentence)
+        if len(cells) > 4:
+            abstract_raw = cells[4]
+            # Truncate at the "Full text" marker before stripping tags
+            abstract_raw = re.split(r'Full text', abstract_raw, maxsplit=1)[0]
+            abstract = _text(abstract_raw)
+            result["abstract"] = abstract or None
+
+        # DOI — from the dx.doi.org link present in row 4 (or anywhere on page)
+        doi_m = re.search(r'https?://(?:dx\.)?doi\.org/([^\s"<]+)', html)
+        if doi_m:
+            result["doi"] = doi_m.group(1).rstrip('.')
+
+        return result
+
+    @classmethod
+    def _enrich_from_detail(cls, paper: Paper, html: str) -> Paper:
+        """Return a new Paper with metadata from the detail page merged in."""
+        detail = cls._parse_detail_page(html)
+        return Paper(
+            title=paper.title,
+            authors=detail["authors"] or paper.authors,
+            year=detail["year"] or paper.year,
+            doi=detail["doi"] or paper.doi,
+            abstract=detail["abstract"] or paper.abstract,
+            journal=detail["journal"] or paper.journal,
+            source=paper.source,
+            is_open_access=paper.is_open_access,
+            url=paper.url,
+        )
 
 
 def _unescape(s: str) -> str:
