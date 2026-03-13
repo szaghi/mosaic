@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.3.10] — 2026-03-13
+### Fixed
+- **sources**: Fix PubMed/PMC year filter returning no results
+
+
 ## [1.3.9] — 2026-03-13
 ### Added
 - **sources**: Enhance PEDro source with full metadata and CLI controls
