@@ -5,8 +5,10 @@ import platform
 import re
 from PyInstaller.utils.hooks import collect_all
 
-# Collect all webview package files (includes WebView2Loader.dll on Windows)
+# Collect all webview/pythonnet package files for the Windows bundle.
+# pythonnet is required by pywebview's edgechromium AND winforms backends on Windows.
 _webview_datas, _webview_binaries, _webview_hidden = collect_all("webview")
+_pythonnet_datas, _pythonnet_binaries, _pythonnet_hidden = collect_all("pythonnet")
 
 # Read version from pyproject.toml so it stays in sync automatically.
 _version = "0.0.0"
@@ -18,11 +20,12 @@ with open("pyproject.toml", encoding="utf-8") as _f:
 a = Analysis(
     ["mosaic/gui_launcher.py"],
     pathex=[],
-    binaries=_webview_binaries,
+    binaries=[*_webview_binaries, *_pythonnet_binaries],
     datas=[
         ("mosaic/ui/templates", "mosaic/ui/templates"),
         ("mosaic/ui/static", "mosaic/ui/static"),
         *_webview_datas,
+        *_pythonnet_datas,
     ],
     hiddenimports=[
         # All source modules (explicit imports, but PyInstaller may miss them
@@ -66,6 +69,7 @@ a = Analysis(
         "mosaic.ui.jobs",
         "webview",
         *_webview_hidden,
+        *_pythonnet_hidden,
     ],
     hookspath=[],
     hooksconfig={},
@@ -78,11 +82,6 @@ a = Analysis(
         "pytest_cov",
         "tkinter",
         "_tkinter",
-        # Exclude WinForms backend (uses pythonnet/clr which fails in PyInstaller
-        # due to DLL resolution); we use the edgechromium backend instead.
-        "clr",
-        "pythonnet",
-        "System",
     ],
     noarchive=False,
 )
