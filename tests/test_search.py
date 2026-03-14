@@ -1,5 +1,7 @@
 """Tests for fan-out search, deduplication, and filtering."""
+
 from unittest.mock import MagicMock
+
 from mosaic.models import Paper, SearchFilters
 from mosaic.search import search_all
 from mosaic.sources.base import BaseSource
@@ -13,9 +15,18 @@ def _make_source(name: str, results: list[Paper], available: bool = True) -> Bas
     return src
 
 
-def _paper(doi="10.1/test", title="Paper", year=2020, abstract=None, pdf_url=None, citation_count=None):
-    return Paper(title=title, doi=doi, year=year, abstract=abstract, pdf_url=pdf_url, authors=["A"],
-                 citation_count=citation_count)
+def _paper(
+    doi="10.1/test", title="Paper", year=2020, abstract=None, pdf_url=None, citation_count=None
+):
+    return Paper(
+        title=title,
+        doi=doi,
+        year=year,
+        abstract=abstract,
+        pdf_url=pdf_url,
+        authors=["A"],
+        citation_count=citation_count,
+    )
 
 
 class TestDeduplication:
@@ -198,7 +209,7 @@ class TestSearchStats:
         stats = {}
         f = SearchFilters(year_from=2019, year_to=2022)
         search_all([src], "q", filters=f, stats=stats)
-        assert stats["unique"] == 3       # before post-filter
+        assert stats["unique"] == 3  # before post-filter
         assert stats["after_filters"] == 1
 
     def test_stats_not_populated_when_none(self):

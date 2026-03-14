@@ -1,11 +1,16 @@
 """Browser session management for authenticated PDF access."""
+
 from __future__ import annotations
+
 import asyncio
 import datetime
 import json
+import logging
 import time
 from pathlib import Path
 from urllib.parse import urlparse
+
+log = logging.getLogger(__name__)
 
 _SESSIONS_DIR = Path.home() / ".config" / "mosaic" / "sessions"
 
@@ -29,6 +34,7 @@ _PDF_TEXT_PATTERNS = [
 
 # ── session path helpers ──────────────────────────────────────────────────────
 
+
 def session_path(name: str) -> Path:
     return _SESSIONS_DIR / f"{name}.json"
 
@@ -41,6 +47,7 @@ def _save_meta(name: str, login_url: str) -> None:
     meta = {"login_url": login_url, "domain": urlparse(login_url).netloc}
     # 0o600: meta file lives alongside session cookies — restrict to owner only
     import os as _os
+
     raw_fd = _os.open(str(_meta_path(name)), _os.O_WRONLY | _os.O_CREAT | _os.O_TRUNC, 0o600)
     with _os.fdopen(raw_fd, "w") as f:
         json.dump(meta, f)
@@ -73,10 +80,12 @@ def session_is_valid(name: str) -> bool:
             return True
         return any(c["expires"] > now for c in timed)
     except Exception:
+        log.debug("Could not parse session file %s", path, exc_info=True)
         return True  # Assume valid if file can't be parsed
 
 
 # ── session listing / deletion ────────────────────────────────────────────────
+
 
 def list_sessions() -> list[dict]:
     """Return metadata for all saved sessions."""
@@ -88,13 +97,15 @@ def list_sessions() -> list[dict]:
             continue
         stat = f.stat()
         meta = _load_meta(f.stem)
-        sessions.append({
-            "name": f.stem,
-            "saved": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
-            "domain": meta.get("domain", "—"),
-            "valid": session_is_valid(f.stem),
-            "path": str(f),
-        })
+        sessions.append(
+            {
+                "name": f.stem,
+                "saved": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                "domain": meta.get("domain", "—"),
+                "valid": session_is_valid(f.stem),
+                "path": str(f),
+            }
+        )
     return sessions
 
 
@@ -120,9 +131,7 @@ def find_session_for_url(url: str) -> str | None:
             continue
         meta = _load_meta(f.stem)
         session_domain = meta.get("domain", "").lower()
-        if session_domain and (
-            session_domain in paper_domain or paper_domain in session_domain
-        ):
+        if session_domain and (session_domain in paper_domain or paper_domain in session_domain):
             return f.stem
     return None
 
@@ -140,6 +149,7 @@ _HEADLESS_PREFERENCE = ("firefox", "chromium", "webkit")
 async def _launch_browser(p, *, headless: bool = False):
     """Try browsers in order and return the first one that launches successfully."""
     from rich import print as rprint
+
     order = _HEADLESS_PREFERENCE if headless else _BROWSER_PREFERENCE
     for name in order:
         try:
@@ -148,14 +158,17 @@ async def _launch_browser(p, *, headless: bool = False):
                 rprint(f"[dim]Using {name}[/dim]")
             return browser
         except Exception:
+            log.debug("Failed to launch %s (headless=%s)", name, headless, exc_info=True)
             continue
-    rprint("[red]No Playwright browser found. Install at least one with:[/red]")
-    for b in _BROWSER_PREFERENCE:
-        rprint(f"  [bold]playwright install {b}[/bold]")
-    raise SystemExit(1)
+    msg = "No Playwright browser found. Install at least one with:\n" + "\n".join(
+        f"  playwright install {b}" for b in _BROWSER_PREFERENCE
+    )
+    rprint(f"[red]{msg}[/red]")
+    raise RuntimeError(msg)
 
 
 # ── login ─────────────────────────────────────────────────────────────────────
+
 
 async def login(name: str, url: str) -> None:
     """Open a headed browser, let the user log in, then persist the session."""
@@ -189,6 +202,7 @@ async def login(name: str, url: str) -> None:
 
 # ── browser download ──────────────────────────────────────────────────────────
 
+
 async def browser_download(landing_url: str, dest: str, session_name: str) -> bool:
     """
     Navigate to landing_url using a saved session, find the PDF link, and
@@ -218,6 +232,7 @@ async def browser_download(landing_url: str, dest: str, session_name: str) -> bo
                 f.write(await response.body())
             return True
         except Exception:
+            log.debug("Browser download failed for %s", landing_url, exc_info=True)
             return False
         finally:
             await browser.close()
@@ -234,6 +249,7 @@ async def _find_pdf_url(page) -> str | None:
                 if href:
                     return _absolutise(href, page.url)
         except Exception:
+            log.debug("PDF selector %s failed", selector, exc_info=True)
             continue
 
     # 2. Text-based link search
@@ -245,6 +261,7 @@ async def _find_pdf_url(page) -> str | None:
             if any(pat in text for pat in _PDF_TEXT_PATTERNS) and href:
                 return _absolutise(href, page.url)
         except Exception:
+            log.debug("PDF text link search failed", exc_info=True)
             continue
 
     return None
@@ -265,9 +282,31 @@ def _require_playwright() -> None:
         import playwright  # noqa: F401
     except ImportError:
         from rich import print as rprint
+
         rprint(
             "[red]Playwright is not installed.[/red]\n"
             "Install it with: [bold]pip install 'mosaic-search[browser]'[/bold]\n"
             "Then run: [bold]playwright install chromium[/bold]"
         )
-        raise SystemExit(1)
+        raise SystemExit(1) from None
+
+
+def has_browser() -> bool:
+    """Return True if Playwright is installed and at least one browser binary exists."""
+    try:
+        import playwright  # noqa: F401
+    except ImportError:
+        return False
+    import os
+    import sys
+
+    pw_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if not pw_path:
+        if sys.platform == "darwin":
+            pw_path = str(Path.home() / "Library/Caches/ms-playwright")
+        elif sys.platform == "win32":
+            pw_path = str(Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright")
+        else:
+            pw_path = str(Path.home() / ".cache/ms-playwright")
+    p = Path(pw_path)
+    return p.is_dir() and any(p.iterdir())

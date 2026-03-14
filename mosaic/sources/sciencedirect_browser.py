@@ -7,7 +7,9 @@ Navigation strategy: go to /search, fill the form fields, submit, then
 wait for li.ResultItem elements. Direct URL navigation to /search?qs=...
 fails with a CSRF-related error; form submission does not.
 """
+
 from __future__ import annotations
+
 import asyncio
 import re
 
@@ -30,14 +32,18 @@ class ScienceDirectBrowserSource(BaseSource):
             or if the ``mosaic.auth`` module is unavailable.
         """
         try:
-            from mosaic.auth import find_session_for_url, session_is_valid
+            from mosaic.auth import find_session_for_url, has_browser, session_is_valid
+
+            if not has_browser():
+                return False
             session_name = find_session_for_url(_SD_BASE)
             return session_name is not None and session_is_valid(session_name)
         except Exception:
             return False
 
-    def search(self, query: str, max_results: int = 25,
-               filters: SearchFilters | None = None) -> list[Paper]:
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Search ScienceDirect using a headless browser with a saved session.
 
         Loads the saved Playwright session and runs an async browser search.
@@ -56,22 +62,21 @@ class ScienceDirectBrowserSource(BaseSource):
             list if the session is invalid or the search fails.
         """
         try:
-            from mosaic.auth import find_session_for_url, _require_playwright
+            from mosaic.auth import _require_playwright, find_session_for_url
+
             _require_playwright()
             session_name = find_session_for_url(_SD_BASE)
             if not session_name:
                 return []
-            return asyncio.run(
-                self._browser_search(query, max_results, session_name, filters)
-            )
+            return asyncio.run(self._browser_search(query, max_results, session_name, filters))
         except Exception:
             return []
 
     # ── async internals ───────────────────────────────────────────────────────
 
-    async def _browser_search(self, query: str, max_results: int,
-                               session_name: str,
-                               filters: SearchFilters | None) -> list[Paper]:
+    async def _browser_search(
+        self, query: str, max_results: int, session_name: str, filters: SearchFilters | None
+    ) -> list[Paper]:
         """Async implementation of the ScienceDirect browser search.
 
         Navigates to the ScienceDirect search form, fills the query fields,
@@ -87,8 +92,9 @@ class ScienceDirectBrowserSource(BaseSource):
         Returns:
             A list of Paper objects extracted from the results page.
         """
-        from mosaic.auth import session_path, _launch_browser
         from playwright.async_api import async_playwright
+
+        from mosaic.auth import _launch_browser, session_path
 
         state_file = session_path(session_name)
 
@@ -102,6 +108,7 @@ class ScienceDirectBrowserSource(BaseSource):
             )
             try:
                 from rich import print as rprint
+
                 # Navigate to the search form (direct URL construction triggers
                 # a CSRF check; form submission avoids it)
                 await page.goto(
@@ -136,21 +143,16 @@ class ScienceDirectBrowserSource(BaseSource):
                     status_el = await page.query_selector(".SearchStatusMessage")
                     status = (await status_el.inner_text()).strip() if status_el else ""
                     if status and "could not be run" in status.lower():
-                        rprint(
-                            f"[yellow]ScienceDirect search error:[/yellow] {status}"
-                        )
+                        rprint(f"[yellow]ScienceDirect search error:[/yellow] {status}")
                     else:
-                        rprint(
-                            "[dim]ScienceDirect (browser): no results for this query.[/dim]"
-                        )
+                        rprint("[dim]ScienceDirect (browser): no results for this query.[/dim]")
             except Exception:
                 pass
             finally:
                 await browser.close()
         return papers
 
-    async def _fill_form(self, page, query: str,
-                         filters: SearchFilters | None) -> None:
+    async def _fill_form(self, page, query: str, filters: SearchFilters | None) -> None:
         """Fill the advanced search form fields and submit."""
         field = (filters.field or "all") if filters else "all"
 
@@ -164,7 +166,7 @@ class ScienceDirectBrowserSource(BaseSource):
 
         if filters:
             y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_to = filters.year_to or (max(filters.years) if filters.years else None)
             if y_from or y_to:
                 date_str = f"{y_from or y_to}-{y_to or y_from}"
                 await page.fill("input[name=date]", date_str)

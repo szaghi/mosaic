@@ -1,12 +1,14 @@
 """Background job manager for long-running searches."""
+
 from __future__ import annotations
 
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -25,7 +27,7 @@ class Job:
 
 
 class JobManager:
-    _MAX_AGE = 300  # seconds — purge completed jobs older than this
+    _MAX_AGE = 900  # seconds — purge completed jobs older than this
 
     def __init__(self, max_workers: int = 4):
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -68,7 +70,8 @@ class JobManager:
         now = time.monotonic()
         with self._lock:
             return [
-                jid for jid, j in self._jobs.items()
+                jid
+                for jid, j in self._jobs.items()
                 if j.status != "running" and (now - j.created_at) > self._MAX_AGE
             ]
 

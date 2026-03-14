@@ -1,14 +1,26 @@
 """PDF download logic with Unpaywall fallback."""
+
 from __future__ import annotations
+
+import logging
 from pathlib import Path
+
 import httpx
+
+from mosaic.db import Cache
 from mosaic.models import Paper
 from mosaic.sources import unpaywall
-from mosaic.db import Cache
+
+log = logging.getLogger(__name__)
 
 
-def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str = "",
-             filename_pattern: str = "{year}_{source}_{author}_{title}") -> str | None:
+def download(
+    paper: Paper,
+    download_dir: str,
+    cache: Cache,
+    unpaywall_email: str = "",
+    filename_pattern: str = "{year}_{source}_{author}_{title}",
+) -> str | None:
     """
     Download PDF for a paper. Returns local path on success, None on failure.
     Tries: 1) known pdf_url  2) Unpaywall lookup by DOI  3) browser session
@@ -29,7 +41,7 @@ def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str
             cache.set_download(paper.uid, str(dest), "ok")
             return str(dest)
         except Exception:
-            pass
+            log.debug("Direct PDF download failed for %s: %s", pdf_url, exc_info=True)
 
     # ── step 2: Unpaywall ─────────────────────────────────────────────────────
     if paper.doi and unpaywall_email:
@@ -40,14 +52,16 @@ def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str
                 cache.set_download(paper.uid, str(dest), "ok")
                 return str(dest)
             except Exception:
-                pass
+                log.debug("Unpaywall download failed for %s: %s", upw_url, exc_info=True)
 
     # ── step 3: browser session ───────────────────────────────────────────────
     landing_url = paper.url or (f"https://doi.org/{paper.doi}" if paper.doi else None)
     if landing_url:
         try:
-            from mosaic.auth import find_session_for_url, browser_download, list_sessions
             import asyncio
+
+            from mosaic.auth import browser_download, find_session_for_url, list_sessions
+
             # Resolve HTTP redirects so domain matching works for known publisher
             # URLs. For doi.org → linkinghub → sciencedirect chains the final JS
             # redirect is only followable by a real browser, so when direct
@@ -62,7 +76,7 @@ def download(paper: Paper, download_dir: str, cache: Cache, unpaywall_email: str
                     cache.set_download(paper.uid, str(dest), "ok")
                     return str(dest)
         except Exception:
-            pass
+            log.debug("Browser session download failed for %s", landing_url, exc_info=True)
 
     cache.set_download(paper.uid, "", "error: no pdf found")
     return None
@@ -75,6 +89,7 @@ def _resolve_redirect(url: str) -> str:
             r = client.head(url)
             return str(r.url)
     except Exception:
+        log.debug("Redirect resolution failed for %s", url, exc_info=True)
         return url
 
 

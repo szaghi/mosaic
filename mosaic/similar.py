@@ -1,9 +1,14 @@
 """Similar-paper discovery via OpenAlex related_works and Semantic Scholar recommendations."""
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper
-from mosaic.sources.openalex import OpenAlexSource, _SELECT
-from mosaic.sources.semantic_scholar import SemanticScholarSource, _FIELDS as _SS_FIELDS
+from mosaic.services import merge_papers
+from mosaic.sources.openalex import _SELECT, OpenAlexSource
+from mosaic.sources.semantic_scholar import _FIELDS as _SS_FIELDS
+from mosaic.sources.semantic_scholar import SemanticScholarSource
 
 _OA_BASE = "https://api.openalex.org"
 _SS_REC_BASE = "https://api.semanticscholar.org/recommendations/v1/papers/forpaper"
@@ -40,20 +45,7 @@ def find_similar(
 
     if ss_api_key:
         for p in _similar_ss(identifier, max_results, api_key=ss_api_key):
-            uid = p.uid
-            if uid not in seen:
-                seen[uid] = p
-            else:
-                existing = seen[uid]
-                if p.abstract and not existing.abstract:
-                    existing.abstract = p.abstract
-                if p.pdf_url and not existing.pdf_url:
-                    existing.pdf_url = p.pdf_url
-                if p.citation_count is not None and (
-                    existing.citation_count is None
-                    or p.citation_count > existing.citation_count
-                ):
-                    existing.citation_count = p.citation_count
+            merge_papers(seen, p)
 
     return seed_title, list(seen.values())
 

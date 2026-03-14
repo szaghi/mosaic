@@ -6,10 +6,14 @@ author lists) requires an institutional subscription; partial metadata
 (title, first author, journal, year, DOI, citation count, open-access flag)
 is available with a free key alone.
 """
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import parse_authors_name_key, parse_year
+from mosaic.sources.base import BaseSource, build_scopus_query
 
 _BASE = "https://api.elsevier.com/content/search/scopus"
 
@@ -79,27 +83,7 @@ class ScopusAPISource(BaseSource):
             A list of Paper objects parsed from the ``search-results.entry``
             array. Entries without a title are silently skipped.
         """
-        if filters and filters.raw_query:
-            scopus_query = filters.raw_query
-        elif filters and filters.field == "title":
-            scopus_query = f'TITLE("{query}")'
-        elif filters and filters.field == "abstract":
-            scopus_query = f'ABS("{query}")'
-        else:
-            scopus_query = f'TITLE-ABS-KEY("{query}")'
-
-        if filters:
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
-            if y_from:
-                scopus_query += f" AND PUBYEAR > {y_from - 1}"
-            if y_to:
-                scopus_query += f" AND PUBYEAR < {y_to + 1}"
-            if filters.authors:
-                for author in filters.authors:
-                    scopus_query += f' AND AUTH("{author}")'
-            if filters.journal:
-                scopus_query += f' AND SRCTITLE("{filters.journal}")'
+        scopus_query = build_scopus_query(query, filters)
 
         headers: dict[str, str] = {
             "X-ELS-APIKey": self._api_key,
@@ -116,10 +100,7 @@ class ScopusAPISource(BaseSource):
         )
         resp.raise_for_status()
         entries = resp.json().get("search-results", {}).get("entry", []) or []
-        return [
-            self._parse(e) for e in entries
-            if isinstance(e, dict) and "dc:title" in e
-        ]
+        return [self._parse(e) for e in entries if isinstance(e, dict) and "dc:title" in e]
 
     def _parse(self, item: dict) -> Paper:
         """Parse a single Scopus search entry dict into a Paper.
@@ -143,22 +124,18 @@ class ScopusAPISource(BaseSource):
 
         # Full author list requires institutional access; fall back to
         # dc:creator (first author string, always present with free key).
-        authors: list[str] = []
         author_list = item.get("author") or []
-        if isinstance(author_list, list):
-            authors = [a.get("authname", "") for a in author_list if a.get("authname")]
+        authors = (
+            parse_authors_name_key(author_list, key="authname")
+            if isinstance(author_list, list)
+            else []
+        )
         if not authors:
             creator = item.get("dc:creator") or ""
             if creator:
                 authors = [creator]
 
-        year: int | None = None
-        cover_date = item.get("prism:coverDate") or ""
-        if len(cover_date) >= 4:
-            try:
-                year = int(cover_date[:4])
-            except ValueError:
-                pass
+        year = parse_year(item.get("prism:coverDate"))
 
         doi = item.get("prism:doi") or None
         abstract = item.get("dc:description") or None
@@ -179,7 +156,7 @@ class ScopusAPISource(BaseSource):
         is_oa = oa_raw in ("1", 1, True)
 
         url: str | None = None
-        for link in (item.get("link") or []):
+        for link in item.get("link") or []:
             if isinstance(link, dict) and link.get("@ref") == "scopus":
                 url = link.get("@href") or None
                 break

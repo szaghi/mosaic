@@ -16,12 +16,14 @@ your name, and press Enter in the terminal.
     Open an issue at https://github.com/szaghi/mosaic if search returns empty
     results after a known-working login.
 """
+
 from __future__ import annotations
+
 import asyncio
 import re
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, build_scopus_query
 
 _SCOPUS_BASE = "https://www.scopus.com"
 _SEARCH_URL = f"{_SCOPUS_BASE}/search/form.uri#advanced"
@@ -40,7 +42,10 @@ class ScopusBrowserSource(BaseSource):
             otherwise or if the ``mosaic.auth`` module is unavailable.
         """
         try:
-            from mosaic.auth import find_session_for_url, session_is_valid
+            from mosaic.auth import find_session_for_url, has_browser, session_is_valid
+
+            if not has_browser():
+                return False
             session_name = find_session_for_url(_SCOPUS_BASE)
             return session_name is not None and session_is_valid(session_name)
         except Exception:
@@ -70,14 +75,13 @@ class ScopusBrowserSource(BaseSource):
             empty list if the session is invalid or the search fails.
         """
         try:
-            from mosaic.auth import find_session_for_url, _require_playwright
+            from mosaic.auth import _require_playwright, find_session_for_url
+
             _require_playwright()
             session_name = find_session_for_url(_SCOPUS_BASE)
             if not session_name:
                 return []
-            return asyncio.run(
-                self._browser_search(query, max_results, session_name, filters)
-            )
+            return asyncio.run(self._browser_search(query, max_results, session_name, filters))
         except Exception:
             return []
 
@@ -105,8 +109,9 @@ class ScopusBrowserSource(BaseSource):
         Returns:
             A list of Paper objects extracted from the results page.
         """
-        from mosaic.auth import session_path, _launch_browser
         from playwright.async_api import async_playwright
+
+        from mosaic.auth import _launch_browser, session_path
 
         state_file = session_path(session_name)
 
@@ -120,6 +125,7 @@ class ScopusBrowserSource(BaseSource):
             )
             try:
                 from rich import print as rprint
+
                 await page.goto(
                     _SEARCH_URL,
                     wait_until="networkidle",
@@ -146,8 +152,7 @@ class ScopusBrowserSource(BaseSource):
 
                 try:
                     await page.wait_for_selector(
-                        "[data-e2e='search-result-row'], tr.resultRow, "
-                        "[data-testid='result-row']",
+                        "[data-e2e='search-result-row'], tr.resultRow, [data-testid='result-row']",
                         timeout=15_000,
                     )
                 except Exception:
@@ -162,43 +167,12 @@ class ScopusBrowserSource(BaseSource):
                 await browser.close()
         return papers
 
-    def _build_query(self, query: str, filters: SearchFilters | None) -> str:
-        """Translate query and filters into Scopus boolean query syntax.
+    @staticmethod
+    def _build_query(query: str, filters: SearchFilters | None) -> str:
+        """Translate query and filters into Scopus boolean query syntax."""
+        return build_scopus_query(query, filters)
 
-        Args:
-            query: Free-text search query.
-            filters: Optional filters for field scoping, year range, authors,
-                and journal.
-
-        Returns:
-            A Scopus boolean query string suitable for the advanced-search form.
-        """
-        if filters and filters.raw_query:
-            scopus_query = filters.raw_query
-        elif filters and filters.field == "title":
-            scopus_query = f'TITLE("{query}")'
-        elif filters and filters.field == "abstract":
-            scopus_query = f'ABS("{query}")'
-        else:
-            scopus_query = f'TITLE-ABS-KEY("{query}")'
-
-        if filters:
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
-            if y_from:
-                scopus_query += f" AND PUBYEAR > {y_from - 1}"
-            if y_to:
-                scopus_query += f" AND PUBYEAR < {y_to + 1}"
-            if filters.authors:
-                for author in filters.authors:
-                    scopus_query += f' AND AUTH("{author}")'
-            if filters.journal:
-                scopus_query += f' AND SRCTITLE("{filters.journal}")'
-        return scopus_query
-
-    async def _fill_form(
-        self, page, query: str, filters: SearchFilters | None
-    ) -> None:
+    async def _fill_form(self, page, query: str, filters: SearchFilters | None) -> None:
         """Fill the Scopus advanced-search textarea and submit.
 
         Tries multiple known textarea selectors in order. Submits via Enter

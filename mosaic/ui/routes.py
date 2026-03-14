@@ -1,4 +1,5 @@
 """Flask route handlers for the MOSAIC web UI."""
+
 from __future__ import annotations
 
 import json
@@ -7,13 +8,23 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 from flask import (
-    Blueprint, Response, current_app, flash, redirect, render_template,
-    request, send_file, stream_with_context, url_for,
+    Blueprint,
+    Response,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    stream_with_context,
+    url_for,
 )
+from markupsafe import escape
 
-from mosaic.helpers import SRC_MAP, build_sources
 from mosaic.models import Paper, SearchFilters
 from mosaic.search import search_all
+from mosaic.services import build_filters, filter_papers
+from mosaic.source_registry import SHORTHAND_TO_CFG_KEY, SRC_MAP, build_sources
 
 bp = Blueprint("ui", __name__)
 
@@ -25,6 +36,7 @@ _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg():
     return current_app.config["MOSAIC_CFG"]
@@ -49,32 +61,27 @@ def _purge_stale():
 
 def _version():
     from mosaic import __version__
+
     return __version__
 
 
-def _build_filters(form) -> SearchFilters | None:
-    year = form.get("year", "").strip()
-    author = form.get("author", "").strip()
-    journal = form.get("journal", "").strip()
-    field = form.get("field", "all")
-    raw_query = form.get("raw_query", "").strip()
+def _safe_int(value, default: int = 10, lo: int = 1, hi: int = 200) -> int:
+    """Parse an integer from form input, clamping to [lo, hi]."""
+    try:
+        return max(lo, min(int(value), hi))
+    except (TypeError, ValueError):
+        return default
 
-    if not any([year, author, journal, field != "all", raw_query]):
-        return None
 
-    authors = [a.strip() for a in author.split(",") if a.strip()] if author else []
-    filters = SearchFilters(authors=authors, journal=journal, field=field, raw_query=raw_query)
-
-    if year:
-        try:
-            parsed = SearchFilters.parse_year(year)
-            filters.year_from = parsed.year_from
-            filters.year_to = parsed.year_to
-            filters.years = parsed.years
-        except ValueError:
-            pass  # silently ignore bad year format in UI
-
-    return filters
+def _build_filters(form) -> tuple[SearchFilters | None, str | None]:
+    """Return (filters, optional_warning). Warning is set on invalid year format."""
+    return build_filters(
+        year=form.get("year", "").strip(),
+        author=form.get("author", "").strip(),
+        journal=form.get("journal", "").strip(),
+        field=form.get("field", "all"),
+        raw_query=form.get("raw_query", "").strip(),
+    )
 
 
 def _run_search(sources, query, max_per_source, filters, progress=None):
@@ -87,7 +94,8 @@ def _run_search(sources, query, max_per_source, filters, progress=None):
             progress[source_name] = status
 
     papers = search_all(
-        sources, query,
+        sources,
+        query,
         max_per_source=max_per_source,
         filters=filters,
         errors=errors,
@@ -100,6 +108,7 @@ def _run_search(sources, query, max_per_source, filters, progress=None):
 def _run_similar(identifier, max_results, oa_email, ss_api_key):
     """Executed in a worker thread."""
     from mosaic.similar import find_similar
+
     seed_title, papers = find_similar(
         identifier,
         max_results=max_results,
@@ -113,6 +122,7 @@ def _run_similar(identifier, max_results, oa_email, ss_api_key):
 # Pages
 # ---------------------------------------------------------------------------
 
+
 @bp.route("/")
 def search_page():
     cfg = _cfg()
@@ -120,22 +130,24 @@ def search_page():
     # Build source list with enabled status
     source_list = []
     for key, display_name in SRC_MAP.items():
-        # Map shorthand to config key
-        cfg_key_map = {
-            "arxiv": "arxiv", "ss": "semantic_scholar", "sd": "sciencedirect",
-            "doaj": "doaj", "epmc": "europepmc", "oa": "openalex",
-            "base": "base", "core": "core", "sp": "springer",
-            "springer": "springer_api", "ads": "nasa_ads", "ieee": "ieee",
-            "zenodo": "zenodo", "crossref": "crossref", "dblp": "dblp",
-            "hal": "hal", "pubmed": "pubmed", "pmc": "pmc", "rxiv": "biorxiv",
-            "pedro": "pedro", "scopus": "scopus",
-        }
-        cfg_key = cfg_key_map.get(key, key)
+        cfg_key = SHORTHAND_TO_CFG_KEY.get(key, key)
         enabled = src_cfg.get(cfg_key, {}).get("enabled", True)
         source_list.append({"key": key, "name": display_name, "enabled": enabled})
 
     prefill_query = request.args.get("q", "")
-    return render_template("search.html", sources=source_list, version=_version(), prefill_query=prefill_query)
+    prefill_filters = {
+        "year": request.args.get("year", ""),
+        "author": request.args.get("author", ""),
+        "journal": request.args.get("journal", ""),
+        "field": request.args.get("field", ""),
+    }
+    return render_template(
+        "search.html",
+        sources=source_list,
+        version=_version(),
+        prefill_query=prefill_query,
+        prefill_filters=prefill_filters,
+    )
 
 
 @bp.route("/search", methods=["POST"])
@@ -144,10 +156,16 @@ def search_submit():
     cfg = _cfg()
     query = request.form.get("query", "").strip()
     if not query:
-        return render_template("partials/results.html", papers=[], errors=["Please enter a search query."], stats={}, version=_version())
+        return render_template(
+            "partials/results.html",
+            papers=[],
+            errors=["Please enter a search query."],
+            stats={},
+            version=_version(),
+        )
 
-    max_results = int(request.form.get("max_results", 10))
-    filters = _build_filters(request.form)
+    max_results = _safe_int(request.form.get("max_results", 10))
+    filters, year_warning = _build_filters(request.form)
 
     # Build sources filtered by user selection
     selected = request.form.getlist("sources")
@@ -155,6 +173,14 @@ def search_submit():
     if selected:
         selected_names = {SRC_MAP[k] for k in selected if k in SRC_MAP}
         sources = [s for s in all_sources if s.name in selected_names]
+    elif request.form.get("_has_sources"):
+        # User explicitly deselected all sources in the search form
+        errors = ["No sources selected. Please select at least one source."]
+        if year_warning:
+            errors.insert(0, year_warning)
+        return render_template(
+            "partials/results.html", papers=[], errors=errors, stats={}, version=_version()
+        )
     else:
         sources = all_sources
 
@@ -167,35 +193,62 @@ def search_submit():
     if job is not None:
         job.progress = progress
 
-    # Store form state for the export link later
+    # Store form state for the export link and history re-run
     current_app.config[f"job_meta_{job_id}"] = {
         "query": query,
         "oa_only": request.form.get("oa_only") == "on",
         "pdf_only": request.form.get("pdf_only") == "on",
         "sort_by": request.form.get("sort_by", ""),
+        "year_warning": year_warning,
+        "filters": {
+            "year": request.form.get("year", ""),
+            "author": request.form.get("author", ""),
+            "journal": request.form.get("journal", ""),
+            "field": request.form.get("field", "all"),
+        },
     }
 
-    return render_template("partials/job_status.html",
-                           job_id=job_id, source_count=source_count,
-                           status_url=url_for("ui.search_status", job_id=job_id),
-                           job_type="search", progress=progress)
+    return render_template(
+        "partials/job_status.html",
+        job_id=job_id,
+        source_count=source_count,
+        status_url=url_for("ui.search_status", job_id=job_id),
+        job_type="search",
+        progress=progress,
+    )
 
 
 @bp.route("/search/status/<job_id>")
 def search_status(job_id):
     job = _jobs().get(job_id)
     if job is None:
-        return render_template("partials/results.html", papers=[], errors=["Job not found."], stats={}, version=_version())
+        return render_template(
+            "partials/results.html",
+            papers=[],
+            errors=["Job not found."],
+            stats={},
+            version=_version(),
+        )
 
     if job.status == "running":
-        return render_template("partials/job_status.html",
-                               job_id=job_id, source_count=0,
-                               status_url=url_for("ui.search_status", job_id=job_id),
-                               job_type="search", progress=job.progress)
+        return render_template(
+            "partials/job_status.html",
+            job_id=job_id,
+            source_count=0,
+            status_url=url_for("ui.search_status", job_id=job_id),
+            job_type="search",
+            progress=job.progress,
+        )
 
     if job.status == "error":
         _jobs().pop(job_id)
-        return render_template("partials/results.html", papers=[], errors=[job.error_message], stats={}, version=_version())
+        return render_template(
+            "partials/results.html",
+            papers=[],
+            errors=[job.error_message],
+            stats={},
+            version=_version(),
+        )
 
     # Done
     result = job.result
@@ -205,15 +258,14 @@ def search_status(job_id):
 
     # Apply post-filters from form state
     meta = current_app.config.pop(f"job_meta_{job_id}", {})
-    if meta.get("oa_only"):
-        papers = [p for p in papers if p.is_open_access or p.pdf_url]
-    if meta.get("pdf_only"):
-        papers = [p for p in papers if p.pdf_url]
-    sort_by = meta.get("sort_by", "")
-    if sort_by == "citations":
-        papers.sort(key=lambda p: p.citation_count or 0, reverse=True)
-    elif sort_by == "year":
-        papers.sort(key=lambda p: p.year or 0, reverse=True)
+    if meta.get("year_warning"):
+        errors.insert(0, meta["year_warning"])
+    papers = filter_papers(
+        papers,
+        oa_only=meta.get("oa_only", False),
+        pdf_only=meta.get("pdf_only", False),
+        sort_by=meta.get("sort_by", ""),
+    )
 
     # Save to cache and record search history
     cache = _cache()
@@ -221,20 +273,27 @@ def search_status(job_id):
         cache.save(p)
     cache.save_search(
         query=meta.get("query", ""),
+        filters_json=json.dumps(meta.get("filters", {})),
         result_count=len(papers),
     )
 
     # Store papers for export
     current_app.config[f"export_{job_id}"] = papers
 
-    return render_template("partials/results.html",
-                           papers=papers, errors=errors, stats=stats,
-                           job_id=job_id, version=_version())
+    return render_template(
+        "partials/results.html",
+        papers=papers,
+        errors=errors,
+        stats=stats,
+        job_id=job_id,
+        version=_version(),
+    )
 
 
 @bp.route("/stream/<job_id>")
 def stream_job(job_id):
     """SSE endpoint — pushes progress updates until the job finishes."""
+
     def _generate():
         job = _jobs().get(job_id)
         if job is None:
@@ -268,8 +327,9 @@ def paper_detail(uid):
     if dl:
         download_status = {"path": dl["local_path"], "status": dl["status"]}
 
-    return render_template("detail.html", paper=paper, download_status=download_status,
-                           version=_version(), quote=quote)
+    return render_template(
+        "detail.html", paper=paper, download_status=download_status, version=_version(), quote=quote
+    )
 
 
 def _run_download(uid, cfg, db_path):
@@ -325,15 +385,16 @@ def download_status(job_id):
 
     _jobs().pop(job_id)
     if job.status == "error":
-        return f"<mark>Download failed: {job.error_message}</mark>"
+        return f"<mark>Download failed: {escape(job.error_message)}</mark>"
 
     result = job.result
-    return f'<mark>{result["msg"]}</mark>'
+    return f"<mark>{escape(result['msg'])}</mark>"
 
 
 # ---------------------------------------------------------------------------
 # Similar
 # ---------------------------------------------------------------------------
+
 
 @bp.route("/similar")
 def similar_page():
@@ -346,9 +407,15 @@ def similar_submit():
     _purge_stale()
     identifier = request.form.get("identifier", "").strip()
     if not identifier:
-        return render_template("partials/results.html", papers=[], errors=["Please enter a DOI or arXiv ID."], stats={}, version=_version())
+        return render_template(
+            "partials/results.html",
+            papers=[],
+            errors=["Please enter a DOI or arXiv ID."],
+            stats={},
+            version=_version(),
+        )
 
-    max_results = int(request.form.get("max_results", 10))
+    max_results = _safe_int(request.form.get("max_results", 10))
     cfg = _cfg()
     oa_email = cfg.get("unpaywall", {}).get("email", "")
     ss_api_key = cfg.get("sources", {}).get("semantic_scholar", {}).get("api_key", "")
@@ -360,42 +427,57 @@ def similar_submit():
         "sort_by": request.form.get("sort_by", ""),
     }
 
-    return render_template("partials/job_status.html",
-                           job_id=job_id, source_count=2,
-                           status_url=url_for("ui.similar_status", job_id=job_id),
-                           job_type="similar")
+    return render_template(
+        "partials/job_status.html",
+        job_id=job_id,
+        source_count=2,
+        status_url=url_for("ui.similar_status", job_id=job_id),
+        job_type="similar",
+    )
 
 
 @bp.route("/similar/status/<job_id>")
 def similar_status(job_id):
     job = _jobs().get(job_id)
     if job is None:
-        return render_template("partials/results.html", papers=[], errors=["Job not found."], stats={}, version=_version())
+        return render_template(
+            "partials/results.html",
+            papers=[],
+            errors=["Job not found."],
+            stats={},
+            version=_version(),
+        )
 
     if job.status == "running":
-        return render_template("partials/job_status.html",
-                               job_id=job_id, source_count=2,
-                               status_url=url_for("ui.similar_status", job_id=job_id),
-                               job_type="similar")
+        return render_template(
+            "partials/job_status.html",
+            job_id=job_id,
+            source_count=2,
+            status_url=url_for("ui.similar_status", job_id=job_id),
+            job_type="similar",
+        )
 
     if job.status == "error":
         _jobs().pop(job_id)
-        return render_template("partials/results.html", papers=[], errors=[job.error_message], stats={}, version=_version())
+        return render_template(
+            "partials/results.html",
+            papers=[],
+            errors=[job.error_message],
+            stats={},
+            version=_version(),
+        )
 
     result = job.result
     papers = result["papers"]
     seed_title = result.get("seed_title")
 
     meta = current_app.config.pop(f"job_meta_{job_id}", {})
-    if meta.get("oa_only"):
-        papers = [p for p in papers if p.is_open_access or p.pdf_url]
-    if meta.get("pdf_only"):
-        papers = [p for p in papers if p.pdf_url]
-    sort_by = meta.get("sort_by", "")
-    if sort_by == "citations":
-        papers.sort(key=lambda p: p.citation_count or 0, reverse=True)
-    elif sort_by == "year":
-        papers.sort(key=lambda p: p.year or 0, reverse=True)
+    papers = filter_papers(
+        papers,
+        oa_only=meta.get("oa_only", False),
+        pdf_only=meta.get("pdf_only", False),
+        sort_by=meta.get("sort_by", ""),
+    )
 
     cache = _cache()
     for p in papers:
@@ -403,19 +485,26 @@ def similar_status(job_id):
 
     current_app.config[f"export_{job_id}"] = papers
 
-    return render_template("partials/results.html",
-                           papers=papers, errors=[], stats={},
-                           seed_title=seed_title, job_id=job_id,
-                           version=_version())
+    return render_template(
+        "partials/results.html",
+        papers=papers,
+        errors=[],
+        stats={},
+        seed_title=seed_title,
+        job_id=job_id,
+        version=_version(),
+    )
 
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
+
 @bp.route("/config")
 def config_page():
     import mosaic.config as cfg_mod
+
     cfg = cfg_mod.load()
     return render_template("config.html", cfg=cfg, version=_version())
 
@@ -423,6 +512,7 @@ def config_page():
 @bp.route("/config", methods=["POST"])
 def config_save():
     import mosaic.config as cfg_mod
+
     cfg = cfg_mod.load()
 
     # General settings
@@ -439,25 +529,10 @@ def config_save():
         except ValueError:
             pass
 
-    # API keys
-    for key_name, cfg_path in [
-        ("elsevier_key", ("sources", "sciencedirect", "api_key")),
-        ("ss_key", ("sources", "semantic_scholar", "api_key")),
-        ("core_key", ("sources", "core", "api_key")),
-        ("ads_key", ("sources", "nasa_ads", "api_key")),
-        ("ieee_key", ("sources", "ieee", "api_key")),
-        ("ncbi_key", ("sources", "pubmed", "api_key")),
-        ("springer_key", ("sources", "springer_api", "api_key")),
-        ("scopus_key", ("sources", "scopus", "api_key")),
-        ("scopus_inst_token", ("sources", "scopus", "inst_token")),
-        ("zenodo_key", ("sources", "zenodo", "api_key")),
-    ]:
-        val = request.form.get(key_name, "").strip()
-        if val:
-            d = cfg
-            for part in cfg_path[:-1]:
-                d = d.setdefault(part, {})
-            d[cfg_path[-1]] = val
+    # API keys — shared registry with CLI
+    from mosaic.config import API_KEY_PATHS, apply_api_keys
+
+    apply_api_keys(cfg, {k: request.form.get(k, "") for k, _ in API_KEY_PATHS})
 
     # Also set PMC key to same as PubMed NCBI key
     ncbi_val = request.form.get("ncbi_key", "").strip()
@@ -479,19 +554,9 @@ def config_save():
     # field tells us the section was present in the submitted form).
     if request.form.get("_sources_section"):
         src_cfg = cfg.get("sources", {})
-        cfg_key_map = {
-            "arxiv": "arxiv", "semantic_scholar": "semantic_scholar",
-            "sciencedirect": "sciencedirect", "doaj": "doaj",
-            "europepmc": "europepmc", "openalex": "openalex",
-            "base": "base", "core": "core", "springer": "springer",
-            "springer_api": "springer_api", "nasa_ads": "nasa_ads",
-            "ieee": "ieee", "zenodo": "zenodo", "crossref": "crossref",
-            "dblp": "dblp", "hal": "hal", "pubmed": "pubmed",
-            "pmc": "pmc", "biorxiv": "biorxiv", "pedro": "pedro",
-            "scopus": "scopus",
-        }
+        all_cfg_keys = set(SHORTHAND_TO_CFG_KEY.values())
         enabled_sources = request.form.getlist("enabled_sources")
-        for cfg_key in cfg_key_map.values():
+        for cfg_key in all_cfg_keys:
             src_cfg.setdefault(cfg_key, {})["enabled"] = cfg_key in enabled_sources
 
     # PEDro settings (separate from the enabled toggle)
@@ -536,12 +601,13 @@ def config_save():
 # Export
 # ---------------------------------------------------------------------------
 
+
 @bp.route("/export/<job_id>")
 def export_results(job_id):
     fmt = request.args.get("format", "csv")
     papers = current_app.config.get(f"export_{job_id}")
     if not papers:
-        flash("No results to export. Run a search first.", "warning")
+        flash("Export results have expired. Please re-run your search.", "warning")
         return redirect(url_for("ui.search_page"))
 
     from mosaic.exporter import export
@@ -571,9 +637,15 @@ def export_results(job_id):
 # History
 # ---------------------------------------------------------------------------
 
+
 @bp.route("/history")
 def history_page():
     searches = _cache().list_searches(limit=50)
+    for s in searches:
+        try:
+            s["filters"] = json.loads(s.get("filters_json") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            s["filters"] = {}
     return render_template("history.html", searches=searches, version=_version())
 
 
@@ -581,47 +653,26 @@ def history_page():
 # Zotero export
 # ---------------------------------------------------------------------------
 
+
 def _run_zotero_export(papers_data, cfg, collection_name):
     """Executed in a worker thread."""
-    from mosaic.zotero import ZoteroClient
+    from mosaic.workflows import push_to_zotero
 
-    zot_cfg = cfg.get("zotero", {})
-    api_key = zot_cfg.get("api_key", "")
-    user_id = zot_cfg.get("user_id", 0)
-    client = ZoteroClient(api_key=api_key, user_id=user_id)
-
-    if not client.is_reachable():
-        if api_key:
-            return {"ok": False, "msg": "Zotero web API not reachable. Check your API key in Config."}
-        return {"ok": False, "msg": "No Zotero API key configured and Zotero desktop is not running. "
-                "Either set a Zotero web API key in Config, or start the Zotero desktop app."}
-
-    collection_key = None
-    if collection_name:
-        try:
-            collection_key = client.ensure_collection(collection_name)
-        except Exception as e:
-            return {"ok": False, "msg": f"Could not create/find collection '{collection_name}': {e}"}
-
-    # Reconstruct Paper objects from serialised data
-    papers = [Paper(**d) for d in papers_data]
-    item_keys = client.add_papers(papers, collection_key=collection_key)
-    added = sum(1 for k in item_keys if k)
-    label = f" to '{collection_name}'" if collection_name else ""
-    return {"ok": True, "msg": f"{added} paper(s) added to Zotero{label}."}
+    papers = [Paper.from_dict(d) for d in papers_data]
+    return push_to_zotero(papers, cfg, collection_name=collection_name)
 
 
 @bp.route("/zotero/export/<job_id>", methods=["POST"])
 def zotero_export(job_id):
     papers = current_app.config.get(f"export_{job_id}")
     if not papers:
-        return "<mark>No results to export. Run a search first.</mark>"
+        return "<mark>Export results have expired. Please re-run your search.</mark>"
 
     cfg = _cfg()
     collection_name = request.form.get("zotero_collection", "").strip()
 
     # Serialise Paper objects for the worker thread
-    papers_data = [_paper_to_dict(p) for p in papers]
+    papers_data = [p.to_dict() for p in papers]
     zot_job_id = _jobs().submit(_run_zotero_export, papers_data, cfg, collection_name)
     status_url = url_for("ui.zotero_export_status", job_id=zot_job_id)
     return (
@@ -643,11 +694,11 @@ def zotero_export_status(job_id):
         )
     _jobs().pop(job_id)
     if job.status == "error":
-        return f"<mark>Zotero export failed: {job.error_message}</mark>"
+        return f"<mark>Zotero export failed: {escape(job.error_message)}</mark>"
     result = job.result
     if result["ok"]:
-        return f'<ins>{result["msg"]}</ins>'
-    return f'<mark>{result["msg"]}</mark>'
+        return f"<ins>{escape(result['msg'])}</ins>"
+    return f"<mark>{escape(result['msg'])}</mark>"
 
 
 @bp.route("/zotero/paper/<path:uid>", methods=["POST"])
@@ -659,7 +710,7 @@ def zotero_export_paper(uid):
 
     cfg = _cfg()
     collection_name = request.form.get("zotero_collection", "").strip()
-    papers_data = [_paper_to_dict(paper)]
+    papers_data = [paper.to_dict()]
     zot_job_id = _jobs().submit(_run_zotero_export, papers_data, cfg, collection_name)
     status_url = url_for("ui.zotero_export_status", job_id=zot_job_id)
     return (
@@ -672,39 +723,23 @@ def zotero_export_paper(uid):
 # Obsidian export
 # ---------------------------------------------------------------------------
 
+
 def _run_obsidian_export(papers_data, cfg):
     """Executed in a worker thread."""
-    from mosaic.obsidian import ObsidianVault
+    from mosaic.workflows import push_to_obsidian
 
-    obs_cfg = cfg.get("obsidian", {})
-    vault_path = obs_cfg.get("vault_path", "")
-    if not vault_path:
-        return {"ok": False, "msg": "Obsidian vault path is not configured. Set it in Config."}
-
-    vault = ObsidianVault(
-        vault_path=vault_path,
-        subfolder=obs_cfg.get("subfolder", "papers"),
-        filename_pattern=obs_cfg.get("filename_pattern", "{year}_{author}_{title}"),
-        tags=obs_cfg.get("tags", ["paper"]),
-        wikilinks=obs_cfg.get("wikilinks", True),
-    )
-    papers = [Paper(**d) for d in papers_data]
-    added, skipped = vault.export_papers(papers)
-    msg = f"{added} note(s) added"
-    if skipped:
-        msg += f", {skipped} skipped (already exist)"
-    msg += f" → {vault.notes_dir}"
-    return {"ok": True, "msg": msg}
+    papers = [Paper.from_dict(d) for d in papers_data]
+    return push_to_obsidian(papers, cfg)
 
 
 @bp.route("/obsidian/export/<job_id>", methods=["POST"])
 def obsidian_export(job_id):
     papers = current_app.config.get(f"export_{job_id}")
     if not papers:
-        return "<mark>No results to export. Run a search first.</mark>"
+        return "<mark>Export results have expired. Please re-run your search.</mark>"
 
     cfg = _cfg()
-    papers_data = [_paper_to_dict(p) for p in papers]
+    papers_data = [p.to_dict() for p in papers]
     obs_job_id = _jobs().submit(_run_obsidian_export, papers_data, cfg)
     status_url = url_for("ui.obsidian_export_status", job_id=obs_job_id)
     return (
@@ -726,41 +761,32 @@ def obsidian_export_status(job_id):
         )
     _jobs().pop(job_id)
     if job.status == "error":
-        return f"<mark>Obsidian export failed: {job.error_message}</mark>"
+        return f"<mark>Obsidian export failed: {escape(job.error_message)}</mark>"
     result = job.result
     if result["ok"]:
-        return f'<ins>{result["msg"]}</ins>'
-    return f'<mark>{result["msg"]}</mark>'
-
-
-def _paper_to_dict(paper: Paper) -> dict:
-    """Serialise a Paper dataclass to a plain dict for thread-safe passing."""
-    from dataclasses import asdict
-    return asdict(paper)
+        return f"<ins>{escape(result['msg'])}</ins>"
+    return f"<mark>{escape(result['msg'])}</mark>"
 
 
 # ---------------------------------------------------------------------------
 # NotebookLM
 # ---------------------------------------------------------------------------
 
-def _run_notebook_from_query(name, query, max_results, filters, oa_only, pdf_only,
-                              artifacts, cfg):
+
+def _run_notebook_from_query(name, query, max_results, filters, oa_only, pdf_only, artifacts, cfg):
     """Executed in a worker thread — search → download → create notebook."""
     import asyncio
-    from mosaic.notebooklm_bridge import _require_notebooklm, create_notebook
+
     from mosaic.db import Cache
     from mosaic.downloader import download as dl_paper
+    from mosaic.notebooklm_bridge import _require_notebooklm, create_notebook
 
     _require_notebooklm()
 
     sources = build_sources(cfg)
     errors: list[str] = []
-    papers = search_all(sources, query, max_per_source=max_results,
-                        filters=filters, errors=errors)
-    if oa_only:
-        papers = [p for p in papers if p.is_open_access or p.pdf_url]
-    if pdf_only:
-        papers = [p for p in papers if p.pdf_url]
+    papers = search_all(sources, query, max_per_source=max_results, filters=filters, errors=errors)
+    papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only)
 
     if not papers:
         return {"ok": False, "msg": "No papers found for this query."}
@@ -788,6 +814,7 @@ def _run_notebook_from_query(name, query, max_results, filters, oa_only, pdf_onl
 def _run_notebook_from_dir(name, from_dir, artifacts, cfg):
     """Executed in a worker thread — import PDFs from directory."""
     import asyncio
+
     from mosaic.notebooklm_bridge import _require_notebooklm, create_notebook_from_dir
 
     _require_notebooklm()
@@ -806,7 +833,10 @@ def _run_notebook_from_dir(name, from_dir, artifacts, cfg):
 
 @bp.route("/notebook")
 def notebook_page():
-    return render_template("notebook.html", version=_version())
+    from mosaic.notebooklm_bridge import check_notebooklm_status
+
+    nb_status = check_notebooklm_status()
+    return render_template("notebook.html", version=_version(), nb_status=nb_status)
 
 
 @bp.route("/notebook", methods=["POST"])
@@ -814,7 +844,7 @@ def notebook_submit():
     _purge_stale()
     name = request.form.get("name", "").strip()
     if not name:
-        return '<article>Please enter a notebook name.</article>'
+        return "<article>Please enter a notebook name.</article>"
 
     input_mode = request.form.get("input_mode", "query")
     artifacts: set[str] = set(request.form.getlist("artifacts"))
@@ -823,24 +853,35 @@ def notebook_submit():
     if input_mode == "dir":
         from_dir = request.form.get("from_dir", "").strip()
         if not from_dir:
-            return '<article>Please enter a PDF directory path.</article>'
+            return "<article>Please enter a PDF directory path.</article>"
         job_id = _jobs().submit(_run_notebook_from_dir, name, from_dir, artifacts, cfg)
     else:
         query = request.form.get("query", "").strip()
         if not query:
-            return '<article>Please enter a search query.</article>'
-        max_results = int(request.form.get("max_results", 10))
-        filters = _build_filters(request.form)
+            return "<article>Please enter a search query.</article>"
+        max_results = _safe_int(request.form.get("max_results", 10))
+        filters, year_warning = _build_filters(request.form)
+        if year_warning:
+            return f"<article>{year_warning}</article>"
         oa_only = request.form.get("oa_only") == "on"
         pdf_only = request.form.get("pdf_only") == "on"
-        job_id = _jobs().submit(_run_notebook_from_query, name, query, max_results,
-                                filters, oa_only, pdf_only, artifacts, cfg)
+        job_id = _jobs().submit(
+            _run_notebook_from_query,
+            name,
+            query,
+            max_results,
+            filters,
+            oa_only,
+            pdf_only,
+            artifacts,
+            cfg,
+        )
 
     status_url = url_for("ui.notebook_status", job_id=job_id)
     return (
         f'<div hx-get="{status_url}" hx-trigger="every 2s" hx-target="#nb-results" hx-swap="innerHTML">'
-        f'<article aria-busy="true">Creating notebook <strong>{name}</strong>&hellip; '
-        f'(this may take a minute)</article></div>'
+        f'<article aria-busy="true">Creating notebook <strong>{escape(name)}</strong>&hellip; '
+        f"(this may take a minute)</article></div>"
     )
 
 
@@ -848,7 +889,7 @@ def notebook_submit():
 def notebook_status(job_id):
     job = _jobs().get(job_id)
     if job is None:
-        return '<article>Job not found.</article>'
+        return "<article>Job not found.</article>"
 
     if job.status == "running":
         status_url = url_for("ui.notebook_status", job_id=job_id)
@@ -859,26 +900,31 @@ def notebook_status(job_id):
 
     _jobs().pop(job_id)
     if job.status == "error":
-        return f'<article><mark>Notebook creation failed: {job.error_message}</mark></article>'
+        return (
+            f"<article><mark>Notebook creation failed: {escape(job.error_message)}</mark></article>"
+        )
 
     result = job.result
     if not result["ok"]:
-        return f'<article><mark>{result["msg"]}</mark></article>'
+        return f"<article><mark>{escape(result['msg'])}</mark></article>"
 
     nb_id = result["nb_id"]
     nb_url = f"https://notebooklm.google.com/notebook/{nb_id}"
-    lines = [f'<ins>Notebook created successfully!</ins>']
+    lines = ["<ins>Notebook created successfully!</ins>"]
     if "paper_count" in result:
-        lines.append(f'<p>{result["paper_count"]} paper(s) found, '
-                     f'{result["downloaded"]} PDF(s) added.</p>')
-    lines.append(f'<p><a href="{nb_url}" target="_blank" rel="noopener">'
-                 f'Open in NotebookLM &rarr;</a></p>')
+        lines.append(
+            f"<p>{result['paper_count']} paper(s) found, {result['downloaded']} PDF(s) added.</p>"
+        )
+    lines.append(
+        f'<p><a href="{nb_url}" target="_blank" rel="noopener">Open in NotebookLM &rarr;</a></p>'
+    )
     return "".join(lines)
 
 
 # ---------------------------------------------------------------------------
 # Bulk download
 # ---------------------------------------------------------------------------
+
 
 @bp.route("/bulk")
 def bulk_page():
@@ -916,30 +962,31 @@ def bulk_submit():
 
     uploaded = request.files.get("file")
     if not uploaded or not uploaded.filename:
-        return '<article>Please select a .bib or .csv file.</article>'
+        return "<article>Please select a .bib or .csv file.</article>"
 
     suffix = Path(uploaded.filename).suffix.lower()
     if suffix not in (".bib", ".csv"):
-        return '<article>Unsupported file type. Use .bib or .csv.</article>'
+        return "<article>Unsupported file type. Use .bib or .csv.</article>"
 
     # Save to a temp file for processing
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         content = uploaded.read(_MAX_UPLOAD_BYTES + 1)
         if len(content) > _MAX_UPLOAD_BYTES:
-            return '<article>File too large (max 10 MB).</article>'
+            return "<article>File too large (max 10 MB).</article>"
         tmp.write(content)
         tmp_path = Path(tmp.name)
 
     try:
         from mosaic.bulk import read_dois
+
         dois = read_dois(tmp_path)
     except ValueError as e:
-        return f'<article>{e}</article>'
+        return f"<article>{e}</article>"
     finally:
         tmp_path.unlink(missing_ok=True)
 
     if not dois:
-        return '<article>No DOIs found in the uploaded file.</article>'
+        return "<article>No DOIs found in the uploaded file.</article>"
 
     cfg = _cfg()
     job_id = _jobs().submit(_run_bulk_download, dois, cfg, cfg["db_path"])
@@ -956,7 +1003,7 @@ def bulk_submit():
 def bulk_status(job_id):
     job = _jobs().get(job_id)
     if job is None:
-        return '<article>Job not found.</article>'
+        return "<article>Job not found.</article>"
 
     if job.status == "running":
         meta = current_app.config.get(f"job_meta_{job_id}", {})
@@ -971,16 +1018,22 @@ def bulk_status(job_id):
     _jobs().pop(job_id)
 
     if job.status == "error":
-        return f'<article>Bulk download failed: {job.error_message}</article>'
+        return f"<article>Bulk download failed: {escape(job.error_message)}</article>"
 
     result = job.result
-    html = f'<p><strong>Done:</strong> {result["ok"]} downloaded, {result["fail"]} failed.</p>'
+    html = f"<p><strong>Done:</strong> {result['ok']} downloaded, {result['fail']} failed.</p>"
     if result["results"]:
         html += '<table role="grid"><thead><tr><th>DOI</th><th>Status</th><th>File</th></tr></thead><tbody>'
         for r in result["results"]:
-            icon = '<span class="badge-oa">&#10003;</span>' if r["status"] == "ok" else '<span class="badge-closed">&#10007;</span>'
-            html += f'<tr><td>{r["doi"]}</td><td>{icon}</td><td>{r["path"]}</td></tr>'
-        html += '</tbody></table>'
+            icon = (
+                '<span class="badge-oa">&#10003;</span>'
+                if r["status"] == "ok"
+                else '<span class="badge-closed">&#10007;</span>'
+            )
+            html += (
+                f"<tr><td>{escape(r['doi'])}</td><td>{icon}</td><td>{escape(r['path'])}</td></tr>"
+            )
+        html += "</tbody></table>"
     return html
 
 
@@ -988,9 +1041,11 @@ def bulk_status(job_id):
 # Auth sessions
 # ---------------------------------------------------------------------------
 
+
 @bp.route("/sessions")
 def sessions_page():
     from mosaic.auth import list_sessions
+
     sessions = list_sessions()
     return render_template("sessions.html", sessions=sessions, version=_version())
 
@@ -998,6 +1053,7 @@ def sessions_page():
 @bp.route("/sessions/delete/<name>", methods=["POST"])
 def session_delete(name):
     from mosaic.auth import delete_session
+
     if delete_session(name):
         flash(f"Session '{name}' deleted.", "success")
     else:

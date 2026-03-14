@@ -1,7 +1,11 @@
 """Semantic Scholar Academic Graph API."""
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
+from mosaic.parsing import parse_authors_name_key
 from mosaic.sources.base import BaseSource
 
 _BASE = "https://api.semanticscholar.org/graph/v1"
@@ -14,7 +18,9 @@ class SemanticScholarSource(BaseSource):
     def __init__(self, api_key: str = ""):
         self._headers = {"x-api-key": api_key} if api_key else {}
 
-    def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Search the Semantic Scholar paper search endpoint.
 
         Translates the query and optional year filters into Semantic Scholar
@@ -30,7 +36,7 @@ class SemanticScholarSource(BaseSource):
         Returns:
             A list of Paper objects from the ``data`` array in the response.
         """
-        q = (filters.raw_query if filters and filters.raw_query else query)
+        q = filters.raw_query if filters and filters.raw_query else query
         params: dict = {"query": q, "limit": min(max_results, 100), "fields": _FIELDS}
         if filters:
             # SS supports year=YYYY or year=YYYY-YYYY
@@ -38,16 +44,15 @@ class SemanticScholarSource(BaseSource):
                 params["year"] = f"{min(filters.years)}-{max(filters.years)}"
             elif filters.year_from or filters.year_to:
                 y_from = filters.year_from or filters.year_to
-                y_to   = filters.year_to   or filters.year_from
+                y_to = filters.year_to or filters.year_from
                 params["year"] = f"{y_from}-{y_to}" if y_from != y_to else str(y_from)
-        resp = httpx.get(
-            f"{_BASE}/paper/search",
-            params=params,
-            headers=self._headers,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        with httpx.Client(timeout=30, headers=self._headers) as client:
+            resp = client.get(
+                f"{_BASE}/paper/search",
+                params=params,
+            )
+            resp.raise_for_status()
+            data = resp.json()
         return [self._parse(item) for item in data.get("data", [])]
 
     def _parse(self, item: dict) -> Paper:
@@ -67,7 +72,7 @@ class SemanticScholarSource(BaseSource):
         venue = item.get("publicationVenue") or {}
         journal = item.get("journal") or {}
 
-        authors = [a.get("name", "") for a in item.get("authors", [])]
+        authors = parse_authors_name_key(item.get("authors") or [])
 
         return Paper(
             title=item.get("title") or "",

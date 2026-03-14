@@ -1,17 +1,15 @@
 """Tests for the generic CustomSource."""
+
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from mosaic.sources.custom import CustomSource, _get_nested, _parse_year
-
 
 # ---------------------------------------------------------------------------
 # Unit helpers
 # ---------------------------------------------------------------------------
+
 
 class TestGetNested:
     def test_top_level_key(self):
@@ -61,26 +59,26 @@ _BASE_CFG = {
     "query_param": "q",
     "results_path": "results",
     "fields": {
-        "title":    "title",
-        "doi":      "doi",
-        "year":     "year",
+        "title": "title",
+        "doi": "doi",
+        "year": "year",
         "abstract": "abstract",
-        "journal":  "journal",
-        "pdf_url":  "pdf",
-        "url":      "link",
-        "authors":  "authors",
+        "journal": "journal",
+        "pdf_url": "pdf",
+        "url": "link",
+        "authors": "authors",
     },
 }
 
 _ITEM = {
-    "title":    "A Test Paper",
-    "doi":      "10.1234/test",
-    "year":     2023,
+    "title": "A Test Paper",
+    "doi": "10.1234/test",
+    "year": 2023,
     "abstract": "An abstract.",
-    "journal":  "Test Journal",
-    "pdf":      "https://example.com/paper.pdf",
-    "link":     "https://example.com/paper",
-    "authors":  ["Alice Smith", "Bob Jones"],
+    "journal": "Test Journal",
+    "pdf": "https://example.com/paper.pdf",
+    "link": "https://example.com/paper",
+    "authors": ["Alice Smith", "Bob Jones"],
 }
 
 
@@ -95,6 +93,7 @@ def _make_response(items: list) -> MagicMock:
 # CustomSource.available()
 # ---------------------------------------------------------------------------
 
+
 class TestAvailable:
     def test_true_when_url_set(self):
         src = CustomSource(_BASE_CFG)
@@ -108,6 +107,7 @@ class TestAvailable:
 # ---------------------------------------------------------------------------
 # CustomSource.search() — GET
 # ---------------------------------------------------------------------------
+
 
 class TestSearchGet:
     def _search(self, cfg_override=None, items=None):
@@ -141,10 +141,12 @@ class TestSearchGet:
         assert mock_get.call_args.kwargs["params"]["limit"] == 10
 
     def test_api_key_header_set(self):
-        _, mock_get = self._search({
-            "api_key": "secret",
-            "api_key_header": "X-My-Key",
-        })
+        _, mock_get = self._search(
+            {
+                "api_key": "secret",
+                "api_key_header": "X-My-Key",
+            }
+        )
         assert mock_get.call_args.kwargs["headers"]["X-My-Key"] == "secret"
 
     def test_no_api_key_no_extra_header(self):
@@ -158,6 +160,7 @@ class TestSearchGet:
 
     def test_raw_query_used_when_filter_set(self):
         from mosaic.models import SearchFilters
+
         src = CustomSource(_BASE_CFG)
         resp = _make_response([_ITEM])
         with patch("httpx.get", return_value=resp) as mock_get:
@@ -168,6 +171,7 @@ class TestSearchGet:
 # ---------------------------------------------------------------------------
 # CustomSource.search() — POST
 # ---------------------------------------------------------------------------
+
 
 class TestSearchPost:
     def _search_post(self, cfg_override=None):
@@ -195,6 +199,7 @@ class TestSearchPost:
 # CustomSource._parse() — field mapping
 # ---------------------------------------------------------------------------
 
+
 class TestParse:
     def _parse(self, item, cfg_override=None):
         cfg = {**_BASE_CFG, **(cfg_override or {})}
@@ -203,14 +208,14 @@ class TestParse:
 
     def test_basic_fields(self):
         p = self._parse(_ITEM)
-        assert p.title    == "A Test Paper"
-        assert p.doi      == "10.1234/test"
-        assert p.year     == 2023
+        assert p.title == "A Test Paper"
+        assert p.doi == "10.1234/test"
+        assert p.year == 2023
         assert p.abstract == "An abstract."
-        assert p.journal  == "Test Journal"
-        assert p.pdf_url  == "https://example.com/paper.pdf"
-        assert p.url      == "https://example.com/paper"
-        assert p.source   == "TestSource"
+        assert p.journal == "Test Journal"
+        assert p.pdf_url == "https://example.com/paper.pdf"
+        assert p.url == "https://example.com/paper"
+        assert p.source == "TestSource"
 
     def test_authors_flat_array(self):
         p = self._parse(_ITEM)
@@ -218,10 +223,13 @@ class TestParse:
 
     def test_authors_array_of_objects(self):
         item = {**_ITEM, "contributors": [{"name": "Carol"}, {"name": "Dave"}]}
-        p = self._parse(item, {
-            "authors_path": "contributors",
-            "authors_field": "name",
-        })
+        p = self._parse(
+            item,
+            {
+                "authors_path": "contributors",
+                "authors_field": "name",
+            },
+        )
         assert p.authors == ["Carol", "Dave"]
 
     def test_nested_field_mapping(self):

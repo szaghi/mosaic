@@ -1,7 +1,8 @@
 """Tests for mosaic.auth — session management and browser download."""
+
 from __future__ import annotations
+
 import asyncio
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,24 +10,25 @@ import pytest
 
 from mosaic.auth import (
     _absolutise,
+    _find_pdf_url,
     _load_meta,
     _meta_path,
+    _require_playwright,
     _save_meta,
+    browser_download,
     delete_session,
     find_session_for_url,
     list_sessions,
     session_path,
-    browser_download,
-    _find_pdf_url,
-    _require_playwright,
 )
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_session(tmp_path: Path, name: str, login_url: str) -> Path:
     """Create a fake session file + metadata in tmp_path."""
     import mosaic.auth as auth_mod
+
     orig = auth_mod._SESSIONS_DIR
     auth_mod._SESSIONS_DIR = tmp_path
     try:
@@ -40,9 +42,11 @@ def _make_session(tmp_path: Path, name: str, login_url: str) -> Path:
 
 # ── session path helpers ──────────────────────────────────────────────────────
 
+
 class TestSessionPath:
     def test_returns_json_path(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -52,6 +56,7 @@ class TestSessionPath:
 
     def test_meta_path_suffix(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -62,9 +67,11 @@ class TestSessionPath:
 
 # ── metadata save / load ──────────────────────────────────────────────────────
 
+
 class TestMeta:
     def test_save_and_load_roundtrip(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -77,6 +84,7 @@ class TestMeta:
 
     def test_load_missing_returns_empty(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -87,9 +95,11 @@ class TestMeta:
 
 # ── list_sessions ─────────────────────────────────────────────────────────────
 
+
 class TestListSessions:
     def test_empty_when_no_dir(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path / "nonexistent"
         try:
@@ -99,6 +109,7 @@ class TestListSessions:
 
     def test_lists_saved_sessions(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -113,6 +124,7 @@ class TestListSessions:
 
     def test_includes_domain(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -124,6 +136,7 @@ class TestListSessions:
 
     def test_excludes_meta_files(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -136,9 +149,11 @@ class TestListSessions:
 
 # ── delete_session ────────────────────────────────────────────────────────────
 
+
 class TestDeleteSession:
     def test_returns_true_when_exists(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -150,6 +165,7 @@ class TestDeleteSession:
 
     def test_removes_meta_file(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -161,6 +177,7 @@ class TestDeleteSession:
 
     def test_returns_false_when_not_exists(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -171,9 +188,11 @@ class TestDeleteSession:
 
 # ── find_session_for_url ──────────────────────────────────────────────────────
 
+
 class TestFindSessionForUrl:
     def test_matches_by_domain(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -185,6 +204,7 @@ class TestFindSessionForUrl:
 
     def test_returns_none_when_no_match(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -196,6 +216,7 @@ class TestFindSessionForUrl:
 
     def test_returns_none_for_empty_url(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -205,6 +226,7 @@ class TestFindSessionForUrl:
 
     def test_returns_none_when_no_sessions_dir(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path / "nonexistent"
         try:
@@ -215,10 +237,13 @@ class TestFindSessionForUrl:
 
 # ── _absolutise ───────────────────────────────────────────────────────────────
 
+
 class TestAbsolutise:
     def test_absolute_url_unchanged(self):
-        assert _absolutise("https://example.com/file.pdf", "https://other.com") == \
-               "https://example.com/file.pdf"
+        assert (
+            _absolutise("https://example.com/file.pdf", "https://other.com")
+            == "https://example.com/file.pdf"
+        )
 
     def test_root_relative(self):
         result = _absolutise("/download/paper.pdf", "https://example.com/article/123")
@@ -231,6 +256,7 @@ class TestAbsolutise:
 
 # ── _require_playwright ───────────────────────────────────────────────────────
 
+
 class TestRequirePlaywright:
     def test_raises_system_exit_when_not_installed(self):
         with patch.dict("sys.modules", {"playwright": None}):
@@ -239,6 +265,7 @@ class TestRequirePlaywright:
 
 
 # ── _find_pdf_url ─────────────────────────────────────────────────────────────
+
 
 class TestFindPdfUrl:
     def _run(self, coro):
@@ -287,17 +314,21 @@ class TestFindPdfUrl:
 
 # ── browser_download ──────────────────────────────────────────────────────────
 
+
 class TestBrowserDownload:
     def _run(self, coro):
         return asyncio.run(coro)
 
     def test_returns_false_when_session_missing(self, tmp_path):
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
             result = self._run(
-                browser_download("https://example.com/article", str(tmp_path / "out.pdf"), "elsevier")
+                browser_download(
+                    "https://example.com/article", str(tmp_path / "out.pdf"), "elsevier"
+                )
             )
             assert result is False
         finally:
@@ -305,7 +336,9 @@ class TestBrowserDownload:
 
     def test_returns_false_when_no_pdf_link_found(self, tmp_path):
         import sys
+
         import mosaic.auth as auth_mod
+
         orig = auth_mod._SESSIONS_DIR
         auth_mod._SESSIONS_DIR = tmp_path
         try:
@@ -332,9 +365,11 @@ class TestBrowserDownload:
             mock_pw_module = MagicMock()
             mock_pw_module.async_playwright = MagicMock(return_value=mock_pw_cm)
 
-            with patch("mosaic.auth._require_playwright", return_value=None), \
-                 patch("mosaic.auth._launch_browser", AsyncMock(return_value=mock_browser)), \
-                 patch.dict(sys.modules, {"playwright.async_api": mock_pw_module}):
+            with (
+                patch("mosaic.auth._require_playwright", return_value=None),
+                patch("mosaic.auth._launch_browser", AsyncMock(return_value=mock_browser)),
+                patch.dict(sys.modules, {"playwright.async_api": mock_pw_module}),
+            ):
                 result = self._run(
                     browser_download(
                         "https://sciencedirect.com/article/123",

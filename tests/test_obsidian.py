@@ -1,14 +1,11 @@
 """Tests for mosaic.obsidian — Obsidian vault note generation."""
-from __future__ import annotations
 
-import textwrap
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
 from mosaic.models import Paper
 from mosaic.obsidian import ObsidianVault, _frontmatter, _yaml_str
-
 
 # ── _yaml_str ────────────────────────────────────────────────────────────────
 

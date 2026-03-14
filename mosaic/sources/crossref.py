@@ -1,8 +1,11 @@
 """Crossref REST API search source."""
+
 from __future__ import annotations
-import re
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
+from mosaic.parsing import extract_first, parse_authors_given_family, parse_year, strip_html
 from mosaic.sources.base import BaseSource
 
 _BASE = "https://api.crossref.org/works"
@@ -77,9 +80,10 @@ class CrossrefSource(BaseSource):
         if self._email:
             params["mailto"] = self._email
 
-        resp = httpx.get(_BASE, params=params, timeout=30)
-        resp.raise_for_status()
-        items = resp.json().get("message", {}).get("items", [])
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(_BASE, params=params)
+            resp.raise_for_status()
+            items = resp.json().get("message", {}).get("items", [])
         return [self._parse(item) for item in items]
 
     def _parse(self, item: dict) -> Paper:
@@ -95,47 +99,31 @@ class CrossrefSource(BaseSource):
             found in the ``link`` array.
         """
         # title is a list; take the first element
-        title_list = item.get("title") or []
-        title = title_list[0] if title_list else ""
+        title = extract_first(item.get("title")) or ""
 
         # authors: list of {given, family} dicts → "Family, Given"
-        raw_authors = item.get("author") or []
-        authors: list[str] = []
-        for a in raw_authors:
-            family = a.get("family", "")
-            given = a.get("given", "")
-            if family and given:
-                authors.append(f"{family}, {given}")
-            elif family:
-                authors.append(family)
-            elif given:
-                authors.append(given)
+        authors = parse_authors_given_family(item.get("author") or [])
 
         # year: published.date-parts[0][0]
         year: int | None = None
         date_parts = item.get("published", {}).get("date-parts", [])
         if date_parts and date_parts[0]:
-            try:
-                year = int(date_parts[0][0])
-            except (TypeError, ValueError):
-                year = None
+            year = parse_year(date_parts[0][0])
 
         doi = item.get("DOI") or None
 
         # abstract may contain JATS XML tags — strip them
-        raw_abstract = item.get("abstract") or ""
-        abstract = re.sub(r"<[^>]+>", " ", raw_abstract).strip() or None
+        abstract = strip_html(item.get("abstract"))
 
         # journal: container-title is a list; take the first element
-        container = item.get("container-title") or []
-        journal = container[0] if container else None
+        journal = extract_first(item.get("container-title"))
 
         # URL: canonical DOI URL
         url = item.get("URL") or None
 
         # PDF URL: find link entry with content-type == "application/pdf"
         pdf_url: str | None = None
-        for link in (item.get("link") or []):
+        for link in item.get("link") or []:
             if link.get("content-type") == "application/pdf":
                 pdf_url = link.get("URL") or None
                 break

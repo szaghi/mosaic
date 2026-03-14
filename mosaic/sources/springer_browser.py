@@ -6,7 +6,9 @@ session is needed — the search interface is publicly accessible.
 
 Uses Firefox headless (preferred via _HEADLESS_PREFERENCE).
 """
+
 from __future__ import annotations
+
 import asyncio
 import math
 import re
@@ -26,19 +28,19 @@ class SpringerBrowserSource(BaseSource):
     name = "Springer"
 
     def available(self) -> bool:
-        """Return True if the ``playwright`` package is installed.
+        """Return True if Playwright is installed and a browser binary exists.
 
         Returns:
-            True when Playwright is importable; False if it is not installed.
+            True when Playwright is importable and at least one browser is
+            installed; False otherwise.
         """
-        try:
-            import playwright  # noqa: F401
-            return True
-        except ImportError:
-            return False
+        from mosaic.auth import has_browser
 
-    def search(self, query: str, max_results: int = 25,
-               filters: SearchFilters | None = None) -> list[Paper]:
+        return has_browser()
+
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Search Springer Nature via a headless browser.
 
         Fetches one or more paginated result pages (20 results per page) and
@@ -56,6 +58,7 @@ class SpringerBrowserSource(BaseSource):
         """
         try:
             from mosaic.auth import _require_playwright
+
             _require_playwright()
             return asyncio.run(self._browser_search(query, max_results, filters))
         except Exception:
@@ -63,8 +66,9 @@ class SpringerBrowserSource(BaseSource):
 
     # ── async internals ───────────────────────────────────────────────────────
 
-    async def _browser_search(self, query: str, max_results: int,
-                               filters: SearchFilters | None) -> list[Paper]:
+    async def _browser_search(
+        self, query: str, max_results: int, filters: SearchFilters | None
+    ) -> list[Paper]:
         """Async implementation of the Springer browser search.
 
         Iterates over paginated Springer result pages, extracting up to
@@ -79,8 +83,9 @@ class SpringerBrowserSource(BaseSource):
         Returns:
             A list of Paper objects extracted from the result pages.
         """
-        from mosaic.auth import _launch_browser
         from playwright.async_api import async_playwright
+
+        from mosaic.auth import _launch_browser
 
         pages_needed = math.ceil(max_results / _PAGE_SIZE)
         papers: list[Paper] = []
@@ -91,6 +96,7 @@ class SpringerBrowserSource(BaseSource):
             page = await context.new_page()
             try:
                 from rich import print as rprint
+
                 for page_num in range(1, pages_needed + 1):
                     url = self._build_url(query, filters, page_num)
                     await page.goto(url, wait_until="networkidle", timeout=30_000)
@@ -113,8 +119,7 @@ class SpringerBrowserSource(BaseSource):
                 await browser.close()
         return papers
 
-    def _build_url(self, query: str, filters: SearchFilters | None,
-                   page: int) -> str:
+    def _build_url(self, query: str, filters: SearchFilters | None, page: int) -> str:
         """Build the Springer search URL for the given query, filters, and page.
 
         Uses ``title`` param for title-scoped searches and ``query`` otherwise.
@@ -142,11 +147,11 @@ class SpringerBrowserSource(BaseSource):
 
         if filters:
             y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_to = filters.year_to or (max(filters.years) if filters.years else None)
             if y_from or y_to:
                 params["date"] = "custom"
                 params["dateFrom"] = y_from or y_to
-                params["dateTo"]   = y_to or y_from
+                params["dateTo"] = y_to or y_from
             if filters.journal:
                 params["query"] = (params.get("query", "") + f" {filters.journal}").strip()
 

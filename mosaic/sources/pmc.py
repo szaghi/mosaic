@@ -1,10 +1,14 @@
 """PubMed Central (PMC) full-text search source via NCBI E-utilities."""
-from __future__ import annotations
-import httpx
-from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
 
-_ESEARCH  = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+from __future__ import annotations
+
+import httpx
+
+from mosaic.models import Paper, SearchFilters
+from mosaic.parsing import parse_authors_name_key, parse_year_earliest
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+
+_ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _ESUMMARY = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
 
 
@@ -24,7 +28,9 @@ class PMCSource(BaseSource):
     def available(self) -> bool:
         return True
 
-    def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Search PubMed Central using the NCBI E-utilities two-step flow.
 
         First calls ``esearch`` (db=pmc) to retrieve a list of numeric PMC IDs,
@@ -44,14 +50,7 @@ class PMCSource(BaseSource):
             results have ``is_open_access=True`` and a direct PDF URL.
         """
         # ── build query (same PMC/PubMed tag syntax) ───────────────────
-        if filters and filters.raw_query:
-            pmc_query = filters.raw_query
-        elif filters and filters.field == "title":
-            pmc_query = f"{query}[ti]"
-        elif filters and filters.field == "abstract":
-            pmc_query = f"{query}[ab]"
-        else:
-            pmc_query = query
+        pmc_query = build_field_query(query, filters, "{}[ti]", "{}[ab]")
 
         if filters:
             if filters.authors:
@@ -71,33 +70,33 @@ class PMCSource(BaseSource):
         # Date filtering: use mindate/maxdate API params rather than
         # embedding [pdat] in the query string — far more reliable.
         if filters:
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 params["datetype"] = "pdat"
-                params["mindate"]  = str(y_from or y_to)
-                params["maxdate"]  = str(y_to   or y_from)
+                params["mindate"] = str(y_from or y_to)
+                params["maxdate"] = str(y_to or y_from)
         if self._api_key:
             params["api_key"] = self._api_key
 
-        resp = httpx.get(_ESEARCH, params=params, timeout=30)
-        resp.raise_for_status()
-        pmc_ids = resp.json().get("esearchresult", {}).get("idlist", [])
-        if not pmc_ids:
-            return []
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(_ESEARCH, params=params)
+            resp.raise_for_status()
+            pmc_ids = resp.json().get("esearchresult", {}).get("idlist", [])
+            if not pmc_ids:
+                return []
 
-        # ── step 2: esummary (db=pmc) → metadata (POST avoids URL-length limits)
-        sum_data: dict = {
-            "db": "pmc",
-            "id": ",".join(pmc_ids),
-            "retmode": "json",
-        }
-        if self._api_key:
-            sum_data["api_key"] = self._api_key
+            # ── step 2: esummary (db=pmc) → metadata (POST avoids URL-length limits)
+            sum_data: dict = {
+                "db": "pmc",
+                "id": ",".join(pmc_ids),
+                "retmode": "json",
+            }
+            if self._api_key:
+                sum_data["api_key"] = self._api_key
 
-        resp2 = httpx.post(_ESUMMARY, data=sum_data, timeout=60)
-        resp2.raise_for_status()
-        result = resp2.json().get("result", {})
+            resp2 = client.post(_ESUMMARY, data=sum_data, timeout=60)
+            resp2.raise_for_status()
+            result = resp2.json().get("result", {})
 
         return [self._parse(result[uid]) for uid in pmc_ids if uid in result]
 
@@ -114,18 +113,10 @@ class PMCSource(BaseSource):
             A Paper with ``is_open_access=True`` and a direct PMC PDF URL
             built from the numeric ``uid``.
         """
-        authors = [a.get("name", "") for a in (item.get("authors") or [])]
+        authors = parse_authors_name_key(item.get("authors") or [])
 
         # year: prefer the earliest of pubdate and epubdate (see PubMedSource).
-        year: int | None = None
-        for field in ("epubdate", "pubdate"):
-            raw = str(item.get(field) or "")
-            if raw:
-                part = raw.split()[0]
-                if part.isdigit() and len(part) == 4:
-                    y = int(part)
-                    if year is None or y < year:
-                        year = y
+        year = parse_year_earliest(item, ["epubdate", "pubdate"])
 
         # extract DOI from articleids list
         doi: str | None = None
@@ -136,7 +127,7 @@ class PMCSource(BaseSource):
 
         uid = str(item.get("uid") or "")
         pdf_url = f"https://pmc.ncbi.nlm.nih.gov/articles/PMC{uid}/pdf/" if uid else None
-        url     = f"https://pmc.ncbi.nlm.nih.gov/articles/PMC{uid}/"    if uid else None
+        url = f"https://pmc.ncbi.nlm.nih.gov/articles/PMC{uid}/" if uid else None
 
         return Paper(
             title=item.get("title") or "",

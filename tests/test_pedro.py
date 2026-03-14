@@ -1,5 +1,6 @@
 """Tests for PEDroSource — search-results page parsing and search logic."""
-from unittest.mock import MagicMock, patch, call
+
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -75,6 +76,7 @@ _RESULTS_HTML_WITH_ENTITIES = """\
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _make_resp(status=200, text=""):
     m = MagicMock()
     m.status_code = status
@@ -97,6 +99,7 @@ def _mock_client(session_text=_SESSION_HTML, results_text=_RESULTS_HTML):
 
 # ── _unescape ─────────────────────────────────────────────────────────────────
 
+
 class TestUnescape:
     def test_apostrophe_numeric(self):
         assert _unescape("Japan&#039;s") == "Japan's"
@@ -115,6 +118,7 @@ class TestUnescape:
 
 
 # ── _parse_page ───────────────────────────────────────────────────────────────
+
 
 class TestParsePage:
     def test_returns_two_papers(self):
@@ -182,6 +186,7 @@ class TestParsePage:
 
 # ── available ─────────────────────────────────────────────────────────────────
 
+
 class TestAvailable:
     def test_disabled_by_default(self):
         assert PEDroSource().available() is False
@@ -191,6 +196,7 @@ class TestAvailable:
 
 
 # ── search ────────────────────────────────────────────────────────────────────
+
 
 class TestSearch:
     src = PEDroSource(acknowledge_fair_use=True, rate_limit_delay=0)
@@ -287,8 +293,10 @@ class TestSearch:
     def test_custom_delay_passed_to_sleep(self):
         src = PEDroSource(acknowledge_fair_use=True, rate_limit_delay=0.1)
         mock_client = _mock_client()
-        with patch("httpx.Client", return_value=mock_client), \
-             patch("mosaic.sources.pedro.time.sleep") as mock_sleep:
+        with (
+            patch("httpx.Client", return_value=mock_client),
+            patch("mosaic.sources.pedro.time.sleep") as mock_sleep,
+        ):
             src.search("exercise", max_results=5)
         # time.sleep called at least once (after session request)
         assert mock_sleep.call_count >= 1

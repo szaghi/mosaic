@@ -4,10 +4,14 @@ Uses the official IEEE Xplore REST API, which requires a free API key and
 provides access to IEEE journals, transactions, magazines, and conference
 proceedings. The source is disabled when ``api_key`` is empty.
 """
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import parse_authors_name_key
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
 
 _BASE = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
 
@@ -67,14 +71,7 @@ class IEEEXploreSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``articles`` array.
         """
-        if filters and filters.raw_query:
-            querytext = filters.raw_query
-        elif filters and filters.field == "title":
-            querytext = f'title:"{query}"'
-        elif filters and filters.field == "abstract":
-            querytext = f'abstract:"{query}"'
-        else:
-            querytext = query
+        querytext = build_field_query(query, filters, 'title:"{}"', 'abstract:"{}"')
 
         params: dict = {
             "querytext": querytext,
@@ -83,16 +80,17 @@ class IEEEXploreSource(BaseSource):
         }
 
         if filters:
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_from, y_to = extract_year_range(filters)
             if y_from:
                 params["start_year"] = y_from
             if y_to:
                 params["end_year"] = y_to
 
-        resp = httpx.get(_BASE, params=params, timeout=30)
-        resp.raise_for_status()
-        return [self._parse(item) for item in resp.json().get("articles", [])]
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(_BASE, params=params)
+            resp.raise_for_status()
+            articles = resp.json().get("articles", [])
+        return [self._parse(item) for item in articles]
 
     def _parse(self, item: dict) -> Paper:
         """Parse a single IEEE Xplore article dict into a Paper.
@@ -113,7 +111,7 @@ class IEEEXploreSource(BaseSource):
 
         authors_wrapper = item.get("authors") or {}
         authors_list = authors_wrapper.get("authors") or []
-        authors = [a.get("full_name", "") for a in authors_list if a.get("full_name")]
+        authors = parse_authors_name_key(authors_list, key="full_name")
 
         year_raw = item.get("publication_year")
         year: int | None = int(year_raw) if year_raw else None

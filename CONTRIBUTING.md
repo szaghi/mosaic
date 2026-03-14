@@ -72,7 +72,7 @@ All reports will be kept confidential.
 - [git](https://git-scm.com/)
 - [pipx](https://pipx.pypa.io/) or a virtualenv manager of your choice
 - [git-cliff](https://git-cliff.org/) — only needed if you update the changelog
-- [Node.js ≥ 20](https://nodejs.org/) — only needed if you update the docs
+- [Node.js >= 20](https://nodejs.org/) — only needed if you update the docs
 
 ### Fork and clone
 
@@ -88,14 +88,18 @@ git remote add upstream https://github.com/szaghi/mosaic.git
 ### Create a virtual environment and install
 
 ```bash
+# Create and activate a venv (required — system Python is externally managed)
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 # Core package + all dev dependencies
 pip install -e ".[dev]"
 
-# Optional: also install the NotebookLM integration
-pip install -e ".[dev,notebooklm]"
+# Optional extras
+pip install -e ".[dev,notebooklm]"   # NotebookLM integration
+pip install -e ".[dev,browser]"      # Playwright browser sources
+pip install -e ".[dev,ui]"           # Flask web UI
+pip install -e ".[dev,desktop]"      # Standalone desktop app (PyInstaller)
 ```
 
 ### Verify the setup
@@ -123,9 +127,9 @@ change — no manual file copying needed.
 Run it after every edit session before testing with the CLI:
 
 ```bash
-# edit source files …
+# edit source files ...
 make dev
-mosaic search "…" --source pubmed
+mosaic search "..." --source pubmed
 ```
 
 `pipx upgrade mosaic-search` continues to work normally and will overwrite the
@@ -142,22 +146,47 @@ mosaic/
 │   ├── cli.py              # Typer app — entry point and command wiring
 │   ├── models.py           # Paper dataclass and SearchFilters
 │   ├── search.py           # search_all() — fan-out and deduplication
+│   ├── source_registry.py  # Source registry, factory functions, shorthand mappings
+│   ├── services.py         # Shared business logic (filter building, paper merging)
+│   ├── workflows.py        # Multi-step orchestration (Zotero/Obsidian export, batch download)
+│   ├── parsing.py          # Shared parsing utilities (year, authors, DOI, HTML)
+│   ├── errors.py           # Custom exception hierarchy and logging setup
 │   ├── config.py           # load/save ~/.config/mosaic/config.toml
 │   ├── db.py               # SQLite cache (papers + downloads)
-│   ├── downloader.py       # PDF download — pdf_url → Unpaywall → browser session
+│   ├── downloader.py       # PDF download — pdf_url -> Unpaywall -> browser session
 │   ├── auth.py             # Browser session management (Playwright)
 │   ├── exporter.py         # Export to .md / .markdown / .csv / .json / .bib
-│   ├── notebooklm_bridge.py# NotebookLM notebook creation
+│   ├── bulk.py             # DOI extraction from .bib / .csv files
+│   ├── similar.py          # find_similar() via OpenAlex + Semantic Scholar
+│   ├── zotero.py           # Zotero integration (local + web API)
+│   ├── obsidian.py         # Obsidian vault export
+│   ├── notebooklm_bridge.py # NotebookLM notebook creation
+│   ├── gui_launcher.py     # Standalone desktop app launcher (PyInstaller)
 │   └── sources/
-│       ├── base.py         # BaseSource ABC
+│       ├── base.py         # BaseSource ABC + shared helpers
 │       ├── arxiv.py
 │       ├── semantic_scholar.py
 │       ├── sciencedirect.py
+│       ├── sciencedirect_browser.py
+│       ├── scopus_api.py
+│       ├── scopus_browser.py
+│       ├── springer_api.py
+│       ├── springer_browser.py
 │       ├── doaj.py
 │       ├── europepmc.py
 │       ├── openalex.py
 │       ├── base_search.py
 │       ├── core.py
+│       ├── nasa_ads.py
+│       ├── ieee.py
+│       ├── zenodo.py
+│       ├── crossref.py
+│       ├── dblp.py
+│       ├── hal.py
+│       ├── pubmed.py
+│       ├── pmc.py
+│       ├── biorxiv.py
+│       ├── pedro.py
 │       ├── custom.py       # Generic TOML-driven source
 │       └── unpaywall.py    # PDF resolver (not a search source)
 ├── tests/                  # pytest test suite (mirrors mosaic/ structure)
@@ -170,49 +199,82 @@ mosaic/
 ```
 
 **Data flow:**
-`cli.py` → `search_all()` → each `Source.search()` → merged `Paper` list
-→ `Cache.save()` → display table → optional download / export / NotebookLM
+`cli.py` loads config → `source_registry.py:build_sources()` instantiates enabled sources
+→ `search.py:search_all()` iterates sources, merges duplicates by `Paper.uid`
+→ `db.py:Cache.save()` persists results → display table
+→ optional download / export / Zotero / NotebookLM
+
+For the full architecture description see `CLAUDE.md`.
 
 ---
 
 ## Coding style
 
-MOSAIC has no linter enforced by CI (yet), but please follow these
-conventions to keep the codebase consistent:
+MOSAIC uses [Ruff](https://docs.astral.sh/ruff/) for both linting and
+formatting, configured in `pyproject.toml` under `[tool.ruff]`.
 
-### General
+### Running Ruff
 
-- **PEP 8** — 4-space indentation, max line length ~100 characters.
+```bash
+# Check for lint issues
+ruff check .
+
+# Auto-fix what Ruff can
+ruff check --fix .
+
+# Format code
+ruff format .
+```
+
+### Key settings
+
+| Setting | Value |
+|---------|-------|
+| Target version | Python 3.11 |
+| Line length | 100 |
+| Quote style | double |
+| Indent style | spaces |
+
+### Enabled rule sets
+
+The project enables a broad set of Ruff rules — see `[tool.ruff.lint]` in
+`pyproject.toml` for the full list. The main categories are:
+
+- **E/W** — pycodestyle errors and warnings
+- **F** — pyflakes
+- **I** — isort (import sorting)
+- **N** — pep8-naming
+- **UP** — pyupgrade
+- **B** — flake8-bugbear
+- **SIM** — flake8-simplify
+- **S** — flake8-bandit (security)
+- **PT** — flake8-pytest-style
+- **C4** — flake8-comprehensions
+- **RUF** — Ruff-specific rules
+
+Some rules are intentionally ignored (e.g. `T201` for print statements in this
+CLI tool, `S101` for asserts in tests). Per-file ignores are configured for
+`tests/**` and `mosaic/cli.py`.
+
+### General conventions
+
 - **`from __future__ import annotations`** at the top of every module
   (enables postponed evaluation of annotations, required for `X | Y` union
   syntax on Python 3.11).
 - **Type annotations** on all public function signatures.
+- **Imports order:** standard library, third-party, local — separated by blank
+  lines. Ruff's isort integration enforces this.
 - **No docstrings needed** for private helpers whose name is self-explanatory.
   Add a docstring when the *why* is not obvious from the code.
-
-### Imports
-
-Order: standard library → third-party → local. Separate groups with a blank
-line. Do not use wildcard imports.
-
-### Error handling
-
-- Raise at system boundaries (bad CLI args, HTTP errors, missing config).
-- Let `httpx` errors propagate to `search_all()`, which catches them and
-  appends a warning message — do not swallow errors silently inside a source.
-
-### No external formatter required
-
-The codebase does not enforce `black` or `ruff` yet. If you run a formatter,
-use `--line-length 100` and open a separate PR so the style change is isolated
-from logic changes.
 
 ---
 
 ## Tests
 
-All tests live in `tests/` and use `pytest` with `unittest.mock` — no real
-network requests are made.
+All tests live in `tests/` and use `pytest` with `unittest.mock` — **no real
+network requests are made**.
+
+### Running tests
 
 ```bash
 # Run the full suite with coverage
@@ -222,27 +284,52 @@ pytest
 pytest tests/test_sources.py
 
 # Run a single test
-pytest tests/test_sources.py::TestArxivSource::test_field_title
-
-# Show coverage in the browser
-pytest && python -m http.server --directory htmlcov   # if htmlcov is configured
+pytest tests/test_sources.py::test_name
 ```
+
+Coverage is configured in `pyproject.toml` under `[tool.pytest.ini_options]`
+and `[tool.coverage.*]`. The default `addopts` includes
+`--cov=mosaic --cov-report=term-missing`, so every `pytest` invocation
+reports coverage.
 
 ### Writing tests
 
-- **Mock HTTP at the `httpx` level** using `unittest.mock.patch` — see
-  `conftest.py` for the `make_response()` helper.
-- **One test class per source or module** (e.g. `TestArxivSource`).
+- **Mock HTTP at the `httpx` level** using `unittest.mock.patch`. Patch at the
+  source module level, e.g. `mosaic.sources.zenodo.httpx.get`, not `httpx.get`
+  globally.
+- **Use `conftest.py` fixtures:**
+  - `tmp_cache` — in-memory SQLite `Cache` instance
+  - `paper` — a sample `Paper` object (Attention Is All You Need)
+  - `make_response(text, json_data, status_code)` — builds a mock `httpx`
+    response with `.status_code`, `.text`, `.json()`, and `.raise_for_status()`
 - **Name tests descriptively**: `test_<what>_<condition>` (e.g.
   `test_field_title_sends_ti_prefix`).
-- Every new feature or bug fix must come with a test that would have caught
-  the bug or validates the feature.
-- Aim to keep `custom.py` and new source files at **100% branch coverage**.
+- Every new feature or bug fix must come with a test that validates it.
+
+### Example
+
+```python
+from unittest.mock import patch
+
+from conftest import make_response
+from mosaic.sources.myname import MySource
+
+def test_myname_basic_search():
+    mock_data = {"results": [{"title": "Test Paper", "year": 2024}]}
+    with patch(
+        "mosaic.sources.myname.httpx.get",
+        return_value=make_response(json_data=mock_data),
+    ):
+        papers = MySource().search("test query")
+    assert len(papers) == 1
+    assert papers[0].title == "Test Paper"
+```
 
 ### Coverage
 
-Coverage JSON is written to `docs/public/` after each run and is used to
-generate the coverage badge on the README. Do not manually edit those files.
+Coverage JSON and a Shields.io badge payload are written to `docs/public/`
+after each test run (via the `pytest_sessionfinish` hook in `conftest.py`).
+Do not manually edit those files.
 
 ---
 
@@ -276,7 +363,6 @@ The changelog is generated automatically by
 - Scope: the module or area most affected (e.g. `cli`, `sources`, `exporter`).
 - Breaking changes: add `!` after type/scope **and** a `BREAKING CHANGE:`
   footer.
-- Never add `Co-authored-by` lines for AI tools.
 
 **Examples:**
 
@@ -286,6 +372,8 @@ feat(sources): add HAL open archive as built-in source
 fix(cli): prevent DOI column from being truncated in results table
 
 docs(custom-sources): add two-source HAL/Zenodo example
+
+test(sources): fix PubMed/PMC tests to match updated source implementation
 
 feat(cli)!: rename --oa-only to --open-access
 
@@ -303,8 +391,9 @@ BREAKING CHANGE: --oa-only flag renamed to --open-access for clarity.
    git fetch upstream
    git rebase upstream/main
    ```
-2. **Run the full test suite** and make sure it passes.
-3. **Update documentation** if your change affects user-visible behaviour,
+2. **Run the full test suite** — `pytest` must pass with no failures.
+3. **Run the linter** — `ruff check .` must report no errors.
+4. **Update documentation** if your change affects user-visible behaviour,
    CLI flags, config keys, or the data model.
 
 ### Branch naming
@@ -322,6 +411,7 @@ refactor/search-dedup
 
 - [ ] Tests added or updated for the change
 - [ ] All tests pass locally (`pytest`)
+- [ ] `ruff check .` reports no errors
 - [ ] Docs updated if behaviour changed
 - [ ] Commit messages follow Conventional Commits
 - [ ] PR title follows Conventional Commits format (used as the squash commit
@@ -339,41 +429,109 @@ refactor/search-dedup
 
 ## Adding a new built-in source
 
-1. Create `mosaic/sources/<name>.py` with a class extending `BaseSource`:
+### 1. Create the source module
+
+Create `mosaic/sources/<name>.py` with a class extending `BaseSource`:
+
+```python
+"""My New Source — brief description of the API."""
+
+from __future__ import annotations
+
+import httpx
+
+from mosaic.models import Paper, SearchFilters
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+
+
+class MySource(BaseSource):
+    """Search source for My Service.
+
+    Attributes:
+        name: Human-readable source name used for display and filtering.
+    """
+
+    name = "My Source"
+
+    def __init__(self, api_key: str = "") -> None:
+        self._api_key = api_key
+
+    def available(self) -> bool:
+        return bool(self._api_key)   # or True if no auth needed
+
+    def search(
+        self,
+        query: str,
+        max_results: int = 25,
+        filters: SearchFilters | None = None,
+    ) -> list[Paper]:
+        q = build_field_query(query, filters, "title:{}", "abstract:{}")
+        # Call the API, parse response, return list[Paper]
+        ...
+        return [self._parse(item) for item in results]
+
+    def _parse(self, item: dict) -> Paper:
+        return Paper(
+            title=item.get("title", ""),
+            authors=item.get("authors", []),
+            year=item.get("year"),
+            doi=item.get("doi"),
+            abstract=item.get("abstract"),
+            source=self.name,
+        )
+```
+
+Use `httpx` for all HTTP requests. See `mosaic/sources/zenodo.py` or
+`mosaic/sources/hal.py` for complete, simple examples. Use the shared helpers
+`build_field_query()` and `extract_year_range()` from `mosaic.sources.base`
+to handle field scoping and year filters consistently.
+
+### 2. Export from `mosaic/sources/__init__.py`
+
+Add an import and include the class in `__all__`:
+
+```python
+from mosaic.sources.myname import MySource
+```
+
+### 3. Wire into `mosaic/source_registry.py`
+
+Four changes are needed in `source_registry.py`:
+
+1. **Import** the class at the top of the file (from `mosaic.sources`).
+2. **Add a factory function** that receives `(cfg, src)` and returns an instance:
    ```python
-   from mosaic.sources.base import BaseSource
-   from mosaic.models import Paper, SearchFilters
-
-   class MySource(BaseSource):
-       name = "MySource"
-
-       def available(self) -> bool:
-           return True   # or check for API key
-
-       def search(self, query: str, max_results: int = 25,
-                  filters: SearchFilters | None = None) -> list[Paper]:
-           ...
-           return [self._parse(item) for item in results]
+   def _make_myname(_cfg: dict, src: dict) -> BaseSource:
+       return MySource(api_key=src.get("api_key", ""))
+   ```
+3. **Register it** by appending a `(config_key, factory)` tuple to
+   `_SOURCE_REGISTRY`:
+   ```python
+   ("myname", _make_myname),
+   ```
+4. **Add shorthand mappings** in `SRC_MAP` (shorthand to display name) and
+   `SHORTHAND_TO_CFG_KEY` (shorthand to config key):
+   ```python
+   SRC_MAP["mysh"] = "My Source"
+   SHORTHAND_TO_CFG_KEY["mysh"] = "myname"
    ```
 
-2. Export from `mosaic/sources/__init__.py`.
+### 4. Add tests
 
-3. Wire into `cli.py:_build_sources()`.
+Create `tests/test_myname.py` (or add to `tests/test_sources.py` for simpler
+sources). At minimum cover:
 
-4. Add a shorthand to the `_src_map` dict in `search()` and
-   `notebook_create()`.
+- Basic search returns `Paper` objects with correct fields
+- `available()` returns `False` when required credentials are missing
+- `filters.field == "title"` and `"abstract"` send the correct native query
+- `filters.raw_query` is forwarded verbatim
+- Year / author / journal filters are applied correctly
 
-5. Write tests in `tests/test_sources.py` (or a dedicated file for complex
-   sources), covering at minimum:
-   - Basic search returns `Paper` objects with correct fields
-   - `available()` returns `False` when required credentials are missing
-   - `field="title"` and `field="abstract"` send the correct native query
-   - `raw_query` is forwarded verbatim
+### 5. Update documentation
 
-6. Update `docs/guide/sources.md` with the source name, coverage, and
-   authentication requirements.
-
-7. Add the source to the table in `README.md` and `docs/guide/index.md`.
+- Add the source to the table in `docs/guide/sources.md` with the source name,
+  shorthand, coverage, and authentication requirements.
+- Add the source to the table in `README.md` and `docs/guide/index.md`.
 
 ---
 
@@ -448,9 +606,9 @@ merges to `main` and version tags respectively.
 Releases are managed by the maintainer using `release.sh`:
 
 ```bash
-./release.sh patch   # 1.2.3 → 1.2.4
-./release.sh minor   # 1.2.3 → 1.3.0
-./release.sh major   # 1.2.3 → 2.0.0
+./release.sh patch   # 1.2.3 -> 1.2.4
+./release.sh minor   # 1.2.3 -> 1.3.0
+./release.sh major   # 1.2.3 -> 2.0.0
 ./release.sh 2.5.0   # exact version
 ```
 

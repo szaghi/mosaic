@@ -1,4 +1,5 @@
 """PEDro — Physiotherapy Evidence Database source (HTML scraping)."""
+
 from __future__ import annotations
 
 import re
@@ -110,8 +111,7 @@ class PEDroSource(BaseSource):
         with httpx.Client(
             headers={
                 "User-Agent": (
-                    "MOSAIC (non-commercial research tool; "
-                    "https://github.com/szaghi/mosaic)"
+                    "MOSAIC (non-commercial research tool; https://github.com/szaghi/mosaic)"
                 ),
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
@@ -201,9 +201,9 @@ class PEDroSource(BaseSource):
 
         row_re = re.compile(
             r'<td><a href="(?P<url>[^"]+record-detail/(?P<rid>\d+)[^"]*)"[^>]*>'
-            r'(?P<title>[^<]+)</a></td>'
-            r'\s*<td>(?P<method>[^<]*)</td>'
-            r'\s*<td>(?P<score>[^<]*)</td>',
+            r"(?P<title>[^<]+)</a></td>"
+            r"\s*<td>(?P<method>[^<]*)</td>"
+            r"\s*<td>(?P<score>[^<]*)</td>",
             re.DOTALL,
         )
 
@@ -226,17 +226,19 @@ class PEDroSource(BaseSource):
                 note_parts.append(f"PEDro score: {score_raw}")
             abstract = "; ".join(note_parts) if note_parts else None
 
-            papers.append(Paper(
-                title=title,
-                authors=[],
-                year=None,
-                doi=None,
-                abstract=abstract,
-                journal=method.title() if method else None,
-                source="PEDro",
-                is_open_access=False,
-                url=url,
-            ))
+            papers.append(
+                Paper(
+                    title=title,
+                    authors=[],
+                    year=None,
+                    doi=None,
+                    abstract=abstract,
+                    journal=method.title() if method else None,
+                    source="PEDro",
+                    is_open_access=False,
+                    url=url,
+                )
+            )
 
         return papers
 
@@ -261,43 +263,45 @@ class PEDroSource(BaseSource):
         result: dict = {"authors": [], "year": None, "doi": None, "abstract": None, "journal": None}
 
         # Extract all <td>…</td> cell contents in document order
-        td_re = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL | re.IGNORECASE)
+        td_re = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL | re.IGNORECASE)
         cells = [m.group(1) for m in td_re.finditer(html)]
 
         def _text(raw: str) -> str:
-            return _unescape(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', raw)).strip())
+            return _unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", raw)).strip())
 
         # Row 1 — authors
         if len(cells) > 1:
             authors_raw = _text(cells[1])
             # Strip trailing affiliation like "[Ottawa Panel]"
-            authors_raw = re.sub(r'\s*\[.*?\]\s*$', '', authors_raw).strip()
+            authors_raw = re.sub(r"\s*\[.*?\]\s*$", "", authors_raw).strip()
             if authors_raw:
                 # Split on ", " only where the next token starts with an uppercase letter
-                result["authors"] = [a.strip() for a in re.split(r',\s*(?=[A-Z])', authors_raw) if a.strip()]
+                result["authors"] = [
+                    a.strip() for a in re.split(r",\s*(?=[A-Z])", authors_raw) if a.strip()
+                ]
 
         # Row 2 — citation: "Journal Name 2019 Sep;49(9):CPG1-CPG95"
         if len(cells) > 2:
             citation = _text(cells[2])
             if citation:
-                y_m = re.search(r'\b(19|20)\d{2}\b', citation)
+                y_m = re.search(r"\b(19|20)\d{2}\b", citation)
                 if y_m:
                     result["year"] = int(y_m.group())
                     # Journal is everything before the year
-                    result["journal"] = citation[:y_m.start()].rstrip(' ,;') or None
+                    result["journal"] = citation[: y_m.start()].rstrip(" ,;") or None
 
         # Row 4 — abstract (stop before the "Full text…" sentence)
         if len(cells) > 4:
             abstract_raw = cells[4]
             # Truncate at the "Full text" marker before stripping tags
-            abstract_raw = re.split(r'Full text', abstract_raw, maxsplit=1)[0]
+            abstract_raw = re.split(r"Full text", abstract_raw, maxsplit=1)[0]
             abstract = _text(abstract_raw)
             result["abstract"] = abstract or None
 
         # DOI — from the dx.doi.org link present in row 4 (or anywhere on page)
         doi_m = re.search(r'https?://(?:dx\.)?doi\.org/([^\s"<]+)', html)
         if doi_m:
-            result["doi"] = doi_m.group(1).rstrip('.')
+            result["doi"] = doi_m.group(1).rstrip(".")
 
         return result
 
@@ -322,9 +326,9 @@ def _unescape(s: str) -> str:
     """Decode common HTML entities in title text."""
     return (
         s.replace("&amp;", "&")
-         .replace("&lt;", "<")
-         .replace("&gt;", ">")
-         .replace("&quot;", '"')
-         .replace("&#039;", "'")
-         .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&#039;", "'")
+        .replace("&apos;", "'")
     )

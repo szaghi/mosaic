@@ -1,16 +1,19 @@
 """Zotero integration — local API (port 23119) and web API (api.zotero.org)."""
+
 from __future__ import annotations
 
-import re
+import logging
 from pathlib import Path
 
 import httpx
 
 from mosaic.models import Paper
 
+log = logging.getLogger(__name__)
+
 _LOCAL_BASE = "http://localhost:{port}/api/users/0"
-_WEB_BASE   = "https://api.zotero.org/users/{user_id}"
-_KEYS_URL   = "https://api.zotero.org/keys/{key}"
+_WEB_BASE = "https://api.zotero.org/users/{user_id}"
+_KEYS_URL = "https://api.zotero.org/keys/{key}"
 
 # arXiv and preprint-like sources map to "preprint"; everything else to
 # "journalArticle" which is Zotero's most common item type.
@@ -29,9 +32,9 @@ class ZoteroClient:
     """
 
     def __init__(self, *, api_key: str = "", user_id: int = 0, port: int = 23119) -> None:
-        self._api_key  = api_key
-        self._user_id  = user_id
-        self._port     = port
+        self._api_key = api_key
+        self._user_id = user_id
+        self._port = port
 
     # ── mode helpers ──────────────────────────────────────────────────────────
 
@@ -65,6 +68,7 @@ class ZoteroClient:
                 r = client.get(url, headers=self._headers)
                 return 200 <= r.status_code < 300
         except Exception:
+            log.debug("Zotero reachability check failed", exc_info=True)
             return False
 
     def discover_user_id(self) -> int:
@@ -98,7 +102,7 @@ class ZoteroClient:
                 json=[{"name": name, "parentCollection": False}],
             )
             r.raise_for_status()
-        return list(r.json()["successful"].values())[0]["key"]
+        return next(iter(r.json()["successful"].values()))["key"]
 
     def add_papers(
         self,
@@ -112,7 +116,7 @@ class ZoteroClient:
         """
         items = [_paper_to_item(p, collection_key) for p in papers]
         result = [""] * len(items)
-        for start in range(0, len(items), 50):          # Zotero max 50/request
+        for start in range(0, len(items), 50):  # Zotero max 50/request
             chunk = items[start : start + 50]
             with httpx.Client(timeout=30) as client:
                 r = client.post(f"{self._base}/items", headers=self._headers, json=chunk)
@@ -133,36 +137,42 @@ class ZoteroClient:
         if self._web_mode:
             return False
 
-        payload = [{
-            "itemType":    "attachment",
-            "parentItem":  item_key,
-            "linkMode":    "linked_file",
-            "path":        str(pdf_path.resolve()),
-            "title":       pdf_path.name,
-            "contentType": "application/pdf",
-        }]
+        payload = [
+            {
+                "itemType": "attachment",
+                "parentItem": item_key,
+                "linkMode": "linked_file",
+                "path": str(pdf_path.resolve()),
+                "title": pdf_path.name,
+                "contentType": "application/pdf",
+            }
+        ]
         try:
             with httpx.Client(timeout=10) as client:
                 r = client.post(f"{self._base}/items", headers=self._headers, json=payload)
                 r.raise_for_status()
             return bool(r.json().get("successful"))
         except Exception:
+            log.debug(
+                "Failed to attach PDF %s to Zotero item %s", pdf_path, item_key, exc_info=True
+            )
             return False
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _paper_to_item(paper: Paper, collection_key: str | None = None) -> dict:
     """Convert a :class:`~mosaic.models.Paper` to a Zotero item dict."""
     item_type = "preprint" if paper.source in _PREPRINT_SOURCES else "journalArticle"
     item: dict = {
         "itemType": item_type,
-        "title":    paper.title or "",
+        "title": paper.title or "",
         "creators": [_parse_author(a) for a in (paper.authors or [])],
-        "date":     str(paper.year) if paper.year else "",
+        "date": str(paper.year) if paper.year else "",
         "abstractNote": paper.abstract or "",
-        "url":      paper.url or (f"https://doi.org/{paper.doi}" if paper.doi else ""),
-        "DOI":      paper.doi or "",
+        "url": paper.url or (f"https://doi.org/{paper.doi}" if paper.doi else ""),
+        "DOI": paper.doi or "",
     }
     if paper.journal:
         item["publicationTitle"] = paper.journal
@@ -187,5 +197,9 @@ def _parse_author(name: str) -> dict:
         return {"creatorType": "author", "lastName": last.strip(), "firstName": first.strip()}
     parts = name.rsplit(" ", 1)
     if len(parts) == 2:
-        return {"creatorType": "author", "firstName": parts[0].strip(), "lastName": parts[1].strip()}
+        return {
+            "creatorType": "author",
+            "firstName": parts[0].strip(),
+            "lastName": parts[1].strip(),
+        }
     return {"creatorType": "author", "lastName": name, "firstName": ""}

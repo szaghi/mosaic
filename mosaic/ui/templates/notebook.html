@@ -4,12 +4,39 @@
 {% block content %}
 <h2>Create NotebookLM Notebook</h2>
 
-<p>
-  <small>
-    Requires: <code>pip install 'mosaic-search[notebooklm]'</code> and a prior
-    <code>notebooklm login</code> to authenticate. Up to 50 sources per notebook.
+{% if not nb_status.installed %}
+<article class="alert-warning">
+  <strong>NotebookLM not available.</strong>
+  The <code>notebooklm-py</code> package is not installed.
+  <ol style="margin:.75rem 0 0;font-size:.9em;">
+    <li>Install the package: <code>pip install 'mosaic-search[notebooklm]'</code></li>
+    <li>Authenticate: <code>pip install notebooklm-py[browser] &amp;&amp; notebooklm login</code></li>
+    <li>Restart MOSAIC</li>
+  </ol>
+</article>
+{% elif not nb_status.authenticated %}
+<article class="alert-warning">
+  <strong>Not authenticated.</strong>
+  NotebookLM requires a Google account session. Follow these steps:
+  <ol style="margin:.75rem 0 0;font-size:.9em;">
+    <li>Install the authentication helper: <code>pip install notebooklm-py[browser]</code></li>
+    <li>Run <code>notebooklm login</code> &mdash; a browser window will open for Google sign-in</li>
+    <li>After signing in, close the browser &mdash; your session is saved automatically</li>
+    <li>Reopen MOSAIC &mdash; the NotebookLM page will be ready to use</li>
+  </ol>
+  <small style="display:block;margin-top:.5rem;">
+    {% if nb_status.storage_path %}
+      Session stored at: <code>{{ nb_status.storage_path }}</code><br>
+    {% endif %}
+    Alternative: set the <code>NOTEBOOKLM_AUTH_JSON</code> environment variable with your session cookies (no browser needed).
   </small>
-</p>
+</article>
+{% else %}
+<article style="border-left:4px solid var(--pico-ins-color);">
+  <strong>&#10003; Authenticated</strong> &mdash; ready to create notebooks.
+  <small>Up to 50 sources per notebook.</small>
+</article>
+{% endif %}
 
 <form id="notebook-form" onsubmit="return false">
   <label>
@@ -34,7 +61,10 @@
 
     <div id="query-section">
       <div class="grid">
-        <input type="text" name="query" placeholder="Search query&hellip;">
+        <label>
+          Search query
+          <input type="text" name="query" placeholder="Search query&hellip;">
+        </label>
         <label>
           Max per source
           <input type="number" name="max_results" value="10" min="1" max="100">
@@ -103,7 +133,8 @@
           hx-post="{{ url_for('ui.notebook_submit') }}"
           hx-target="#nb-results"
           hx-include="#notebook-form"
-          hx-indicator="#nb-spinner">
+          hx-indicator="#nb-spinner"
+          {% if not nb_status.installed or not nb_status.authenticated %}disabled aria-disabled="true"{% endif %}>
     Create Notebook
   </button>
 </form>

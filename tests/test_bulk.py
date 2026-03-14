@@ -1,10 +1,13 @@
 """Tests for mosaic.bulk — DOI extraction from BibTeX and CSV files."""
-from pathlib import Path
-import pytest
-from mosaic.bulk import read_dois, _read_bib, _read_csv
 
+from pathlib import Path
+
+import pytest
+
+from mosaic.bulk import _read_bib, _read_csv, read_dois
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def write(tmp_path: Path, name: str, content: str) -> Path:
     p = tmp_path / name
@@ -14,9 +17,10 @@ def write(tmp_path: Path, name: str, content: str) -> Path:
 
 # ── read_dois dispatcher ──────────────────────────────────────────────────────
 
+
 class TestReadDois:
     def test_dispatches_bib(self, tmp_path):
-        f = write(tmp_path, "refs.bib", '@article{x, doi = {10.1/test}}')
+        f = write(tmp_path, "refs.bib", "@article{x, doi = {10.1/test}}")
         assert read_dois(f) == ["10.1/test"]
 
     def test_dispatches_csv(self, tmp_path):
@@ -29,15 +33,16 @@ class TestReadDois:
             read_dois(f)
 
     def test_extension_case_insensitive(self, tmp_path):
-        f = write(tmp_path, "refs.BIB", '@article{x, doi = {10.1/test}}')
+        f = write(tmp_path, "refs.BIB", "@article{x, doi = {10.1/test}}")
         assert read_dois(f) == ["10.1/test"]
 
 
 # ── _read_bib ─────────────────────────────────────────────────────────────────
 
+
 class TestReadBib:
     def test_extracts_doi_curly_braces(self, tmp_path):
-        f = write(tmp_path, "r.bib", '@article{key, doi = {10.1234/test}}')
+        f = write(tmp_path, "r.bib", "@article{key, doi = {10.1234/test}}")
         assert _read_bib(f) == ["10.1234/test"]
 
     def test_extracts_doi_double_quotes(self, tmp_path):
@@ -45,22 +50,16 @@ class TestReadBib:
         assert _read_bib(f) == ["10.1234/test"]
 
     def test_case_insensitive_key(self, tmp_path):
-        f = write(tmp_path, "r.bib", '@article{key, DOI = {10.1/x}}')
+        f = write(tmp_path, "r.bib", "@article{key, DOI = {10.1/x}}")
         assert _read_bib(f) == ["10.1/x"]
 
     def test_multiple_entries(self, tmp_path):
-        content = (
-            '@article{a, doi = {10.1/aaa}}\n'
-            '@article{b, doi = {10.1/bbb}}\n'
-        )
+        content = "@article{a, doi = {10.1/aaa}}\n@article{b, doi = {10.1/bbb}}\n"
         f = write(tmp_path, "r.bib", content)
         assert _read_bib(f) == ["10.1/aaa", "10.1/bbb"]
 
     def test_deduplicates(self, tmp_path):
-        content = (
-            '@article{a, doi = {10.1/dup}}\n'
-            '@article{b, doi = {10.1/dup}}\n'
-        )
+        content = "@article{a, doi = {10.1/dup}}\n@article{b, doi = {10.1/dup}}\n"
         f = write(tmp_path, "r.bib", content)
         assert _read_bib(f) == ["10.1/dup"]
 
@@ -74,7 +73,7 @@ class TestReadBib:
 
     def test_doi_with_slashes_and_dots(self, tmp_path):
         doi = "10.48550/arXiv.1706.03762"
-        f = write(tmp_path, "r.bib", f'@misc{{x, doi = {{{doi}}}}}')
+        f = write(tmp_path, "r.bib", f"@misc{{x, doi = {{{doi}}}}}")
         assert _read_bib(f) == [doi]
 
     def test_whitespace_around_value(self, tmp_path):
@@ -83,15 +82,13 @@ class TestReadBib:
         assert result == ["10.1/abc"]
 
     def test_preserves_order(self, tmp_path):
-        content = "\n".join(
-            f'@article{{e{i}, doi = {{10.1/{i}}}}}'
-            for i in range(5)
-        )
+        content = "\n".join(f"@article{{e{i}, doi = {{10.1/{i}}}}}" for i in range(5))
         f = write(tmp_path, "r.bib", content)
         assert _read_bib(f) == [f"10.1/{i}" for i in range(5)]
 
 
 # ── _read_csv ─────────────────────────────────────────────────────────────────
+
 
 class TestReadCsv:
     def test_reads_doi_column(self, tmp_path):

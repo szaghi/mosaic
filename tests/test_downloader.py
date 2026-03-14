@@ -1,14 +1,19 @@
 """Tests for the PDF downloader."""
-from unittest.mock import patch, MagicMock
-from mosaic.models import Paper
+
+from unittest.mock import MagicMock, patch
+
 from mosaic.downloader import download
-from mosaic.db import Cache
+from mosaic.models import Paper
 
 
 def _paper(doi="10.1/test", pdf_url=None):
     return Paper(
-        title="Test Paper", authors=["Smith"], year=2020,
-        doi=doi, pdf_url=pdf_url, source="test",
+        title="Test Paper",
+        authors=["Smith"],
+        year=2020,
+        doi=doi,
+        pdf_url=pdf_url,
+        source="test",
     )
 
 
@@ -33,8 +38,10 @@ class TestDownload:
 
     def test_falls_back_to_unpaywall_when_no_pdf_url(self, tmp_path, tmp_cache):
         p = _paper(doi="10.1/x", pdf_url=None)
-        with patch("mosaic.sources.unpaywall.resolve", return_value="https://repo.org/paper.pdf"), \
-             patch("mosaic.downloader._fetch"):
+        with (
+            patch("mosaic.sources.unpaywall.resolve", return_value="https://repo.org/paper.pdf"),
+            patch("mosaic.downloader._fetch"),
+        ):
             result = download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         assert result is not None
 
@@ -62,39 +69,47 @@ class TestDownload:
     def test_falls_back_to_browser_when_steps_1_and_2_fail(self, tmp_path, tmp_cache):
         p = _paper(doi="10.1/x", pdf_url=None)
         p.url = "https://sciencedirect.com/article/pii/S123"
-        with patch("mosaic.sources.unpaywall.resolve", return_value=None), \
-             patch("mosaic.auth.find_session_for_url", return_value="elsevier"), \
-             patch("mosaic.auth.browser_download", new=MagicMock(return_value=True)) as mock_bd, \
-             patch("asyncio.run", side_effect=lambda coro: True):
+        with (
+            patch("mosaic.sources.unpaywall.resolve", return_value=None),
+            patch("mosaic.auth.find_session_for_url", return_value="elsevier"),
+            patch("mosaic.auth.browser_download", new=MagicMock(return_value=True)) as _mock_bd,
+            patch("asyncio.run", side_effect=lambda coro: True),
+        ):
             result = download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         assert result is not None
 
     def test_skips_browser_when_no_session_matches(self, tmp_path, tmp_cache):
         p = _paper(doi="10.1/x", pdf_url=None)
         p.url = "https://nature.com/articles/123"
-        with patch("mosaic.sources.unpaywall.resolve", return_value=None), \
-             patch("mosaic.auth.find_session_for_url", return_value=None), \
-             patch("mosaic.auth.list_sessions", return_value=[]), \
-             patch("mosaic.auth.browser_download") as mock_bd:
+        with (
+            patch("mosaic.sources.unpaywall.resolve", return_value=None),
+            patch("mosaic.auth.find_session_for_url", return_value=None),
+            patch("mosaic.auth.list_sessions", return_value=[]),
+            patch("mosaic.auth.browser_download") as mock_bd,
+        ):
             download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         mock_bd.assert_not_called()
 
     def test_browser_result_cached_as_ok(self, tmp_path, tmp_cache):
         p = _paper(doi="10.1/x", pdf_url=None)
         p.url = "https://sciencedirect.com/article/pii/S123"
-        with patch("mosaic.sources.unpaywall.resolve", return_value=None), \
-             patch("mosaic.auth.find_session_for_url", return_value="elsevier"), \
-             patch("mosaic.auth.browser_download", MagicMock(return_value=True)), \
-             patch("asyncio.run", return_value=True):
+        with (
+            patch("mosaic.sources.unpaywall.resolve", return_value=None),
+            patch("mosaic.auth.find_session_for_url", return_value="elsevier"),
+            patch("mosaic.auth.browser_download", MagicMock(return_value=True)),
+            patch("asyncio.run", return_value=True),
+        ):
             download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         rec = tmp_cache.get_download(p.uid)
         assert rec["status"] == "ok"
 
     def test_all_steps_fail_returns_none(self, tmp_path, tmp_cache):
         p = _paper(doi="10.1/x", pdf_url=None)
-        with patch("mosaic.sources.unpaywall.resolve", return_value=None), \
-             patch("mosaic.auth.find_session_for_url", return_value=None), \
-             patch("mosaic.auth.list_sessions", return_value=[]), \
-             patch("mosaic.downloader._resolve_redirect", side_effect=lambda u: u):
+        with (
+            patch("mosaic.sources.unpaywall.resolve", return_value=None),
+            patch("mosaic.auth.find_session_for_url", return_value=None),
+            patch("mosaic.auth.list_sessions", return_value=[]),
+            patch("mosaic.downloader._resolve_redirect", side_effect=lambda u: u),
+        ):
             result = download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         assert result is None

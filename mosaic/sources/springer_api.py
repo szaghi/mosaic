@@ -6,11 +6,14 @@ complements the browser-based Springer source (``sp``) — the API source
 is faster and includes direct PDF links; the browser source requires no
 credentials and covers all Springer content, not just OA.
 """
+
 from __future__ import annotations
-import re
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import parse_authors_name_key, parse_year
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
 
 _BASE = "https://api.springernature.com/openaccess/json"
 
@@ -69,30 +72,25 @@ class SpringerAPISource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``records`` array.
         """
-        if filters and filters.raw_query:
-            q = filters.raw_query
-        elif filters and filters.field == "title":
-            q = f'title:"{query}"'
-        else:
-            q = query
+        q = build_field_query(query, filters, 'title:"{}"', "{}")
 
         if filters:
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 q += f" date:{y_from or y_to}-{y_to or y_from}"
 
-        resp = httpx.get(
-            _BASE,
-            params={
-                "q": q,
-                "p": min(max_results, 100),
-                "api_key": self._api_key,
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return [self._parse(r) for r in resp.json().get("records", [])]
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(
+                _BASE,
+                params={
+                    "q": q,
+                    "p": min(max_results, 100),
+                    "api_key": self._api_key,
+                },
+            )
+            resp.raise_for_status()
+            records = resp.json().get("records", [])
+        return [self._parse(r) for r in records]
 
     def _parse(self, record: dict) -> Paper:
         """Parse a single Springer Open Access record into a Paper.
@@ -112,13 +110,9 @@ class SpringerAPISource(BaseSource):
         title = record.get("title") or ""
 
         creators = record.get("creators") or []
-        authors = [c.get("creator", "") for c in creators if c.get("creator")]
+        authors = parse_authors_name_key(creators, key="creator")
 
-        pub_date = record.get("publicationDate") or ""
-        year: int | None = None
-        m = re.match(r"(\d{4})", pub_date)
-        if m:
-            year = int(m.group(1))
+        year = parse_year(record.get("publicationDate"))
 
         doi = record.get("doi") or None
 
@@ -129,7 +123,7 @@ class SpringerAPISource(BaseSource):
         # url array: pick html for landing page, pdf for download
         url: str | None = None
         pdf_url: str | None = None
-        for entry in (record.get("url") or []):
+        for entry in record.get("url") or []:
             fmt = entry.get("format", "")
             val = entry.get("value", "")
             if fmt == "html" and not url:

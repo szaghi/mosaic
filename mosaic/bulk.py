@@ -1,4 +1,5 @@
 """Utilities for extracting DOIs from BibTeX and CSV files."""
+
 from __future__ import annotations
 
 import csv

@@ -23,7 +23,11 @@
       <td>{{ s.result_count }}</td>
       <td><small>{{ s.created_at }}</small></td>
       <td>
-        <a href="{{ url_for('ui.search_page', q=s.query) }}"
+        <a href="{{ url_for('ui.search_page', q=s.query,
+                   year=s.filters.get('year', ''),
+                   author=s.filters.get('author', ''),
+                   journal=s.filters.get('journal', ''),
+                   field=s.filters.get('field', '')) }}"
            role="button" class="outline secondary"
            style="padding:.2rem .5rem;font-size:.8em;">Re-run</a>
       </td>

@@ -1,12 +1,18 @@
 """Tests for the SQLite cache layer."""
+
 from mosaic.models import Paper
-from mosaic.db import Cache
 
 
 def _paper(doi="10.1/test", title="Test Paper", abstract=None, pdf_url=None):
     return Paper(
-        title=title, doi=doi, authors=["Author A"], year=2020,
-        abstract=abstract, pdf_url=pdf_url, source="arXiv", is_open_access=True,
+        title=title,
+        doi=doi,
+        authors=["Author A"],
+        year=2020,
+        abstract=abstract,
+        pdf_url=pdf_url,
+        source="arXiv",
+        is_open_access=True,
     )
 
 

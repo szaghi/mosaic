@@ -1,7 +1,10 @@
 """Shared fixtures and coverage reporting hook."""
+
 import json
 from pathlib import Path
+
 import pytest
+
 from mosaic.db import Cache
 from mosaic.models import Paper
 
@@ -13,6 +16,7 @@ def pytest_sessionfinish(session, exitstatus):
     _PUBLIC.mkdir(parents=True, exist_ok=True)
     try:
         import coverage as coverage_lib
+
         cov = coverage_lib.Coverage()
         cov.load()
         # Full coverage.py JSON report
@@ -68,6 +72,7 @@ def paper():
 def make_response(text="", json_data=None, status_code=200):
     """Build a minimal mock httpx response."""
     from unittest.mock import MagicMock
+
     m = MagicMock()
     m.status_code = status_code
     m.text = text

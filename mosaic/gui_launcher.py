@@ -1,5 +1,7 @@
 """Entry point for the standalone MOSAIC app (PyInstaller)."""
+
 from __future__ import annotations
+
 import os
 import platform
 import shutil
@@ -56,8 +58,13 @@ def _find_browser() -> tuple[str, bool] | tuple[None, bool]:
             return ff, False
 
     else:  # Linux / BSD
-        for name in ("google-chrome", "google-chrome-stable", "chromium-browser",
-                      "chromium", "microsoft-edge"):
+        for name in (
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium-browser",
+            "chromium",
+            "microsoft-edge",
+        ):
             found = shutil.which(name)
             if found:
                 return found, True
@@ -96,6 +103,7 @@ def _open_app_window(url: str) -> None:
 
 def main() -> None:
     from waitress import serve
+
     from mosaic.ui import create_app
 
     app = create_app()

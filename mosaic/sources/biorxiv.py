@@ -1,4 +1,5 @@
 """bioRxiv / medRxiv preprint source."""
+
 from __future__ import annotations
 
 import re
@@ -11,9 +12,7 @@ from mosaic.sources.base import BaseSource
 
 _BASE_API = "https://api.biorxiv.org/details"
 # Extract DOI (without version suffix) from href="/content/10.1101/..."
-_DOI_HREF_RE = re.compile(
-    r'href="/content/(10\.1101/\d{4}\.\d{2}\.\d{2}\.\d+)(?:v\d+)?"'
-)
+_DOI_HREF_RE = re.compile(r'href="/content/(10\.1101/\d{4}\.\d{2}\.\d{2}\.\d+)(?:v\d+)?"')
 
 
 class BioRxivSource(BaseSource):
@@ -55,11 +54,12 @@ class BioRxivSource(BaseSource):
         """
         search_query = self._build_query(query, filters)
         papers: list[Paper] = []
-        for server in ("biorxiv", "medrxiv"):
-            try:
-                papers.extend(self._search_server(server, search_query, max_results))
-            except Exception:
-                continue
+        with httpx.Client(timeout=30) as client:
+            for server in ("biorxiv", "medrxiv"):
+                try:
+                    papers.extend(self._search_server(client, server, search_query, max_results))
+                except Exception:
+                    continue
         # Post-process: author / journal filters (not supported natively)
         if filters:
             papers = [p for p in papers if filters.match(p)]
@@ -75,7 +75,7 @@ class BioRxivSource(BaseSource):
         parts = [query]
         if filters:
             y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_to = filters.year_to or (max(filters.years) if filters.years else None)
             if y_from:
                 parts.append(f"after:{y_from - 1}-12-31")
             if y_to:
@@ -87,6 +87,7 @@ class BioRxivSource(BaseSource):
 
     def _search_server(
         self,
+        client: httpx.Client,
         server: str,
         query: str,
         max_results: int,
@@ -96,10 +97,9 @@ class BioRxivSource(BaseSource):
             f"https://www.{server}.org/search/"
             f"{encoded}%20numresults%3A{max_results}%20sort%3Arelevance-rank"
         )
-        resp = httpx.get(
+        resp = client.get(
             url,
             headers={"User-Agent": "MOSAIC/1.0"},
-            timeout=30,
             follow_redirects=True,
         )
         if resp.status_code != 200:
@@ -118,16 +118,16 @@ class BioRxivSource(BaseSource):
 
         papers = []
         for doi in dois:
-            paper = self._fetch_paper(server, doi)
+            paper = self._fetch_paper(client, server, doi)
             if paper is not None:
                 papers.append(paper)
         return papers
 
-    def _fetch_paper(self, server: str, doi: str) -> Paper | None:
+    def _fetch_paper(self, client: httpx.Client, server: str, doi: str) -> Paper | None:
         """Fetch metadata for a single preprint from the bioRxiv content API."""
         url = f"{_BASE_API}/{server}/{doi}/0/json"
         try:
-            resp = httpx.get(url, timeout=15)
+            resp = client.get(url, timeout=15)
             if resp.status_code != 200:
                 return None
             items = resp.json().get("collection", [])
@@ -140,16 +140,13 @@ class BioRxivSource(BaseSource):
 
     def _parse(self, item: dict, server: str) -> Paper:
         doi = item.get("doi") or ""
-        date_str = item.get("date") or ""   # "YYYY-MM-DD"
+        date_str = item.get("date") or ""  # "YYYY-MM-DD"
         year: int | None = None
         if date_str and len(date_str) >= 4 and date_str[:4].isdigit():
             year = int(date_str[:4])
 
         version = str(item.get("version") or "1")
-        pdf_url = (
-            f"https://www.{server}.org/content/{doi}v{version}.full.pdf"
-            if doi else None
-        )
+        pdf_url = f"https://www.{server}.org/content/{doi}v{version}.full.pdf" if doi else None
 
         authors_str = item.get("authors") or ""
         # bioRxiv API returns authors semicolon-separated: "Smith J; Jones A"

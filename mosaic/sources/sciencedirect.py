@@ -1,6 +1,9 @@
 """Elsevier ScienceDirect API (open access only by default)."""
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
 from mosaic.sources.base import BaseSource
 
@@ -20,7 +23,9 @@ class ScienceDirectSource(BaseSource):
         """Return True only when an Elsevier API key has been configured."""
         return bool(self._api_key)
 
-    def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Search the Elsevier ScienceDirect full-text API.
 
         Builds a PUT request with a JSON body using Elsevier's query syntax
@@ -66,7 +71,7 @@ class ScienceDirectSource(BaseSource):
             if filters.journal:
                 body["pub"] = filters.journal
             y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_to = filters.year_to or (max(filters.years) if filters.years else None)
             if y_from or y_to:
                 body["date"] = f"{y_from or y_to}-{y_to or y_from}"
 
@@ -136,7 +141,9 @@ class ScienceDirectSource(BaseSource):
         if self._inst_token:
             headers["X-ELS-Insttoken"] = self._inst_token
 
-        with httpx.stream("GET", _ARTICLE.format(doi=doi), headers=headers, timeout=60, follow_redirects=True) as r:
+        with httpx.stream(
+            "GET", _ARTICLE.format(doi=doi), headers=headers, timeout=60, follow_redirects=True
+        ) as r:
             r.raise_for_status()
             with open(dest, "wb") as f:
                 for chunk in r.iter_bytes(8192):

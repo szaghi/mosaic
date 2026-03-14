@@ -1,9 +1,9 @@
 """Tests for the NotebookLM bridge module."""
+
 from __future__ import annotations
 
 import asyncio
 import sys
-from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,11 +11,11 @@ import pytest
 
 from mosaic.models import Paper
 
-
 # ---------------------------------------------------------------------------
 # Helpers — inject a fake `notebooklm` package into sys.modules so that
 # the bridge can be tested without the real dependency installed.
 # ---------------------------------------------------------------------------
+
 
 def _make_fake_notebooklm(nb_id: str = "nb-001") -> tuple[ModuleType, MagicMock]:
     """Return (fake_module, mock_client_instance)."""
@@ -30,7 +30,7 @@ def _make_fake_notebooklm(nb_id: str = "nb-001") -> tuple[ModuleType, MagicMock]
     client.sources.add_url = AsyncMock()
     client.artifacts.generate_audio = AsyncMock()
 
-    NotebookLMClient = MagicMock()
+    NotebookLMClient = MagicMock()  # noqa: N806
     NotebookLMClient.from_storage = AsyncMock(return_value=client)
 
     mod = ModuleType("notebooklm")
@@ -47,15 +47,18 @@ def _run(coro):
 # _require_notebooklm
 # ---------------------------------------------------------------------------
 
+
 class TestRequireNotebooklm:
     def test_raises_when_not_installed(self):
         from mosaic.notebooklm_bridge import _require_notebooklm
+
         with patch.dict(sys.modules, {"notebooklm": None}):
             with pytest.raises(ImportError, match="mosaic-search\\[notebooklm\\]"):
                 _require_notebooklm()
 
     def test_passes_when_installed(self):
         from mosaic.notebooklm_bridge import _require_notebooklm
+
         fake_mod, _ = _make_fake_notebooklm()
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
             _require_notebooklm()  # should not raise
@@ -65,9 +68,11 @@ class TestRequireNotebooklm:
 # create_notebook
 # ---------------------------------------------------------------------------
 
+
 class TestCreateNotebook:
     def _run_create(self, papers_with_paths, artifacts=None, nb_id="nb-42"):
         from mosaic.notebooklm_bridge import create_notebook
+
         fake_mod, client = _make_fake_notebooklm(nb_id)
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
             result = _run(create_notebook("Test NB", papers_with_paths, artifacts=artifacts))
@@ -81,7 +86,7 @@ class TestCreateNotebook:
         pdf = tmp_path / "paper.pdf"
         pdf.write_bytes(b"%PDF-1.4")
         paper = Paper(title="A Paper", url="https://example.com/paper")
-        result, client = self._run_create([(paper, pdf)])
+        _result, client = self._run_create([(paper, pdf)])
         client.sources.add_file.assert_awaited_once_with("nb-42", pdf)
         client.sources.add_url.assert_not_awaited()
 
@@ -123,6 +128,7 @@ class TestCreateNotebook:
 
     def test_source_failure_is_non_fatal(self):
         from mosaic.notebooklm_bridge import create_notebook
+
         paper = Paper(title="A Paper", url="https://example.com/paper")
         fake_mod, client = _make_fake_notebooklm()
         client.sources.add_url = AsyncMock(side_effect=Exception("NLM error"))
@@ -143,9 +149,11 @@ class TestCreateNotebook:
 # create_notebook_from_dir
 # ---------------------------------------------------------------------------
 
+
 class TestCreateNotebookFromDir:
     def _run_from_dir(self, directory, artifacts=None, nb_id="nb-dir"):
         from mosaic.notebooklm_bridge import create_notebook_from_dir
+
         fake_mod, client = _make_fake_notebooklm(nb_id)
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
             result = _run(create_notebook_from_dir("Dir NB", directory, artifacts=artifacts))
@@ -153,6 +161,7 @@ class TestCreateNotebookFromDir:
 
     def test_raises_when_no_pdfs(self, tmp_path):
         from mosaic.notebooklm_bridge import create_notebook_from_dir
+
         fake_mod, _ = _make_fake_notebooklm()
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
             with pytest.raises(ValueError, match="No PDF files found"):
@@ -182,6 +191,7 @@ class TestCreateNotebookFromDir:
 
     def test_pdf_failure_is_non_fatal(self, tmp_path):
         from mosaic.notebooklm_bridge import create_notebook_from_dir
+
         (tmp_path / "paper.pdf").write_bytes(b"%PDF")
         fake_mod, client = _make_fake_notebooklm()
         client.sources.add_file = AsyncMock(side_effect=Exception("upload error"))

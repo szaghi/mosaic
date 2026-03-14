@@ -1,14 +1,17 @@
 """Unified paper data model."""
+
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 
 @dataclass
 class SearchFilters:
     """Filters applied both at the API level (where supported) and as post-processing."""
+
     year_from: int | None = None
     year_to: int | None = None
-    years: list[int] | None = None   # explicit list; mutually exclusive with from/to range
+    years: list[int] | None = None  # explicit list; mutually exclusive with from/to range
     authors: list[str] = field(default_factory=list)
     journal: str = ""
     # Field-scoping: "title" | "abstract" | "all" (default)
@@ -16,7 +19,7 @@ class SearchFilters:
     # Raw query override: sent directly to the source API, bypassing field transformation
     raw_query: str = ""
 
-    def match(self, paper: "Paper") -> bool:
+    def match(self, paper: Paper) -> bool:
         """Return True if paper passes all active filters."""
         if paper.year is not None:
             if self.years is not None:
@@ -31,13 +34,13 @@ class SearchFilters:
             combined = " ".join(paper.authors).lower()
             if not any(a.lower() in combined for a in self.authors):
                 return False
-        if self.journal:
-            if not paper.journal or self.journal.lower() not in paper.journal.lower():
-                return False
-        return True
+        return not (
+            self.journal
+            and (not paper.journal or self.journal.lower() not in paper.journal.lower())
+        )
 
     @staticmethod
-    def parse_year(value: str) -> "SearchFilters":
+    def parse_year(value: str) -> SearchFilters:
         """
         Parse a year string into a SearchFilters instance.
           "2020"           → exact year
@@ -76,6 +79,17 @@ class Paper:
     url: str | None = None
     citation_count: int | None = None
 
+    def to_dict(self) -> dict:
+        """Serialise to a plain dict (thread-safe passing, JSON export)."""
+        from dataclasses import asdict
+
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Paper:
+        """Reconstruct a Paper from a dict produced by ``to_dict``."""
+        return cls(**d)
+
     @property
     def uid(self) -> str:
         """Best available unique identifier."""
@@ -109,15 +123,16 @@ class Paper:
             s = re.sub(r"[^\w\s-]", "", text)[:max_len].strip()
             return re.sub(r"\s+", "_", s)
 
-        year    = str(self.year) if self.year else "0000"
-        source  = _slug(self.source)
-        author  = _slug(self.short_authors.split()[0] if self.authors else "Unknown")
-        title   = _slug(self.title)
-        doi     = re.sub(r"[^\w.-]", "_", self.doi) if self.doi else "no_doi"
+        year = str(self.year) if self.year else "0000"
+        source = _slug(self.source)
+        author = _slug(self.short_authors.split()[0] if self.authors else "Unknown")
+        title = _slug(self.title)
+        doi = re.sub(r"[^\w.-]", "_", self.doi) if self.doi else "no_doi"
         journal = _slug(self.journal) if self.journal else "no_journal"
 
-        name = pattern.format(year=year, source=source, author=author,
-                              title=title, doi=doi, journal=journal)
+        name = pattern.format(
+            year=year, source=source, author=author, title=title, doi=doi, journal=journal
+        )
         # strip any remaining filesystem-unsafe chars and collapse separators
         name = re.sub(r"[^\w\s.\-_]", "", name).strip("_")
         return name + ".pdf"

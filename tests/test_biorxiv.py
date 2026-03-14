@@ -1,10 +1,9 @@
 """Tests for BioRxivSource — search page + content API."""
-from unittest.mock import patch, call, MagicMock
 
-import pytest
+from unittest.mock import MagicMock, patch
 
 from mosaic.models import SearchFilters
-from mosaic.sources.biorxiv import BioRxivSource, _DOI_HREF_RE
+from mosaic.sources.biorxiv import _DOI_HREF_RE, BioRxivSource
 
 # ── fixtures / helpers ────────────────────────────────────────────────────────
 
@@ -19,6 +18,7 @@ _SEARCH_HTML = """\
 </li>
 </body></html>
 """
+
 
 # bioRxiv content API response for a single DOI
 def _api_resp(doi, title, version="1", year="2023", abstract="An abstract."):
@@ -50,6 +50,7 @@ def _make_resp(status=200, text="", json_data=None):
 
 # ── DOI regex ─────────────────────────────────────────────────────────────────
 
+
 class TestDoiHrefRegex:
     def test_matches_versioned_href(self):
         html = '<a href="/content/10.1101/2023.01.15.524150v2">'
@@ -75,6 +76,7 @@ class TestDoiHrefRegex:
 
 # ── _parse ────────────────────────────────────────────────────────────────────
 
+
 class TestParse:
     src = BioRxivSource()
 
@@ -98,46 +100,83 @@ class TestParse:
         assert p.source == "bioRxiv/medRxiv"
 
     def test_pdf_url_constructed_from_doi_and_version(self):
-        item = {"doi": "10.1101/2023.01.15.524150", "title": "T", "version": "3",
-                "date": "2023-01-15", "authors": "A B", "category": ""}
+        item = {
+            "doi": "10.1101/2023.01.15.524150",
+            "title": "T",
+            "version": "3",
+            "date": "2023-01-15",
+            "authors": "A B",
+            "category": "",
+        }
         p = self.src._parse(item, "biorxiv")
         assert p.pdf_url == "https://www.biorxiv.org/content/10.1101/2023.01.15.524150v3.full.pdf"
 
     def test_medrxiv_server_in_url(self):
-        item = {"doi": "10.1101/2022.06.10.495673", "title": "T", "version": "1",
-                "date": "2022-06-10", "authors": "X Y", "category": "infectious diseases"}
+        item = {
+            "doi": "10.1101/2022.06.10.495673",
+            "title": "T",
+            "version": "1",
+            "date": "2022-06-10",
+            "authors": "X Y",
+            "category": "infectious diseases",
+        }
         p = self.src._parse(item, "medrxiv")
         assert "medrxiv.org" in p.url
         assert "medrxiv.org" in p.pdf_url
 
     def test_category_in_journal(self):
-        item = {"doi": "10.1101/2023.01.15.524150", "title": "T", "version": "1",
-                "date": "2023-01-15", "authors": "A", "category": "neuroscience"}
+        item = {
+            "doi": "10.1101/2023.01.15.524150",
+            "title": "T",
+            "version": "1",
+            "date": "2023-01-15",
+            "authors": "A",
+            "category": "neuroscience",
+        }
         p = self.src._parse(item, "biorxiv")
         assert p.journal == "Biorxiv [neuroscience]"
 
     def test_empty_category_gives_plain_journal(self):
-        item = {"doi": "10.1101/2023.01.15.524150", "title": "T", "version": "1",
-                "date": "2023-01-15", "authors": "A", "category": ""}
+        item = {
+            "doi": "10.1101/2023.01.15.524150",
+            "title": "T",
+            "version": "1",
+            "date": "2023-01-15",
+            "authors": "A",
+            "category": "",
+        }
         p = self.src._parse(item, "biorxiv")
         assert p.journal == "Biorxiv"
 
     def test_missing_doi_gives_none(self):
-        item = {"doi": "", "title": "T", "version": "1",
-                "date": "2023-01-15", "authors": "A", "category": ""}
+        item = {
+            "doi": "",
+            "title": "T",
+            "version": "1",
+            "date": "2023-01-15",
+            "authors": "A",
+            "category": "",
+        }
         p = self.src._parse(item, "biorxiv")
         assert p.doi is None
         assert p.pdf_url is None
         assert p.url is None
 
     def test_missing_date_year_is_none(self):
-        item = {"doi": "10.1101/2023.01.15.524150", "title": "T", "version": "1",
-                "date": "", "authors": "A", "category": ""}
+        item = {
+            "doi": "10.1101/2023.01.15.524150",
+            "title": "T",
+            "version": "1",
+            "date": "",
+            "authors": "A",
+            "category": "",
+        }
         p = self.src._parse(item, "biorxiv")
         assert p.year is None
 
 
 # ── _build_query ──────────────────────────────────────────────────────────────
+
 
 class TestBuildQuery:
     def test_plain_query(self):
@@ -174,76 +213,89 @@ class TestBuildQuery:
 
 # ── _fetch_paper ──────────────────────────────────────────────────────────────
 
+
 class TestFetchPaper:
     src = BioRxivSource()
     doi = "10.1101/2023.01.15.524150"
 
     def test_returns_paper_on_success(self):
-        with patch("httpx.get") as mock_get:
-            mock_get.return_value = _make_resp(
-                json_data=_api_resp(self.doi, "Great Paper")
-            )
-            p = self.src._fetch_paper("biorxiv", self.doi)
+        mock_client = MagicMock()
+        mock_client.get.return_value = _make_resp(json_data=_api_resp(self.doi, "Great Paper"))
+        p = self.src._fetch_paper(mock_client, "biorxiv", self.doi)
         assert p is not None
         assert p.title == "Great Paper"
 
     def test_returns_none_on_non_200(self):
-        with patch("httpx.get") as mock_get:
-            mock_get.return_value = _make_resp(status=404)
-            p = self.src._fetch_paper("biorxiv", self.doi)
+        mock_client = MagicMock()
+        mock_client.get.return_value = _make_resp(status=404)
+        p = self.src._fetch_paper(mock_client, "biorxiv", self.doi)
         assert p is None
 
     def test_returns_none_on_empty_collection(self):
-        with patch("httpx.get") as mock_get:
-            mock_get.return_value = _make_resp(
-                json_data={"messages": [], "collection": []}
-            )
-            p = self.src._fetch_paper("biorxiv", self.doi)
+        mock_client = MagicMock()
+        mock_client.get.return_value = _make_resp(json_data={"messages": [], "collection": []})
+        p = self.src._fetch_paper(mock_client, "biorxiv", self.doi)
         assert p is None
 
     def test_returns_none_on_exception(self):
-        with patch("httpx.get", side_effect=Exception("timeout")):
-            p = self.src._fetch_paper("biorxiv", self.doi)
+        mock_client = MagicMock()
+        mock_client.get.side_effect = Exception("timeout")
+        p = self.src._fetch_paper(mock_client, "biorxiv", self.doi)
         assert p is None
 
     def test_picks_latest_version(self):
         resp = {
             "collection": [
-                {"doi": self.doi, "title": "v1", "version": "1",
-                 "date": "2023-01-01", "authors": "A", "category": ""},
-                {"doi": self.doi, "title": "v2", "version": "2",
-                 "date": "2023-02-01", "authors": "A", "category": ""},
+                {
+                    "doi": self.doi,
+                    "title": "v1",
+                    "version": "1",
+                    "date": "2023-01-01",
+                    "authors": "A",
+                    "category": "",
+                },
+                {
+                    "doi": self.doi,
+                    "title": "v2",
+                    "version": "2",
+                    "date": "2023-02-01",
+                    "authors": "A",
+                    "category": "",
+                },
             ]
         }
-        with patch("httpx.get") as mock_get:
-            mock_get.return_value = _make_resp(json_data=resp)
-            p = self.src._fetch_paper("biorxiv", self.doi)
+        mock_client = MagicMock()
+        mock_client.get.return_value = _make_resp(json_data=resp)
+        p = self.src._fetch_paper(mock_client, "biorxiv", self.doi)
         assert p.title == "v2"
 
 
 # ── search (integration-style) ────────────────────────────────────────────────
 
+
 class TestSearch:
     src = BioRxivSource()
 
-    def _mock_get(self, server_html=None, api_json=None, search_status=200):
-        """Return a side_effect callable for httpx.get."""
-        call_count = {"n": 0}
+    def _mock_client_se(self, server_html=None, api_json=None, search_status=200):
+        """Return a (client_cls, mock_client) tuple with a side_effect callable for .get()."""
 
         def side_effect(url, **kwargs):
-            call_count["n"] += 1
-            # First two calls are the search pages (biorxiv + medrxiv)
             if "/search/" in url:
                 return _make_resp(
                     status=search_status,
                     text=server_html or _SEARCH_HTML,
                 )
-            # Subsequent calls are content-API lookups
-            return _make_resp(json_data=api_json or _api_resp(
-                "10.1101/2023.01.15.524150", "Title One"
-            ))
+            return _make_resp(
+                json_data=api_json or _api_resp("10.1101/2023.01.15.524150", "Title One")
+            )
 
-        return side_effect
+        mock_client = MagicMock()
+        mock_client.get.side_effect = side_effect
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=mock_client)
+        ctx.__exit__ = MagicMock(return_value=False)
+        client_cls = MagicMock(return_value=ctx)
+        return client_cls, mock_client
 
     def test_returns_papers_from_both_servers(self):
         doi1 = "10.1101/2023.01.15.524150"
@@ -256,7 +308,14 @@ class TestSearch:
                 return _make_resp(json_data=_api_resp(doi1, "Title One"))
             return _make_resp(json_data=_api_resp(doi2, "Title Two"))
 
-        with patch("httpx.get", side_effect=side_effect):
+        mock_client = MagicMock()
+        mock_client.get.side_effect = side_effect
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=mock_client)
+        ctx.__exit__ = MagicMock(return_value=False)
+        client_cls = MagicMock(return_value=ctx)
+
+        with patch("httpx.Client", client_cls):
             papers = self.src.search("transformer", max_results=5)
 
         titles = {p.title for p in papers}
@@ -268,17 +327,29 @@ class TestSearch:
                 return _make_resp(status=503)
             if "medrxiv.org/search" in url:
                 return _make_resp(text=_SEARCH_HTML)
-            return _make_resp(json_data=_api_resp(
-                "10.1101/2023.01.15.524150", "medRxiv Paper"
-            ))
+            return _make_resp(json_data=_api_resp("10.1101/2023.01.15.524150", "medRxiv Paper"))
 
-        with patch("httpx.get", side_effect=side_effect):
+        mock_client = MagicMock()
+        mock_client.get.side_effect = side_effect
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=mock_client)
+        ctx.__exit__ = MagicMock(return_value=False)
+        client_cls = MagicMock(return_value=ctx)
+
+        with patch("httpx.Client", client_cls):
             papers = self.src.search("covid", max_results=5)
 
         assert any("medRxiv Paper" in p.title for p in papers)
 
     def test_all_search_pages_fail_returns_empty(self):
-        with patch("httpx.get", return_value=_make_resp(status=500)):
+        mock_client = MagicMock()
+        mock_client.get.return_value = _make_resp(status=500)
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=mock_client)
+        ctx.__exit__ = MagicMock(return_value=False)
+        client_cls = MagicMock(return_value=ctx)
+
+        with patch("httpx.Client", client_cls):
             papers = self.src.search("deep learning", max_results=5)
         assert papers == []
 
@@ -292,7 +363,14 @@ class TestSearch:
                 return _make_resp(text="")  # no results
             return _make_resp(json_data={"collection": []})
 
-        with patch("httpx.get", side_effect=side_effect):
+        mock_client = MagicMock()
+        mock_client.get.side_effect = side_effect
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=mock_client)
+        ctx.__exit__ = MagicMock(return_value=False)
+        client_cls = MagicMock(return_value=ctx)
+
+        with patch("httpx.Client", client_cls):
             self.src.search("RNA", max_results=5, filters=filters)
 
         search_urls = [u for u in captured_urls if "/search/" in u]
@@ -306,8 +384,15 @@ class TestSearch:
                 return _make_resp(text=_SEARCH_HTML)
             return _make_resp(json_data=_api_resp(doi, "Paper"))
 
+        mock_client = MagicMock()
+        mock_client.get.side_effect = side_effect
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=mock_client)
+        ctx.__exit__ = MagicMock(return_value=False)
+        client_cls = MagicMock(return_value=ctx)
+
         filters = SearchFilters(authors=["Nonexistent"])
-        with patch("httpx.get", side_effect=side_effect):
+        with patch("httpx.Client", client_cls):
             papers = self.src.search("RNA", max_results=5, filters=filters)
 
         assert papers == []

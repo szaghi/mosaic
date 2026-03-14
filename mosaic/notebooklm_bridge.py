@@ -1,25 +1,29 @@
 """Bridge between MOSAIC and Google NotebookLM via notebooklm-py."""
+
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from mosaic.models import Paper
+
+log = logging.getLogger(__name__)
 
 # NotebookLM enforces a hard cap of 50 sources per notebook.
 _SOURCE_LIMIT = 50
 
 # Mapping from flag name to artifacts client method name
 _ARTIFACT_METHODS: dict[str, str] = {
-    "podcast":     "generate_audio",
-    "video":       "generate_video",
-    "briefing":    "generate_report",
+    "podcast": "generate_audio",
+    "video": "generate_video",
+    "briefing": "generate_report",
     "study_guide": "generate_study_guide",
-    "quiz":        "generate_quiz",
-    "flashcards":  "generate_flashcards",
+    "quiz": "generate_quiz",
+    "flashcards": "generate_flashcards",
     "infographic": "generate_infographic",
-    "slide_deck":  "generate_slide_deck",
-    "data_table":  "generate_data_table",
-    "mind_map":    "generate_mind_map",
+    "slide_deck": "generate_slide_deck",
+    "data_table": "generate_data_table",
+    "mind_map": "generate_mind_map",
 }
 
 
@@ -32,7 +36,49 @@ def _require_notebooklm() -> None:
             "notebooklm-py is not installed.\n"
             "Install it with:  pip install 'mosaic-search[notebooklm]'\n"
             "Then authenticate: notebooklm login"
-        )
+        ) from None
+
+
+def check_notebooklm_status() -> dict[str, object]:
+    """Check NotebookLM availability and authentication status.
+
+    Returns a dict with:
+      - installed (bool): True if notebooklm-py is importable.
+      - authenticated (bool): True if storage_state.json exists and is non-empty.
+      - storage_path (str | None): Resolved path to storage_state.json.
+      - auth_env (bool): True if NOTEBOOKLM_AUTH_JSON env var is set.
+    """
+    import os
+
+    status: dict[str, object] = {
+        "installed": False,
+        "authenticated": False,
+        "storage_path": None,
+        "auth_env": bool(os.environ.get("NOTEBOOKLM_AUTH_JSON")),
+    }
+
+    try:
+        import notebooklm  # noqa: F401
+
+        status["installed"] = True
+    except ImportError:
+        return status
+
+    try:
+        from notebooklm.paths import get_storage_path
+
+        sp = get_storage_path()
+        status["storage_path"] = str(sp)
+        if sp.exists() and sp.stat().st_size > 10:
+            status["authenticated"] = True
+    except Exception:
+        log.debug("Could not check NotebookLM storage path", exc_info=True)
+
+    # Auth via env var counts as authenticated
+    if status["auth_env"]:
+        status["authenticated"] = True
+
+    return status
 
 
 async def _generate_artifacts(client, nb_id: str, artifacts: set[str], added: int) -> None:
@@ -84,7 +130,7 @@ async def create_notebook(
                     await client.sources.add_url(nb_id, paper.url)
                     added += 1
             except Exception:
-                pass  # individual source failures are non-fatal
+                log.debug("Failed to add source %s to notebook", paper.title, exc_info=True)
 
         await _generate_artifacts(client, nb_id, artifacts, added)
 
@@ -122,7 +168,7 @@ async def create_notebook_from_dir(
                 await client.sources.add_file(nb_id, pdf)
                 added += 1
             except Exception:
-                pass
+                log.debug("Failed to add PDF %s to notebook", pdf.name, exc_info=True)
 
         await _generate_artifacts(client, nb_id, artifacts, added)
 

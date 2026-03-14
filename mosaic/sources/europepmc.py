@@ -1,8 +1,12 @@
 """Europe PubMed Central API."""
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import parse_year, split_authors
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
 
 _BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 
@@ -10,7 +14,9 @@ _BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 class EuropePMCSource(BaseSource):
     name = "Europe PMC"
 
-    def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Search the Europe PMC REST API.
 
         Builds a query using Europe PMC field qualifiers (``TITLE:``,
@@ -26,32 +32,28 @@ class EuropePMCSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``resultList.result`` array.
         """
-        if filters and filters.raw_query:
-            epmc_query = filters.raw_query
-        elif filters and filters.field == "title":
-            epmc_query = f'TITLE:"{query}"'
-        elif filters and filters.field == "abstract":
-            epmc_query = f'ABSTRACT:"{query}"'
-        else:
-            epmc_query = query
+        epmc_query = build_field_query(query, filters, 'TITLE:"{}"', 'ABSTRACT:"{}"')
         if filters:
             if filters.authors:
                 for author in filters.authors:
                     epmc_query += f' AND AUTH:"{author}"'
             if filters.journal:
                 epmc_query += f' AND JOURNAL:"{filters.journal}"'
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 epmc_query += f" AND PUB_YEAR:[{y_from or y_to} TO {y_to or y_from}]"
-        resp = httpx.get(_BASE, params={
-            "query": epmc_query,
-            "pageSize": min(max_results, 100),
-            "resultType": "core",
-            "format": "json",
-        }, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(
+                _BASE,
+                params={
+                    "query": epmc_query,
+                    "pageSize": min(max_results, 100),
+                    "resultType": "core",
+                    "format": "json",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
         return [self._parse(item) for item in data.get("resultList", {}).get("result", [])]
 
     def _parse(self, item: dict) -> Paper:
@@ -67,11 +69,9 @@ class EuropePMCSource(BaseSource):
             A Paper with a PDF URL constructed from the PMC ID when the
             article is open access and has a PMC identifier.
         """
-        authors_raw = item.get("authorString") or ""
-        authors = [a.strip() for a in authors_raw.split(",") if a.strip()]
+        authors = split_authors(item.get("authorString") or "")
 
-        year_str = str(item.get("pubYear") or "")
-        year = int(year_str) if year_str.isdigit() else None
+        year = parse_year(item.get("pubYear"))
 
         is_oa = item.get("isOpenAccess") == "Y"
 

@@ -1,8 +1,12 @@
 """NASA Astrophysics Data System (ADS) API source."""
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import extract_first, parse_year
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
 
 _BASE = "https://api.adsabs.harvard.edu/v1/search/query"
 _FIELDS = "title,author,year,doi,abstract,bibcode,identifier,pub,property"
@@ -63,34 +67,25 @@ class NASAADSSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``response.docs`` array.
         """
-        if filters and filters.raw_query:
-            ads_query = filters.raw_query
-        elif filters and filters.field == "title":
-            ads_query = f"title:{query}"
-        elif filters and filters.field == "abstract":
-            ads_query = f"abstract:{query}"
-        else:
-            ads_query = query
+        ads_query = build_field_query(query, filters, "title:{}", "abstract:{}")
 
         if filters:
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 ads_query += f" year:{y_from or y_to}-{y_to or y_from}"
 
-        resp = httpx.get(
-            _BASE,
-            params={
-                "q": ads_query,
-                "fl": _FIELDS,
-                "rows": min(max_results, 200),
-                "sort": "score desc",
-            },
-            headers=self._headers,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        docs = resp.json().get("response", {}).get("docs", [])
+        with httpx.Client(timeout=30, headers=self._headers) as client:
+            resp = client.get(
+                _BASE,
+                params={
+                    "q": ads_query,
+                    "fl": _FIELDS,
+                    "rows": min(max_results, 200),
+                    "sort": "score desc",
+                },
+            )
+            resp.raise_for_status()
+            docs = resp.json().get("response", {}).get("docs", [])
         return [self._parse(doc) for doc in docs]
 
     def _parse(self, doc: dict) -> Paper:
@@ -108,16 +103,13 @@ class NASAADSSource(BaseSource):
             article is open access.
         """
         # title is a list in ADS
-        title_raw = doc.get("title") or []
-        title = title_raw[0] if title_raw else ""
+        title = extract_first(doc.get("title")) or ""
 
         authors = list(doc.get("author") or [])
 
-        year_str = str(doc.get("year") or "")
-        year = int(year_str) if year_str.isdigit() else None
+        year = parse_year(doc.get("year"))
 
-        doi_list = doc.get("doi") or []
-        doi = doi_list[0] if doi_list else None
+        doi = extract_first(doc.get("doi"))
 
         abstract = doc.get("abstract") or None
 
@@ -126,9 +118,9 @@ class NASAADSSource(BaseSource):
 
         # extract arXiv ID from the identifier list (e.g. "arXiv:2301.xxxxx")
         arxiv_id: str | None = None
-        for ident in (doc.get("identifier") or []):
+        for ident in doc.get("identifier") or []:
             if ident.startswith("arXiv:"):
-                arxiv_id = ident[len("arXiv:"):]
+                arxiv_id = ident[len("arXiv:") :]
                 break
 
         journal = doc.get("pub") or None

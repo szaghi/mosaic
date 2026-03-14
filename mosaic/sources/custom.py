@@ -1,7 +1,11 @@
 """Generic configurable REST source — driven entirely from a TOML config dict."""
+
 from __future__ import annotations
+
 import re
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
 from mosaic.sources.base import BaseSource
 
@@ -53,17 +57,17 @@ class CustomSource(BaseSource):
     """
 
     def __init__(self, cfg: dict) -> None:
-        self.name             = cfg["name"]
-        self._url             = cfg.get("url", "")
-        self._method          = cfg.get("method", "GET").upper()
-        self._query_param     = cfg.get("query_param", "q")
-        self._results_path    = cfg.get("results_path", "results")
-        self._api_key         = cfg.get("api_key", "")
-        self._api_key_header  = cfg.get("api_key_header", "X-API-Key")
+        self.name = cfg["name"]
+        self._url = cfg.get("url", "")
+        self._method = cfg.get("method", "GET").upper()
+        self._query_param = cfg.get("query_param", "q")
+        self._results_path = cfg.get("results_path", "results")
+        self._api_key = cfg.get("api_key", "")
+        self._api_key_header = cfg.get("api_key_header", "X-API-Key")
         self._max_results_param = cfg.get("max_results_param", "")
-        self._fields: dict    = cfg.get("fields", {})
-        self._authors_path    = cfg.get("authors_path", "")
-        self._authors_field   = cfg.get("authors_field", "")
+        self._fields: dict = cfg.get("fields", {})
+        self._authors_path = cfg.get("authors_path", "")
+        self._authors_field = cfg.get("authors_field", "")
 
     def available(self) -> bool:
         """Return True only when a non-empty endpoint URL has been configured."""
@@ -135,17 +139,14 @@ class CustomSource(BaseSource):
         Returns:
             A Paper populated with whatever fields the config mapping resolves.
         """
+
         def field(key: str):
             path = self._fields.get(key, "")
             return _get_nested(item, path) if path else None
 
         if self._authors_path and self._authors_field:
             raw = _get_nested(item, self._authors_path) or []
-            authors = [
-                a.get(self._authors_field, "")
-                for a in raw
-                if isinstance(a, dict)
-            ]
+            authors = [a.get(self._authors_field, "") for a in raw if isinstance(a, dict)]
         elif "authors" in self._fields:
             raw = _get_nested(item, self._fields["authors"]) or []
             authors = [str(a) for a in raw if a]

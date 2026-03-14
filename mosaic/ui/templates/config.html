@@ -189,6 +189,7 @@
     </label>
   </fieldset>
 
-  <button type="submit">Save Configuration</button>
+  <button type="submit" hx-indicator="#config-spinner">Save Configuration</button>
+  <span id="config-spinner" class="htmx-indicator" aria-busy="true">Saving&hellip;</span>
 </form>
 {% endblock %}
