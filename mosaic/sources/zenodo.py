@@ -1,9 +1,12 @@
 """Zenodo open-access research repository API source."""
+
 from __future__ import annotations
-import re
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import parse_authors_name_key, parse_year, strip_html
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
 
 _BASE = "https://zenodo.org/api/records"
 
@@ -64,19 +67,11 @@ class ZenodoSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``hits.hits`` array.
         """
-        if filters and filters.raw_query:
-            q = filters.raw_query
-        elif filters and filters.field == "title":
-            q = f"title:{query}"
-        elif filters and filters.field == "abstract":
-            q = f"description:{query}"
-        else:
-            q = query
+        q = build_field_query(query, filters, "title:{}", "description:{}")
 
         # year filter
         if filters:
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 y_lo = f"{y_from or y_to}-01-01"
                 y_hi = f"{y_to or y_from}-12-31"
@@ -96,9 +91,10 @@ class ZenodoSource(BaseSource):
         if self._token:
             params["access_token"] = self._token
 
-        resp = httpx.get(_BASE, params=params, timeout=30)
-        resp.raise_for_status()
-        hits = resp.json().get("hits", {}).get("hits", [])
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(_BASE, params=params)
+            resp.raise_for_status()
+            hits = resp.json().get("hits", {}).get("hits", [])
         return [self._parse(hit) for hit in hits]
 
     def _parse(self, hit: dict) -> Paper:
@@ -118,21 +114,14 @@ class ZenodoSource(BaseSource):
 
         title = meta.get("title", "")
 
-        creators = meta.get("creators") or []
-        authors = [c.get("name", "") for c in creators]
+        authors = parse_authors_name_key(meta.get("creators") or [])
 
-        pub_date = meta.get("publication_date") or ""
-        year: int | None = None
-        if pub_date:
-            m = re.match(r"(\d{4})", pub_date)
-            if m:
-                year = int(m.group(1))
+        year = parse_year(meta.get("publication_date"))
 
         doi = meta.get("doi") or None
 
         # description may contain HTML — strip tags for a plain-text abstract
-        raw_desc = meta.get("description") or ""
-        abstract = re.sub(r"<[^>]+>", " ", raw_desc).strip() or None
+        abstract = strip_html(meta.get("description"))
 
         journal_info = meta.get("journal") or {}
         journal = journal_info.get("title") or None
@@ -141,7 +130,7 @@ class ZenodoSource(BaseSource):
 
         # PDF: first file entry whose key ends with .pdf
         pdf_url: str | None = None
-        for f in (hit.get("files") or []):
+        for f in hit.get("files") or []:
             if str(f.get("key", "")).lower().endswith(".pdf"):
                 pdf_url = f.get("links", {}).get("self") or None
                 break

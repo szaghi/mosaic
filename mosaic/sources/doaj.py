@@ -1,8 +1,12 @@
 """DOAJ (Directory of Open Access Journals) API."""
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import parse_authors_name_key, parse_year
+from mosaic.sources.base import BaseSource, build_field_query
 
 _BASE = "https://doaj.org/api/v3/search/articles"
 
@@ -10,7 +14,9 @@ _BASE = "https://doaj.org/api/v3/search/articles"
 class DoajSource(BaseSource):
     name = "DOAJ"
 
-    def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Search the DOAJ v3 article search endpoint.
 
         Translates the query into DOAJ Lucene syntax, scoping to
@@ -27,14 +33,9 @@ class DoajSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``results`` array.
         """
-        if filters and filters.raw_query:
-            doaj_query = filters.raw_query
-        elif filters and filters.field == "title":
-            doaj_query = f'bibjson.title:"{query}"'
-        elif filters and filters.field == "abstract":
-            doaj_query = f'bibjson.abstract:"{query}"'
-        else:
-            doaj_query = query
+        doaj_query = build_field_query(
+            query, filters, 'bibjson.title:"{}"', 'bibjson.abstract:"{}"'
+        )
         if filters:
             if filters.authors:
                 for author in filters.authors:
@@ -50,13 +51,13 @@ class DoajSource(BaseSource):
                 if filters.year_to:
                     doaj_query += f" AND bibjson.year:<={filters.year_to}"
         # DOAJ uses path-based query: /search/articles/{query}
-        resp = httpx.get(
-            f"https://doaj.org/api/v3/search/articles/{httpx.URL(doaj_query)}",
-            params={"pageSize": min(max_results, 100)},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(
+                f"https://doaj.org/api/v3/search/articles/{httpx.URL(doaj_query)}",
+                params={"pageSize": min(max_results, 100)},
+            )
+            resp.raise_for_status()
+            data = resp.json()
         return [self._parse(item) for item in data.get("results", [])]
 
     def _parse(self, item: dict) -> Paper:
@@ -72,12 +73,13 @@ class DoajSource(BaseSource):
         """
         bib = item.get("bibjson") or {}
         journal = bib.get("journal") or {}
-        identifiers = {i["type"]: i["id"] for i in bib.get("identifier", []) if "type" in i and "id" in i}
+        identifiers = {
+            i["type"]: i["id"] for i in bib.get("identifier", []) if "type" in i and "id" in i
+        }
 
-        authors = [a.get("name", "") for a in bib.get("author", [])]
+        authors = parse_authors_name_key(bib.get("author", []))
 
-        year_str = bib.get("year") or ""
-        year = int(year_str) if year_str.isdigit() else None
+        year = parse_year(bib.get("year"))
 
         pdf_url = None
         for link in bib.get("link", []):

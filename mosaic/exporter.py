@@ -1,9 +1,12 @@
 """Export search results to various file formats."""
+
 from __future__ import annotations
+
 import csv
 import json
 import re
 from pathlib import Path
+
 from mosaic.models import Paper
 
 
@@ -12,11 +15,11 @@ def export(papers: list[Paper], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     ext = path.suffix.lower()
     dispatch = {
-        ".md":       _to_markdown,
+        ".md": _to_markdown,
         ".markdown": _to_markdown_full,
-        ".csv":      _to_csv,
-        ".json":     _to_json,
-        ".bib":      _to_bibtex,
+        ".csv": _to_csv,
+        ".json": _to_json,
+        ".bib": _to_bibtex,
     }
     fn = dispatch.get(ext)
     if fn is None:
@@ -26,13 +29,14 @@ def export(papers: list[Paper], path: Path) -> None:
 
 # ── Markdown ──────────────────────────────────────────────────────────────────
 
+
 def _to_markdown(papers: list[Paper], path: Path) -> None:
     lines = [
         "| # | Title | Authors | Year | DOI | Source | OA | PDF |",
         "|---|-------|---------|------|-----|--------|----|-----|",
     ]
     for i, p in enumerate(papers, 1):
-        oa  = "yes" if p.is_open_access else "no"
+        oa = "yes" if p.is_open_access else "no"
         pdf = p.pdf_url or ""
         doi = p.doi or ""
         lines.append(
@@ -44,31 +48,30 @@ def _to_markdown(papers: list[Paper], path: Path) -> None:
 
 # ── Markdown (detailed) ───────────────────────────────────────────────────────
 
+
 def _to_markdown_full(papers: list[Paper], path: Path) -> None:
     blocks = []
     for i, p in enumerate(papers, 1):
         rows: list[tuple[str, str]] = [
-            ("Title",        p.title),
-            ("Authors",      ", ".join(p.authors) if p.authors else ""),
-            ("Year",         str(p.year) if p.year else ""),
-            ("DOI",          p.doi or ""),
-            ("arXiv ID",     p.arxiv_id or ""),
-            ("Journal",      p.journal or ""),
-            ("Volume",       p.volume or ""),
-            ("Issue",        p.issue or ""),
-            ("Pages",        p.pages or ""),
-            ("Source",          p.source),
-            ("Open Access",     "yes" if p.is_open_access else "no"),
-            ("Citation count",  str(p.citation_count) if p.citation_count is not None else ""),
-            ("PDF",             p.pdf_url or ""),
-            ("URL",             p.url or ""),
-            ("Abstract",        p.abstract or ""),
+            ("Title", p.title),
+            ("Authors", ", ".join(p.authors) if p.authors else ""),
+            ("Year", str(p.year) if p.year else ""),
+            ("DOI", p.doi or ""),
+            ("arXiv ID", p.arxiv_id or ""),
+            ("Journal", p.journal or ""),
+            ("Volume", p.volume or ""),
+            ("Issue", p.issue or ""),
+            ("Pages", p.pages or ""),
+            ("Source", p.source),
+            ("Open Access", "yes" if p.is_open_access else "no"),
+            ("Citation count", str(p.citation_count) if p.citation_count is not None else ""),
+            ("PDF", p.pdf_url or ""),
+            ("URL", p.url or ""),
+            ("Abstract", p.abstract or ""),
         ]
         table = "| Field | Value |\n|-------|-------|\n"
         table += "\n".join(
-            f"| {field} | {value.replace(chr(10), ' ')} |"
-            for field, value in rows
-            if value
+            f"| {field} | {value.replace(chr(10), ' ')} |" for field, value in rows if value
         )
         blocks.append(f"## {i}. {p.title}\n\n{table}")
     path.write_text("\n\n---\n\n".join(blocks) + "\n", encoding="utf-8")
@@ -76,52 +79,69 @@ def _to_markdown_full(papers: list[Paper], path: Path) -> None:
 
 # ── CSV ───────────────────────────────────────────────────────────────────────
 
+
 def _to_csv(papers: list[Paper], path: Path) -> None:
-    fields = ["title", "authors", "year", "doi", "arxiv_id",
-              "journal", "volume", "issue", "pages",
-              "source", "is_open_access", "citation_count", "pdf_url", "url"]
+    fields = [
+        "title",
+        "authors",
+        "year",
+        "doi",
+        "arxiv_id",
+        "journal",
+        "volume",
+        "issue",
+        "pages",
+        "source",
+        "is_open_access",
+        "citation_count",
+        "pdf_url",
+        "url",
+    ]
     with path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
         for p in papers:
-            writer.writerow({
-                "title":          p.title,
-                "authors":        "; ".join(p.authors),
-                "year":           p.year or "",
-                "doi":            p.doi or "",
-                "arxiv_id":       p.arxiv_id or "",
-                "journal":        p.journal or "",
-                "volume":         p.volume or "",
-                "issue":          p.issue or "",
-                "pages":          p.pages or "",
-                "source":         p.source,
-                "is_open_access": p.is_open_access,
-                "citation_count": p.citation_count if p.citation_count is not None else "",
-                "pdf_url":        p.pdf_url or "",
-                "url":            p.url or "",
-            })
+            writer.writerow(
+                {
+                    "title": p.title,
+                    "authors": "; ".join(p.authors),
+                    "year": p.year or "",
+                    "doi": p.doi or "",
+                    "arxiv_id": p.arxiv_id or "",
+                    "journal": p.journal or "",
+                    "volume": p.volume or "",
+                    "issue": p.issue or "",
+                    "pages": p.pages or "",
+                    "source": p.source,
+                    "is_open_access": p.is_open_access,
+                    "citation_count": p.citation_count if p.citation_count is not None else "",
+                    "pdf_url": p.pdf_url or "",
+                    "url": p.url or "",
+                }
+            )
 
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 
+
 def _to_json(papers: list[Paper], path: Path) -> None:
     data = [
         {
-            "title":          p.title,
-            "authors":        p.authors,
-            "year":           p.year,
-            "doi":            p.doi,
-            "arxiv_id":       p.arxiv_id,
-            "abstract":       p.abstract,
-            "journal":        p.journal,
-            "volume":         p.volume,
-            "issue":          p.issue,
-            "pages":          p.pages,
-            "source":         p.source,
+            "title": p.title,
+            "authors": p.authors,
+            "year": p.year,
+            "doi": p.doi,
+            "arxiv_id": p.arxiv_id,
+            "abstract": p.abstract,
+            "journal": p.journal,
+            "volume": p.volume,
+            "issue": p.issue,
+            "pages": p.pages,
+            "source": p.source,
             "is_open_access": p.is_open_access,
             "citation_count": p.citation_count,
-            "pdf_url":        p.pdf_url,
-            "url":            p.url,
+            "pdf_url": p.pdf_url,
+            "url": p.url,
         }
         for p in papers
     ]
@@ -129,6 +149,7 @@ def _to_json(papers: list[Paper], path: Path) -> None:
 
 
 # ── BibTeX ────────────────────────────────────────────────────────────────────
+
 
 def _to_bibtex(papers: list[Paper], path: Path) -> None:
     entries = [_bibtex_entry(p, i) for i, p in enumerate(papers, 1)]
@@ -156,8 +177,8 @@ def _bibtex_entry(p: Paper, index: int) -> str:
     if p.doi:
         fields.append(("doi", p.doi))
     if p.arxiv_id:
-        fields.append(("eprint",      p.arxiv_id))
-        fields.append(("eprinttype",  "arXiv"))
+        fields.append(("eprint", p.arxiv_id))
+        fields.append(("eprinttype", "arXiv"))
         if not p.journal:
             fields.append(("howpublished", f"{{arXiv:{p.arxiv_id}}}"))
     if p.abstract:

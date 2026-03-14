@@ -1,5 +1,7 @@
 """Unpaywall — resolve OA PDF URL for any DOI."""
+
 from __future__ import annotations
+
 import httpx
 
 _BASE = "https://api.unpaywall.org/v2/{doi}"

@@ -1,8 +1,12 @@
 """PubMed / NCBI E-utilities search source."""
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import parse_authors_name_key, parse_year_earliest
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
 
 _ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _ESUMMARY = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
@@ -24,7 +28,9 @@ class PubMedSource(BaseSource):
     def available(self) -> bool:
         return True
 
-    def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Search PubMed using the NCBI E-utilities two-step flow.
 
         First calls ``esearch`` to retrieve a list of PMIDs matching the
@@ -43,14 +49,7 @@ class PubMedSource(BaseSource):
             A list of Paper objects parsed from the esummary response.
         """
         # ── build PubMed query ─────────────────────────────────────────
-        if filters and filters.raw_query:
-            pm_query = filters.raw_query
-        elif filters and filters.field == "title":
-            pm_query = f"{query}[ti]"
-        elif filters and filters.field == "abstract":
-            pm_query = f"{query}[ab]"
-        else:
-            pm_query = query
+        pm_query = build_field_query(query, filters, "{}[ti]", "{}[ab]")
 
         if filters:
             if filters.authors:
@@ -70,33 +69,33 @@ class PubMedSource(BaseSource):
         # Date filtering: use mindate/maxdate API params rather than
         # embedding [pdat] in the query string — far more reliable.
         if filters:
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 params["datetype"] = "pdat"
-                params["mindate"]  = str(y_from or y_to)
-                params["maxdate"]  = str(y_to   or y_from)
+                params["mindate"] = str(y_from or y_to)
+                params["maxdate"] = str(y_to or y_from)
         if self._api_key:
             params["api_key"] = self._api_key
 
-        resp = httpx.get(_ESEARCH, params=params, timeout=30)
-        resp.raise_for_status()
-        pmids = resp.json().get("esearchresult", {}).get("idlist", [])
-        if not pmids:
-            return []
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(_ESEARCH, params=params)
+            resp.raise_for_status()
+            pmids = resp.json().get("esearchresult", {}).get("idlist", [])
+            if not pmids:
+                return []
 
-        # ── step 2: esummary → metadata (POST avoids URL-length limits) ──
-        sum_data: dict = {
-            "db": "pubmed",
-            "id": ",".join(pmids),
-            "retmode": "json",
-        }
-        if self._api_key:
-            sum_data["api_key"] = self._api_key
+            # ── step 2: esummary → metadata (POST avoids URL-length limits) ──
+            sum_data: dict = {
+                "db": "pubmed",
+                "id": ",".join(pmids),
+                "retmode": "json",
+            }
+            if self._api_key:
+                sum_data["api_key"] = self._api_key
 
-        resp2 = httpx.post(_ESUMMARY, data=sum_data, timeout=60)
-        resp2.raise_for_status()
-        result = resp2.json().get("result", {})
+            resp2 = client.post(_ESUMMARY, data=sum_data, timeout=60)
+            resp2.raise_for_status()
+            result = resp2.json().get("result", {})
 
         return [self._parse(result[pmid]) for pmid in pmids if pmid in result]
 
@@ -114,28 +113,20 @@ class PubMedSource(BaseSource):
             PMC ID is present in the ``articleids`` list.
         """
         # authors
-        authors = [a.get("name", "") for a in (item.get("authors") or [])]
+        authors = parse_authors_name_key(item.get("authors") or [])
 
         # year: prefer the earliest of pubdate and epubdate so that the year
         # shown is consistent with PubMed's pdat filter (which uses epubdate
         # for epub-ahead-of-print articles).
         # Both fields can be "2021 Jan 15", "2021 Jan", "2021", "2021 Winter".
-        year: int | None = None
-        for field in ("epubdate", "pubdate"):
-            raw = str(item.get(field) or "")
-            if raw:
-                part = raw.split()[0]
-                if part.isdigit() and len(part) == 4:
-                    y = int(part)
-                    if year is None or y < year:
-                        year = y
+        year = parse_year_earliest(item, ["epubdate", "pubdate"])
 
         # extract DOI and PMC ID from articleids list
         doi: str | None = None
         pmcid: str | None = None
         for aid in item.get("articleids") or []:
             idtype = aid.get("idtype", "")
-            value  = aid.get("value", "")
+            value = aid.get("value", "")
             if idtype == "doi" and value:
                 doi = value
             elif idtype == "pmc" and value:

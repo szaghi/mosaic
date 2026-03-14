@@ -31,7 +31,7 @@
 ## What MOSAIC does
 
 ```bash
-# Search 20 sources at once, deduplicate, download OA PDFs
+# Search 21 sources at once, deduplicate, download OA PDFs
 mosaic search "attention is all you need" --oa-only --download
 
 # Discover related literature from any DOI or arXiv ID — no query needed
@@ -71,7 +71,7 @@ Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://sza
 <tr>
 <td align="center" width="33%">
 
-🌐 **20 sources, one command**
+🌐 **21 sources, one command**
 
 arXiv · Semantic Scholar · OpenAlex · PubMed · PubMed Central · Europe PMC · DOAJ · Crossref · Springer · IEEE · NASA ADS · Zenodo · BASE · CORE · DBLP · HAL · ScienceDirect · bioRxiv/medRxiv · and more
 
@@ -173,6 +173,8 @@ Push results directly into your Zotero library — local API (Zotero running on 
 | **PubMed** | `pubmed` | 35 M+ biomedical citations (NCBI) | None (API key optional) | PMC PDF for OA articles |
 | **PubMed Central** | `pmc` | 5 M+ free full-text biomedical articles | None (API key optional) | Always — all PMC articles are OA |
 | **bioRxiv / medRxiv** | `rxiv` | Life-science and medical preprints | None | Always (all preprints are OA) |
+| **PEDro** | `pedro` | Physiotherapy evidence database | None (fair-use ack) | No (abstracts only) |
+| **Scopus** | `scopus` | 90 M+ abstracts from Elsevier's citation database | API key or browser session | Via Unpaywall |
 | **Unpaywall** | — | PDF resolver for any DOI | Email only | Legal OA copy |
 
 ## Installation
@@ -228,7 +230,7 @@ mosaic search "deep learning" -n 25 --oa-only
 mosaic search "RNA velocity" --source epmc
 ```
 
-**Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc` · `oa` · `base` · `core`
+**Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc` · `oa` · `base` · `core` · `sp` · `springer` · `ads` · `ieee` · `zenodo` · `crossref` · `dblp` · `hal` · `pubmed` · `pmc` · `rxiv` · `pedro` · `scopus`
 
 Custom sources defined in `config.toml` are also queried and addressable by their `name`.
 

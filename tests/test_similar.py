@@ -1,7 +1,8 @@
 """Tests for similar-paper discovery (OpenAlex + Semantic Scholar)."""
-from unittest.mock import patch, MagicMock
-from unittest.mock import MagicMock
-from mosaic.similar import find_similar, _oa_work_url, _ss_paper_id, _similar_openalex
+
+from unittest.mock import MagicMock, patch
+
+from mosaic.similar import _oa_work_url, _similar_openalex, _ss_paper_id, find_similar
 
 
 def make_response(text="", json_data=None, status_code=200):
@@ -15,6 +16,7 @@ def make_response(text="", json_data=None, status_code=200):
 
 
 # ── URL / ID helpers ──────────────────────────────────────────────────────────
+
 
 class TestOaWorkUrl:
     def test_bare_doi(self):
@@ -151,6 +153,7 @@ class TestSimilarOpenAlex:
 
 # ── find_similar (fan-out + dedup) ───────────────────────────────────────────
 
+
 class TestFindSimilar:
     def test_no_ss_key_uses_oa_only(self):
         responses = [
@@ -166,19 +169,21 @@ class TestFindSimilar:
 
     def test_ss_key_merges_results(self):
         ss_rec_response = {
-            "recommendedPapers": [{
-                "paperId": "zzz",
-                "title": "New Paper From SS",
-                "authors": [{"name": "Alice"}],
-                "year": 2021,
-                "abstract": None,
-                "externalIds": {"DOI": "10.9/new"},
-                "openAccessPdf": None,
-                "publicationVenue": None,
-                "journal": None,
-                "isOpenAccess": False,
-                "citationCount": 100,
-            }]
+            "recommendedPapers": [
+                {
+                    "paperId": "zzz",
+                    "title": "New Paper From SS",
+                    "authors": [{"name": "Alice"}],
+                    "year": 2021,
+                    "abstract": None,
+                    "externalIds": {"DOI": "10.9/new"},
+                    "openAccessPdf": None,
+                    "publicationVenue": None,
+                    "journal": None,
+                    "isOpenAccess": False,
+                    "citationCount": 100,
+                }
+            ]
         }
 
         def fake_get(url, **kwargs):
@@ -189,7 +194,7 @@ class TestFindSimilar:
             return make_response(json_data=_RELATED_RESPONSE)
 
         with patch("mosaic.similar.httpx.get", side_effect=fake_get):
-            seed_title, papers = find_similar("10.1/x", max_results=10, ss_api_key="key123")
+            _, papers = find_similar("10.1/x", max_results=10, ss_api_key="key123")
 
         titles = {p.title for p in papers}
         assert "New Paper From SS" in titles
@@ -200,19 +205,21 @@ class TestFindSimilar:
         # OA returns BERT with citation_count=50000
         # SS returns BERT with citation_count=55000 → should win
         ss_rec_response = {
-            "recommendedPapers": [{
-                "paperId": "bert",
-                "title": "BERT: Pre-training of Deep Bidirectional Transformers",
-                "authors": [{"name": "Jacob Devlin"}],
-                "year": 2019,
-                "abstract": "BERT abstract",
-                "externalIds": {"DOI": "10.18653/v1/N19-1423"},
-                "openAccessPdf": None,
-                "publicationVenue": None,
-                "journal": None,
-                "isOpenAccess": True,
-                "citationCount": 55000,
-            }]
+            "recommendedPapers": [
+                {
+                    "paperId": "bert",
+                    "title": "BERT: Pre-training of Deep Bidirectional Transformers",
+                    "authors": [{"name": "Jacob Devlin"}],
+                    "year": 2019,
+                    "abstract": "BERT abstract",
+                    "externalIds": {"DOI": "10.18653/v1/N19-1423"},
+                    "openAccessPdf": None,
+                    "publicationVenue": None,
+                    "journal": None,
+                    "isOpenAccess": True,
+                    "citationCount": 55000,
+                }
+            ]
         }
 
         def fake_get(url, **kwargs):

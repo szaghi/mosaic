@@ -1,9 +1,16 @@
 """SQLite cache for papers and download status."""
+
 from __future__ import annotations
-import sqlite3
+
 import json
+import logging
+import sqlite3
+import threading
 from pathlib import Path
+
 from mosaic.models import Paper
+
+log = logging.getLogger(__name__)
 
 
 def _connect(db_path: str) -> sqlite3.Connection:
@@ -57,36 +64,51 @@ def _init(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE papers ADD COLUMN citation_count INTEGER")
         con.commit()
     except sqlite3.OperationalError:
-        pass  # column already exists
+        log.debug("Migration: citation_count column already exists")
 
 
 def upsert(con: sqlite3.Connection, paper: Paper) -> None:
-    con.execute("""
+    con.execute(
+        """
         INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(uid) DO UPDATE SET
             pdf_url=excluded.pdf_url,
             abstract=excluded.abstract,
             is_open_access=excluded.is_open_access,
             citation_count=COALESCE(excluded.citation_count, papers.citation_count)
-    """, (
-        paper.uid, paper.title,
-        json.dumps(paper.authors), paper.year,
-        paper.doi, paper.arxiv_id, paper.pii,
-        paper.abstract, paper.journal,
-        paper.volume, paper.issue, paper.pages,
-        paper.pdf_url, paper.source,
-        int(paper.is_open_access), paper.url,
-        paper.citation_count,
-    ))
+    """,
+        (
+            paper.uid,
+            paper.title,
+            json.dumps(paper.authors),
+            paper.year,
+            paper.doi,
+            paper.arxiv_id,
+            paper.pii,
+            paper.abstract,
+            paper.journal,
+            paper.volume,
+            paper.issue,
+            paper.pages,
+            paper.pdf_url,
+            paper.source,
+            int(paper.is_open_access),
+            paper.url,
+            paper.citation_count,
+        ),
+    )
     con.commit()
 
 
 def set_download(con: sqlite3.Connection, uid: str, local_path: str, status: str) -> None:
-    con.execute("""
+    con.execute(
+        """
         INSERT INTO downloads(uid, local_path, status)
         VALUES (?,?,?)
         ON CONFLICT(uid) DO UPDATE SET local_path=excluded.local_path, status=excluded.status
-    """, (uid, local_path, status))
+    """,
+        (uid, local_path, status),
+    )
     con.commit()
 
 
@@ -116,39 +138,57 @@ def row_to_paper(row: sqlite3.Row) -> Paper:
 
 
 class Cache:
+    """Thread-safe SQLite cache.
+
+    All public methods are protected by a reentrant lock so that the cache
+    can be shared safely across ``ThreadPoolExecutor`` workers.
+    """
+
     def __init__(self, db_path: str):
         self.con = _connect(db_path)
+        self._lock = threading.RLock()
 
     def save(self, paper: Paper) -> None:
-        upsert(self.con, paper)
+        with self._lock:
+            upsert(self.con, paper)
 
     def set_download(self, uid: str, local_path: str, status: str) -> None:
-        set_download(self.con, uid, local_path, status)
+        with self._lock:
+            set_download(self.con, uid, local_path, status)
 
     def get_download(self, uid: str) -> sqlite3.Row | None:
-        return get_download(self.con, uid)
+        with self._lock:
+            return get_download(self.con, uid)
 
     def get_by_uid(self, uid: str) -> Paper | None:
-        row = self.con.execute("SELECT * FROM papers WHERE uid=?", (uid,)).fetchone()
-        return row_to_paper(row) if row else None
+        with self._lock:
+            row = self.con.execute("SELECT * FROM papers WHERE uid=?", (uid,)).fetchone()
+            return row_to_paper(row) if row else None
 
     def search_local(self, query: str) -> list[Paper]:
-        rows = self.con.execute("""
-            SELECT * FROM papers
-            WHERE title LIKE ? OR abstract LIKE ?
-        """, (f"%{query}%", f"%{query}%")).fetchall()
-        return [row_to_paper(r) for r in rows]
+        with self._lock:
+            rows = self.con.execute(
+                """
+                SELECT * FROM papers
+                WHERE title LIKE ? OR abstract LIKE ?
+            """,
+                (f"%{query}%", f"%{query}%"),
+            ).fetchall()
+            return [row_to_paper(r) for r in rows]
 
-    def save_search(self, query: str, filters_json: str = "",
-                    sources_json: str = "", result_count: int = 0) -> None:
-        self.con.execute(
-            "INSERT INTO searches(query, filters_json, sources_json, result_count) VALUES (?,?,?,?)",
-            (query, filters_json, sources_json, result_count),
-        )
-        self.con.commit()
+    def save_search(
+        self, query: str, filters_json: str = "", sources_json: str = "", result_count: int = 0
+    ) -> None:
+        with self._lock:
+            self.con.execute(
+                "INSERT INTO searches(query, filters_json, sources_json, result_count) VALUES (?,?,?,?)",
+                (query, filters_json, sources_json, result_count),
+            )
+            self.con.commit()
 
     def list_searches(self, limit: int = 50) -> list[dict]:
-        rows = self.con.execute(
-            "SELECT * FROM searches ORDER BY created_at DESC LIMIT ?", (limit,)
-        ).fetchall()
-        return [dict(r) for r in rows]
+        with self._lock:
+            rows = self.con.execute(
+                "SELECT * FROM searches ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+            return [dict(r) for r in rows]

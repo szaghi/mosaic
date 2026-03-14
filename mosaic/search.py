@@ -1,11 +1,16 @@
 """Fan-out search across all enabled sources with deduplication."""
+
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable
 
 from mosaic.models import Paper, SearchFilters
+from mosaic.services import merge_papers
 from mosaic.sources.base import BaseSource
+
+log = logging.getLogger(__name__)
 
 
 def _query_source(
@@ -39,8 +44,7 @@ def search_all(
         workers = min(len(active), 8)
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
-                pool.submit(_query_source, s, query, max_per_source, filters): s
-                for s in active
+                pool.submit(_query_source, s, query, max_per_source, filters): s for s in active
             }
             for future in as_completed(futures):
                 source = futures[future]
@@ -49,10 +53,11 @@ def search_all(
                     per_source[name] = len(results)
                     raw_total += len(results)
                     for paper in results:
-                        _merge(seen, paper)
+                        merge_papers(seen, paper)
                     if progress_callback:
                         progress_callback(name, "done")
                 except Exception as e:
+                    log.warning("Source %s failed: %s", source.name, e)
                     if errors is not None:
                         errors.append(f"{source.name}: {e}")
                     if progress_callback:
@@ -62,6 +67,7 @@ def search_all(
             try:
                 results = source.search(query, max_results=max_per_source, filters=filters)
             except Exception as e:
+                log.warning("Source %s failed: %s", source.name, e)
                 if errors is not None:
                     errors.append(f"{source.name}: {e}")
                 if progress_callback:
@@ -70,7 +76,7 @@ def search_all(
             per_source[source.name] = len(results)
             raw_total += len(results)
             for paper in results:
-                _merge(seen, paper)
+                merge_papers(seen, paper)
             if progress_callback:
                 progress_callback(source.name, "done")
 
@@ -89,22 +95,3 @@ def search_all(
         stats["after_filters"] = len(papers)
 
     return papers
-
-
-def _merge(seen: dict[str, Paper], paper: Paper) -> None:
-    uid = paper.uid
-    if uid not in seen:
-        seen[uid] = paper
-        return
-    existing = seen[uid]
-    if paper.abstract and not existing.abstract:
-        existing.abstract = paper.abstract
-    if paper.pdf_url and not existing.pdf_url:
-        existing.pdf_url = paper.pdf_url
-    if paper.doi and not existing.doi:
-        existing.doi = paper.doi
-    if paper.citation_count is not None and (
-        existing.citation_count is None
-        or paper.citation_count > existing.citation_count
-    ):
-        existing.citation_count = paper.citation_count

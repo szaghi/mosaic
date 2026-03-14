@@ -1,28 +1,26 @@
 """Tests for mosaic.zotero — ZoteroClient (local and web mode)."""
+
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from mosaic.models import Paper
 from mosaic.zotero import ZoteroClient, _paper_to_item, _parse_author
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+
 def _paper(**kwargs) -> Paper:
-    defaults = dict(
-        title="Test Paper",
-        authors=["Alice Smith", "Bob Jones"],
-        year=2020,
-        doi="10.1/test",
-        journal="Nature",
-        abstract="An abstract.",
-        source="arXiv",
-        pdf_url=None,
-    )
+    defaults = {
+        "title": "Test Paper",
+        "authors": ["Alice Smith", "Bob Jones"],
+        "year": 2020,
+        "doi": "10.1/test",
+        "journal": "Nature",
+        "abstract": "An abstract.",
+        "source": "arXiv",
+        "pdf_url": None,
+    }
     defaults.update(kwargs)
     return Paper(**defaults)
 
@@ -37,6 +35,7 @@ def _mock_response(json_data=None, status_code=200):
 
 
 # ── ZoteroClient construction ─────────────────────────────────────────────────
+
 
 class TestZoteroClientConstruction:
     def test_local_mode_base_url(self):
@@ -72,11 +71,14 @@ class TestZoteroClientConstruction:
 
 # ── is_reachable ──────────────────────────────────────────────────────────────
 
+
 class TestIsReachable:
     def test_local_true_on_200(self):
         c = ZoteroClient()
         with patch("httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(status_code=200)
+            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(
+                status_code=200
+            )
             assert c.is_reachable() is True
 
     def test_local_false_on_connection_error(self):
@@ -88,30 +90,38 @@ class TestIsReachable:
     def test_web_true_on_200(self):
         c = ZoteroClient(api_key="k")
         with patch("httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(status_code=200)
+            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(
+                status_code=200
+            )
             assert c.is_reachable() is True
 
     def test_web_false_on_401(self):
         c = ZoteroClient(api_key="bad")
         with patch("httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(status_code=403)
+            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(
+                status_code=403
+            )
             assert c.is_reachable() is False
 
     def test_false_on_500(self):
         c = ZoteroClient()
         with patch("httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(status_code=500)
+            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(
+                status_code=500
+            )
             assert c.is_reachable() is False
 
 
 # ── discover_user_id ──────────────────────────────────────────────────────────
 
+
 class TestDiscoverUserId:
     def test_returns_user_id_and_caches(self):
         c = ZoteroClient(api_key="mykey", user_id=0)
         with patch("httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__.return_value.get.return_value = \
-                _mock_response(json_data={"userID": 12345678, "key": "mykey"})
+            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(
+                json_data={"userID": 12345678, "key": "mykey"}
+            )
             uid = c.discover_user_id()
         assert uid == 12345678
         assert c._user_id == 12345678
@@ -123,13 +133,15 @@ class TestDiscoverUserId:
     def test_base_url_updated_after_discover(self):
         c = ZoteroClient(api_key="k", user_id=0)
         with patch("httpx.Client") as mock_cls:
-            mock_cls.return_value.__enter__.return_value.get.return_value = \
-                _mock_response(json_data={"userID": 99})
+            mock_cls.return_value.__enter__.return_value.get.return_value = _mock_response(
+                json_data={"userID": 99}
+            )
             c.discover_user_id()
         assert c._base == "https://api.zotero.org/users/99"
 
 
 # ── ensure_collection ─────────────────────────────────────────────────────────
+
 
 class TestEnsureCollection:
     def _collections_response(self, names: list[str]) -> list[dict]:
@@ -145,10 +157,10 @@ class TestEnsureCollection:
 
     def test_creates_missing_collection(self):
         c = ZoteroClient()
-        get_resp  = _mock_response(json_data=[])
+        get_resp = _mock_response(json_data=[])
         post_resp = _mock_response(json_data={"successful": {"0": {"key": "NEWKEY"}}})
         client_mock = MagicMock()
-        client_mock.get.return_value  = get_resp
+        client_mock.get.return_value = get_resp
         client_mock.post.return_value = post_resp
         with patch("httpx.Client") as mock_cls:
             mock_cls.return_value.__enter__.return_value = client_mock
@@ -157,10 +169,10 @@ class TestEnsureCollection:
 
     def test_post_payload_has_name(self):
         c = ZoteroClient()
-        get_resp  = _mock_response(json_data=[])
+        get_resp = _mock_response(json_data=[])
         post_resp = _mock_response(json_data={"successful": {"0": {"key": "K"}}})
         client_mock = MagicMock()
-        client_mock.get.return_value  = get_resp
+        client_mock.get.return_value = get_resp
         client_mock.post.return_value = post_resp
         with patch("httpx.Client") as mock_cls:
             mock_cls.return_value.__enter__.return_value = client_mock
@@ -171,13 +183,16 @@ class TestEnsureCollection:
 
 # ── add_papers ────────────────────────────────────────────────────────────────
 
+
 class TestAddPapers:
     def test_returns_item_keys(self):
         c = ZoteroClient()
-        resp = _mock_response(json_data={
-            "successful": {"0": {"key": "AAAA"}, "1": {"key": "BBBB"}},
-            "failed": {},
-        })
+        resp = _mock_response(
+            json_data={
+                "successful": {"0": {"key": "AAAA"}, "1": {"key": "BBBB"}},
+                "failed": {},
+            }
+        )
         with patch("httpx.Client") as mock_cls:
             mock_cls.return_value.__enter__.return_value.post.return_value = resp
             keys = c.add_papers([_paper(), _paper(doi="10.2/b")])
@@ -185,10 +200,12 @@ class TestAddPapers:
 
     def test_empty_string_for_failed_item(self):
         c = ZoteroClient()
-        resp = _mock_response(json_data={
-            "successful": {"0": {"key": "AAAA"}},
-            "failed": {"1": {"code": 413, "message": "too large"}},
-        })
+        resp = _mock_response(
+            json_data={
+                "successful": {"0": {"key": "AAAA"}},
+                "failed": {"1": {"code": 413, "message": "too large"}},
+            }
+        )
         with patch("httpx.Client") as mock_cls:
             mock_cls.return_value.__enter__.return_value.post.return_value = resp
             keys = c.add_papers([_paper(), _paper(doi="10.2/b")])
@@ -226,6 +243,7 @@ class TestAddPapers:
 
 # ── attach_pdf ────────────────────────────────────────────────────────────────
 
+
 class TestAttachPdf:
     def test_local_mode_posts_linked_file(self, tmp_path):
         pdf = tmp_path / "paper.pdf"
@@ -260,6 +278,7 @@ class TestAttachPdf:
 
 
 # ── _paper_to_item ────────────────────────────────────────────────────────────
+
 
 class TestPaperToItem:
     def test_maps_basic_fields(self):
@@ -308,6 +327,7 @@ class TestPaperToItem:
 
 
 # ── _parse_author ─────────────────────────────────────────────────────────────
+
 
 class TestParseAuthor:
     def test_last_comma_first(self):

@@ -1,9 +1,13 @@
 """HAL (Hyper Articles en Ligne) search source."""
+
 from __future__ import annotations
+
 import re
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, build_field_query
 
 _BASE = "https://api.archives-ouvertes.fr/search/"
 _FL = "title_s,authFullName_s,producedDate_s,doiId_s,abstract_s,journalTitle_s,fileMain_s,openAccess_bool,uri_s"
@@ -64,14 +68,7 @@ class HALSource(BaseSource):
             A list of Paper objects parsed from the ``response.docs`` array.
             Returns an empty list when no documents are present in the response.
         """
-        if filters and filters.raw_query:
-            q = filters.raw_query
-        elif filters and filters.field == "title":
-            q = f'title_s:"{query}"'
-        elif filters and filters.field == "abstract":
-            q = f'abstract_s:"{query}"'
-        else:
-            q = query
+        q = build_field_query(query, filters, 'title_s:"{}"', 'abstract_s:"{}"')
 
         # Append native year filter
         if filters:
@@ -84,16 +81,10 @@ class HALSource(BaseSource):
                 )
             elif filters.year_from is not None:
                 y = filters.year_from
-                q += (
-                    f" AND producedDate_s:[{y}-01-01T00:00:00Z"
-                    f" TO {y}-12-31T23:59:59Z]"
-                )
+                q += f" AND producedDate_s:[{y}-01-01T00:00:00Z TO {y}-12-31T23:59:59Z]"
             elif filters.year_to is not None:
                 y = filters.year_to
-                q += (
-                    f" AND producedDate_s:[{y}-01-01T00:00:00Z"
-                    f" TO {y}-12-31T23:59:59Z]"
-                )
+                q += f" AND producedDate_s:[{y}-01-01T00:00:00Z TO {y}-12-31T23:59:59Z]"
 
             for author in filters.authors or []:
                 q += f' AND authFullName_s:"{author}"'
@@ -108,9 +99,10 @@ class HALSource(BaseSource):
             "wt": "json",
         }
 
-        resp = httpx.get(_BASE, params=params, timeout=30)
-        resp.raise_for_status()
-        docs = resp.json().get("response", {}).get("docs", [])
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(_BASE, params=params)
+            resp.raise_for_status()
+            docs = resp.json().get("response", {}).get("docs", [])
         return [self._parse(doc) for doc in docs]
 
     def _parse(self, doc: dict) -> Paper:

@@ -20,6 +20,7 @@
 
   <button hx-post="{{ url_for('ui.download_paper', uid=quote(paper.uid, safe='')) }}"
           hx-target="#download-status"
+          hx-disabled-elt="this"
           class="outline">
     Download PDF
   </button>
@@ -31,11 +32,11 @@
   {% endif %}
 
   <form style="display:inline-flex;gap:.3rem;align-items:center;margin:0;" onsubmit="return false;">
-    <input type="text" name="zotero_collection" placeholder="Collection (optional)" style="padding:.2rem .4rem;font-size:.85em;width:150px;margin:0;">
+    <input type="text" name="zotero_collection" placeholder="Collection (optional)" style="width:150px;">
     <button hx-post="{{ url_for('ui.zotero_export_paper', uid=quote(paper.uid, safe='')) }}"
             hx-include="closest form"
             hx-target="#zotero-status"
-            class="outline" style="padding:.2rem .5rem;font-size:.85em;margin:0;">
+            class="outline">
       Send to Zotero
     </button>
   </form>
@@ -97,5 +98,6 @@
 <blockquote>{{ paper.abstract }}</blockquote>
 {% endif %}
 
-<p><a href="{{ url_for('ui.search_page') }}">&larr; Back to search</a></p>
+<p><a href="{{ url_for('ui.search_page') }}"
+       onclick="if(history.length>1){history.back();return false;}">&larr; Back to results</a></p>
 {% endblock %}

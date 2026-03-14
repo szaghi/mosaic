@@ -40,7 +40,7 @@ mosaic config --show
 
 ### Data flow
 
-1. `cli.py` loads config, instantiates enabled sources via `_build_sources()`, calls `search_all()`.
+1. `cli.py` loads config, instantiates enabled sources via `source_registry.py:build_sources()`, calls `search_all()`.
 2. `search.py:search_all()` iterates sources sequentially, merges duplicates by `Paper.uid` (preferring richer data), applies `SearchFilters` as a post-processing safety net.
 3. Results are saved to a SQLite cache (`db.py:Cache`) and optionally downloaded via `downloader.py`.
 
@@ -48,10 +48,16 @@ mosaic config --show
 
 - **`models.py`** — `Paper` dataclass (central data model) and `SearchFilters` (year/author/journal filtering). `Paper.uid` is the deduplication key: prefers DOI > arxiv_id > pii > title slug.
 - **`sources/base.py`** — `BaseSource` ABC with `search()` and `available()`. All sources in `sources/` implement this interface.
-- **`sources/`** — Twenty sources: `arxiv`, `semantic_scholar`, `sciencedirect` (API key or browser session), `sciencedirect_browser`, `springer_browser` (Playwright, shorthand `sp`), `springer_api` (free API key, shorthand `springer`), `doaj`, `europepmc`, `openalex`, `base_search`, `core` (free API key), `nasa_ads` (free API token), `ieee` (free API key, shorthand `ieee`), `zenodo` (no auth required), `crossref` (no auth required), `dblp` (no auth required), `hal` (no auth required), `pubmed` (no auth required, API key optional), `pmc` (PubMed Central, always OA + direct PDF, API key optional; same NCBI key as pubmed), `biorxiv` (bioRxiv + medRxiv, shorthand `rxiv`; searches both servers via website search, fetches metadata from `api.biorxiv.org`; always OA). `unpaywall.py` is a helper (not a search source) used by the downloader.
+- **`sources/`** — 21 sources: `arxiv`, `semantic_scholar`, `sciencedirect` (API key or browser session), `sciencedirect_browser`, `springer_browser` (Playwright, shorthand `sp`), `springer_api` (free API key, shorthand `springer`), `doaj`, `europepmc`, `openalex`, `base_search`, `core` (free API key), `nasa_ads` (free API token), `ieee` (free API key, shorthand `ieee`), `zenodo` (no auth required), `crossref` (no auth required), `dblp` (no auth required), `hal` (no auth required), `pubmed` (no auth required, API key optional), `pmc` (PubMed Central, always OA + direct PDF, API key optional; same NCBI key as pubmed), `biorxiv` (bioRxiv + medRxiv, shorthand `rxiv`; searches both servers via website search, fetches metadata from `api.biorxiv.org`; always OA), `pedro` (physiotherapy evidence, shorthand `pedro`; requires `acknowledge_fair_use` config flag), `scopus` (Elsevier, shorthand `scopus`; API key or browser session). `unpaywall.py` is a helper (not a search source) used by the downloader.
+- **`source_registry.py`** — Source factory registry, shorthand maps (`SRC_MAP`, `SHORTHAND_TO_CFG_KEY`), and `build_sources(cfg)` which instantiates all enabled sources from config.
+- **`services.py`** — Shared business logic: `build_filters()` (construct `SearchFilters` from user input), `filter_papers()` (OA/PDF/sort post-processing), `merge_papers()` (deduplication by `Paper.uid`).
+- **`workflows.py`** — Multi-step orchestration: `download_papers()`, `push_to_zotero()`, `push_to_obsidian()`. Used by both CLI and web UI.
+- **`parsing.py`** — Shared parsing utilities: `parse_year()`, `normalise_doi()`, `strip_html()`, `parse_authors_name_key()`, `parse_authors_given_family()`, `split_authors()`, `extract_first()`.
+- **`errors.py`** — Custom exception hierarchy (`MosaicError` → `SourceError`, `DownloadError`, `ConfigError`) and central logging setup.
 - **`similar.py`** — `find_similar(identifier, max_results, *, oa_email, ss_api_key)` fans out to OpenAlex `related_works` (always) and Semantic Scholar recommendations (when API key configured), deduplicates by `Paper.uid`, and returns `(seed_title, papers)`. Used by `mosaic similar` CLI command.
 - **`bulk.py`** — `read_dois(path)` extracts DOIs from `.bib` (regex) or `.csv` (DictReader) files. Used by `mosaic get --from`.
 - **`zotero.py`** — `ZoteroClient` class supporting both local API (`http://localhost:23119`) and web API (`https://api.zotero.org`). Auto-detects mode from config (`zotero.api_key`). Key methods: `is_reachable()`, `discover_user_id()`, `ensure_collection(name)`, `add_papers(papers)`, `attach_pdf(item_key, path)`. PDF attachment is local-only (linked_file); web mode is metadata-only in v1.
+- **`gui_launcher.py`** — Entry point for standalone desktop app (PyInstaller). Opens web UI in a Chromium `--app` window.
 - **`db.py`** — SQLite with two tables: `papers` (upsert on uid, updates pdf_url/abstract/is_open_access) and `downloads` (tracks local file paths and status).
 - **`config.py`** — Reads/writes `~/.config/mosaic/config.toml`; deep-merges user config over defaults. DB lives at `~/.local/share/mosaic/cache.db`, downloads at `~/mosaic-papers/`. Zotero config under `[zotero]` section (`api_key`, `user_id`).
 
@@ -60,7 +66,7 @@ mosaic config --show
 1. Create `mosaic/sources/myname.py` with a class extending `BaseSource`.
 2. Set `name` class attribute and implement `search()` returning `list[Paper]`.
 3. Export from `mosaic/sources/__init__.py`.
-4. Wire into `cli.py:_build_sources()`.
+4. Wire into `source_registry.py` (factory function + `_SOURCE_REGISTRY` + shorthand maps).
 
 ### Tests
 

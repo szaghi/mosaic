@@ -1,10 +1,14 @@
 """arXiv API source (no auth required, all OA)."""
+
 from __future__ import annotations
+
 import time
 import xml.etree.ElementTree as ET
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
 
 _BASE = "https://export.arxiv.org/api/query"
 _NS = {
@@ -20,7 +24,9 @@ class ArxivSource(BaseSource):
         self._delay = delay
         self._last_call = 0.0
 
-    def search(self, query: str, max_results: int = 25, filters: SearchFilters | None = None) -> list[Paper]:
+    def search(
+        self, query: str, max_results: int = 25, filters: SearchFilters | None = None
+    ) -> list[Paper]:
         """Query the arXiv Atom API and return matching papers.
 
         Enforces a minimum inter-request delay to comply with arXiv rate-limit
@@ -42,33 +48,28 @@ class ArxivSource(BaseSource):
         if elapsed < self._delay:
             time.sleep(self._delay - elapsed)
 
-        if filters and filters.raw_query:
-            search_query = filters.raw_query
-        elif filters and filters.field == "title":
-            search_query = f"ti:{query}"
-        elif filters and filters.field == "abstract":
-            search_query = f"abs:{query}"
-        else:
-            search_query = f"all:{query}"
+        search_query = build_field_query(query, filters, "ti:{}", "abs:{}", "all:{}")
         if filters:
             if filters.authors:
                 for author in filters.authors:
                     search_query += f" AND au:{author}"
             if filters.journal:
                 search_query += f" AND jr:{filters.journal}"
-            # date range: submittedDate:[YYYYMMDDtttt TO YYYYMMDDtttt]
-            y_from = filters.year_from or (min(filters.years) if filters.years else None)
-            y_to   = filters.year_to   or (max(filters.years) if filters.years else None)
+            y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 d_from = f"{y_from or '0000'}01010000"
-                d_to   = f"{y_to   or '9999'}12312359"
+                d_to = f"{y_to or '9999'}12312359"
                 search_query += f" AND submittedDate:[{d_from} TO {d_to}]"
 
-        resp = httpx.get(_BASE, params={
-            "search_query": search_query,
-            "start": 0,
-            "max_results": max_results,
-        }, timeout=30)
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(
+                _BASE,
+                params={
+                    "search_query": search_query,
+                    "start": 0,
+                    "max_results": max_results,
+                },
+            )
         self._last_call = time.time()
         resp.raise_for_status()
 
@@ -89,14 +90,14 @@ class ArxivSource(BaseSource):
             A Paper populated with title, authors, year, DOI, arXiv ID,
             abstract, journal reference, PDF URL, and open-access flag.
         """
+
         def txt(tag: str) -> str | None:
             el = entry.find(tag, _NS)
             return el.text.strip() if el is not None and el.text else None
 
         arxiv_id = (txt("atom:id") or "").split("/abs/")[-1]
         authors = [
-            a.findtext("atom:name", namespaces=_NS) or ""
-            for a in entry.findall("atom:author", _NS)
+            a.findtext("atom:name", namespaces=_NS) or "" for a in entry.findall("atom:author", _NS)
         ]
         published = txt("atom:published") or ""
         year = int(published[:4]) if published else None
@@ -109,7 +110,11 @@ class ArxivSource(BaseSource):
         doi_el = entry.find("arxiv:doi", _NS)
         # Fall back to the canonical arXiv preprint DOI (strip version suffix).
         _arxiv_id_base = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
-        doi = doi_el.text.strip() if doi_el is not None and doi_el.text else f"10.48550/arXiv.{_arxiv_id_base}"
+        doi = (
+            doi_el.text.strip()
+            if doi_el is not None and doi_el.text
+            else f"10.48550/arXiv.{_arxiv_id_base}"
+        )
 
         journal_el = entry.find("arxiv:journal_ref", _NS)
         journal = journal_el.text.strip() if journal_el is not None and journal_el.text else None

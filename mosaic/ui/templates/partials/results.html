@@ -3,7 +3,7 @@
 {% endif %}
 
 {% for err in errors %}
-<article>&#9888; {{ err }}</article>
+<article class="alert-warning">&#9888; {{ err }}</article>
 {% endfor %}
 
 {% if stats and stats.get('per_source') %}
@@ -34,18 +34,18 @@
   <a href="{{ url_for('ui.export_results', job_id=job_id, format='md') }}" role="button" class="outline secondary">Markdown</a>
   <span style="margin-left:.5rem;">|</span>
   <form style="display:inline-flex;gap:.3rem;align-items:center;margin:0;" onsubmit="return false;">
-    <input type="text" name="zotero_collection" placeholder="Collection (optional)" style="padding:.2rem .4rem;font-size:.85em;width:150px;margin:0;">
+    <input type="text" name="zotero_collection" placeholder="Collection (optional)" style="width:150px;">
     <button hx-post="{{ url_for('ui.zotero_export', job_id=job_id) }}"
             hx-include="closest form"
             hx-target="#zotero-status"
-            class="outline" style="padding:.2rem .5rem;font-size:.85em;margin:0;">
+            class="outline">
       Send to Zotero
     </button>
   </form>
   <span style="margin-left:.5rem;">|</span>
   <button hx-post="{{ url_for('ui.obsidian_export', job_id=job_id) }}"
           hx-target="#obsidian-status"
-          class="outline" style="padding:.2rem .5rem;font-size:.85em;margin:0;">
+          class="outline">
     Export to Obsidian
   </button>
 </div>

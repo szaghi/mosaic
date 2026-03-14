@@ -1,8 +1,10 @@
 """Tests for the export module."""
+
 import csv
 import json
-from pathlib import Path
+
 import pytest
+
 from mosaic.exporter import export
 from mosaic.models import Paper
 
@@ -61,7 +63,11 @@ class TestMarkdown:
     def test_row_count(self, tmp_path):
         out = tmp_path / "results.md"
         export(_PAPERS, out)
-        data_lines = [l for l in out.read_text().splitlines() if l.startswith("|") and "---" not in l and "Title" not in l]
+        data_lines = [
+            line
+            for line in out.read_text().splitlines()
+            if line.startswith("|") and "---" not in line and "Title" not in line
+        ]
         assert len(data_lines) == len(_PAPERS)
 
 
@@ -99,7 +105,7 @@ class TestMarkdownFull:
         export(_PAPERS, out)
         # second paper has no journal — row should not appear
         lines = out.read_text().splitlines()
-        bert_start = next(i for i, l in enumerate(lines) if "BERT" in l)
+        bert_start = next(i for i, line in enumerate(lines) if "BERT" in line)
         bert_block = "\n".join(lines[bert_start:])
         assert "| Journal |" not in bert_block
 
@@ -124,7 +130,7 @@ class TestCSV:
         export(_PAPERS, out)
         with out.open() as fh:
             rows = list(csv.DictReader(fh))
-        assert "Ashish Vaswani; Noam Shazeer" == rows[0]["authors"]
+        assert rows[0]["authors"] == "Ashish Vaswani; Noam Shazeer"
 
     def test_row_count(self, tmp_path):
         out = tmp_path / "results.csv"

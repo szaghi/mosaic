@@ -1,4 +1,5 @@
 """MOSAIC web UI — Flask application factory."""
+
 from __future__ import annotations
 
 import os
@@ -38,6 +39,7 @@ def create_app() -> Flask:
     app.config["JOB_MANAGER"] = JobManager()
 
     from mosaic.ui.routes import bp
+
     app.register_blueprint(bp)
 
     return app

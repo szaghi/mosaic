@@ -1,8 +1,11 @@
 """DBLP Computer Science Bibliography search source."""
+
 from __future__ import annotations
+
 import httpx
+
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, build_field_query
 
 _BASE = "https://dblp.org/search/publ/api"
 
@@ -61,12 +64,7 @@ class DBLPSource(BaseSource):
             A list of Paper objects parsed from the ``result.hits.hit`` array.
             Returns an empty list when no hits are present in the response.
         """
-        if filters and filters.raw_query:
-            q = filters.raw_query
-        elif filters and filters.field == "title":
-            q = f"{query}$"
-        else:
-            q = query
+        q = build_field_query(query, filters, "{}$", "{}")
 
         params: dict = {
             "q": q,
@@ -75,10 +73,11 @@ class DBLPSource(BaseSource):
             "format": "json",
         }
 
-        resp = httpx.get(_BASE, params=params, timeout=30)
-        resp.raise_for_status()
-        hits = resp.json().get("result", {}).get("hits", {})
-        raw_hits = hits.get("hit", [])
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(_BASE, params=params)
+            resp.raise_for_status()
+            hits = resp.json().get("result", {}).get("hits", {})
+            raw_hits = hits.get("hit", [])
         if not raw_hits:
             return []
         return [self._parse(hit) for hit in raw_hits]
@@ -133,14 +132,11 @@ class DBLPSource(BaseSource):
 
         # pdf_url: set when ee is a direct PDF or an arXiv PDF link
         pdf_url: str | None = None
-        if ee:
-            if ee.endswith(".pdf") or "arxiv.org/pdf" in ee:
-                pdf_url = ee
+        if ee and (ee.endswith(".pdf") or "arxiv.org/pdf" in ee):
+            pdf_url = ee
 
         # is_open_access: True if we have a PDF URL or ee links to arXiv
-        is_open_access = pdf_url is not None or (
-            ee is not None and "arxiv.org" in ee
-        )
+        is_open_access = pdf_url is not None or (ee is not None and "arxiv.org" in ee)
 
         return Paper(
             title=title,

@@ -17,14 +17,15 @@ safe to open in a vault that uses either the *Templates* core plugin or the
 *Templater* community plugin; neither plugin will attempt to process a note
 that contains no template variables.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 from mosaic.models import Paper
 
-
 # ── minimal YAML serialiser (no external dependency) ─────────────────────────
+
 
 def _yaml_str(s: str) -> str:
     """Return a YAML-safe scalar representation of *s*.
@@ -46,12 +47,7 @@ def _yaml_str(s: str) -> str:
         or s != s.strip()
     )
     if need_quote:
-        escaped = (
-            s.replace("\\", "\\\\")
-             .replace('"', '\\"')
-             .replace("\n", " ")
-             .replace("\r", "")
-        )
+        escaped = s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", "")
         return f'"{escaped}"'
     return s
 
@@ -85,6 +81,7 @@ def _frontmatter(data: dict) -> str:
 
 
 # ── main class ────────────────────────────────────────────────────────────────
+
 
 class ObsidianVault:
     """Write MOSAIC search results as Obsidian-compatible paper notes.
@@ -223,9 +220,7 @@ class ObsidianVault:
             related_stems: Stems of other papers in the same batch, used to
                 generate ``[[wikilinks]]`` in the *See also* section.
         """
-        self.note_path(paper).write_text(
-            self._render(paper, related_stems), encoding="utf-8"
-        )
+        self.note_path(paper).write_text(self._render(paper, related_stems), encoding="utf-8")
 
     def _render(self, paper: Paper, related_stems: list[str]) -> str:
         """Render a :class:`~mosaic.models.Paper` as an Obsidian Markdown string.

@@ -15,16 +15,18 @@
     table td, table th { padding: .4rem .6rem; font-size: .9em; }
     table td:first-child { white-space: nowrap; }
     .export-bar { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
-    .export-bar a { font-size: .85em; }
+    .export-bar a, .export-bar button, .export-bar input { font-size: .85em; padding: .2rem .5rem; margin: 0; height: auto; }
     details summary { cursor: pointer; }
     .filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .5rem; }
     .source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .25rem .5rem; }
     .source-grid label { font-size: .9em; margin-bottom: 0; }
     .stats-line { font-size: .85em; color: var(--pico-muted-color); margin-bottom: .5rem; }
+    .alert-warning { border-left: 4px solid var(--pico-del-color); }
     .paper-meta dt { font-weight: bold; }
     .paper-meta dd { margin-bottom: .5rem; }
     fieldset { margin-bottom: 1.5rem; }
-    .action-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
+    .action-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; align-items: center; }
+    .action-bar a, .action-bar button, .action-bar input { font-size: .85em; padding: .2rem .5rem; margin: 0; height: auto; }
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -50,8 +52,10 @@
   <main class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}
-        <article {% if category == 'warning' %}class="pico-background-yellow-100"{% endif %}>
+        <article class="flash-message{% if category == 'warning' %} alert-warning{% endif %}" style="position:relative;">
           {{ message }}
+          <a href="#" onclick="this.parentElement.remove();return false"
+             style="position:absolute;top:.5rem;right:.75rem;text-decoration:none;font-weight:bold;opacity:.6;">&times;</a>
         </article>
       {% endfor %}
     {% endwith %}
@@ -77,6 +81,15 @@
       var saved = localStorage.getItem("mosaic-theme");
       if (saved) document.documentElement.dataset.theme = saved;
     })();
+
+    // Auto-dismiss flash messages after 8 seconds
+    setTimeout(function() {
+      document.querySelectorAll('.flash-message').forEach(function(el) {
+        el.style.transition = 'opacity 0.5s';
+        el.style.opacity = '0';
+        setTimeout(function() { el.remove(); }, 500);
+      });
+    }, 8000);
 
     // Keyboard shortcuts
     document.addEventListener("keydown", function(e) {

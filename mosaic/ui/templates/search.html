@@ -36,27 +36,32 @@
     </fieldset>
   </div>
 
-  <details>
+  {% set pf = prefill_filters or {} %}
+  {% set has_filters = pf.get('year') or pf.get('author') or pf.get('journal') or (pf.get('field') and pf.get('field') != 'all') %}
+  <details {% if has_filters %}open{% endif %}>
     <summary>Filters</summary>
     <div class="filter-grid">
       <label>
         Year
-        <input type="text" name="year" placeholder="2020, 2020-2024, or 2020,2022">
+        <input type="text" name="year" placeholder="e.g. 2020, 2020-2024"
+               value="{{ pf.get('year', '') }}">
       </label>
       <label>
         Author
-        <input type="text" name="author" placeholder="Last name(s), comma-separated">
+        <input type="text" name="author" placeholder="e.g. Smith, Lee"
+               value="{{ pf.get('author', '') }}">
       </label>
       <label>
         Journal
-        <input type="text" name="journal" placeholder="Journal name (substring)">
+        <input type="text" name="journal" placeholder="e.g. Nature"
+               value="{{ pf.get('journal', '') }}">
       </label>
       <label>
         Field
         <select name="field">
-          <option value="all">All fields</option>
-          <option value="title">Title only</option>
-          <option value="abstract">Abstract only</option>
+          <option value="all" {% if pf.get('field', 'all') == 'all' %}selected{% endif %}>All fields</option>
+          <option value="title" {% if pf.get('field') == 'title' %}selected{% endif %}>Title only</option>
+          <option value="abstract" {% if pf.get('field') == 'abstract' %}selected{% endif %}>Abstract only</option>
         </select>
       </label>
     </div>
@@ -75,6 +80,7 @@
         <a href="#" onclick="document.querySelectorAll('#source-checks input').forEach(c=>c.checked=false);return false">Deselect all</a>
       </small>
     </div>
+    <input type="hidden" name="_has_sources" value="1">
     <div id="source-checks" class="source-grid">
       {% for s in sources %}
       <label>

@@ -1,7 +1,7 @@
 """Tests for configuration loading and merging."""
-import tomli_w
+
 from unittest.mock import patch
-from pathlib import Path
+
 import mosaic.config as cfg_mod
 
 
