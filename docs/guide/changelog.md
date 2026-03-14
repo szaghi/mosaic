@@ -2,6 +2,13 @@
 title: Changelog
 ---
 
+## [1.3.12] — 2026-03-14
+### Changed
+- Extract shared modules and simplify source registry
+
+- Fix asyncio.run loop in downloader and extract shared CLI post-processing
+
+
 ## [1.3.10] — 2026-03-13
 ### Fixed
 - **sources**: Fix PubMed/PMC year filter returning no results
