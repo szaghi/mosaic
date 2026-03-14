@@ -70,11 +70,16 @@ def download(
             resolved_url = _resolve_redirect(landing_url)
             session = find_session_for_url(resolved_url)
             sessions_to_try = [session] if session else [s["name"] for s in list_sessions()]
-            for s in sessions_to_try:
-                ok = asyncio.run(browser_download(resolved_url, str(dest), s))
-                if ok:
-                    cache.set_download(paper.uid, str(dest), "ok")
-                    return str(dest)
+
+            async def _try_sessions() -> bool:
+                for s in sessions_to_try:
+                    if await browser_download(resolved_url, str(dest), s):
+                        return True
+                return False
+
+            if asyncio.run(_try_sessions()):
+                cache.set_download(paper.uid, str(dest), "ok")
+                return str(dest)
         except Exception:
             log.debug("Browser session download failed for %s", landing_url, exc_info=True)
 

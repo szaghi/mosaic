@@ -202,47 +202,21 @@ def search(
     if verbose:
         _print_search_stats(search_stats, filters)
 
-    if sort_by and sort_by not in ("citations", "year"):
-        rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year[/red]')
-        raise typer.Exit(1)
-    papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by)
-
-    if not papers:
-        rprint("[yellow]No results found.[/yellow]")
-        raise typer.Exit()
-
-    # save to cache
-    for p in papers:
-        cache.save(p)
-
-    _print_results(papers)
-
-    if output:
-        from mosaic.exporter import export
-
-        for path in output:
-            try:
-                export(papers, path)
-                rprint(f"[green]Saved:[/green] {path}")
-            except ValueError as e:
-                rprint(f"[red]{e}[/red]")
-                raise typer.Exit(1) from None
-
-    pdf_map: dict[str, str] = {}
-    if download:
-        pdf_map = _download_all(papers, cfg, cache)
-
-    if zotero:
-        _push_to_zotero(
-            papers,
-            cfg,
-            collection_name=zotero_collection,
-            force_local=zotero_local,
-            pdf_map=pdf_map,
-        )
-
-    if obsidian:
-        _push_to_obsidian(papers, cfg, subfolder_override=obsidian_folder)
+    _post_process(
+        papers,
+        cfg,
+        cache,
+        output=list(output),
+        do_download=download,
+        sort_by=sort_by,
+        oa_only=oa_only,
+        pdf_only=pdf_only,
+        zotero=zotero,
+        zotero_collection=zotero_collection,
+        zotero_local=zotero_local,
+        obsidian=obsidian,
+        obsidian_folder=obsidian_folder,
+    )
 
 
 @app.command()
@@ -333,46 +307,21 @@ def similar(
 
     rprint(f"[bold]Similar to:[/bold] {seed_title}\n")
 
-    if sort_by and sort_by not in ("citations", "year"):
-        rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year[/red]')
-        raise typer.Exit(1)
-    papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by)
-
-    if not papers:
-        rprint("[yellow]No similar papers found.[/yellow]")
-        raise typer.Exit()
-
-    for p in papers:
-        cache.save(p)
-
-    _print_results(papers)
-
-    if output:
-        from mosaic.exporter import export
-
-        for path in output:
-            try:
-                export(papers, path)
-                rprint(f"[green]Saved:[/green] {path}")
-            except ValueError as e:
-                rprint(f"[red]{e}[/red]")
-                raise typer.Exit(1) from None
-
-    pdf_map: dict[str, str] = {}
-    if download:
-        pdf_map = _download_all(papers, cfg, cache)
-
-    if zotero:
-        _push_to_zotero(
-            papers,
-            cfg,
-            collection_name=zotero_collection,
-            force_local=zotero_local,
-            pdf_map=pdf_map,
-        )
-
-    if obsidian:
-        _push_to_obsidian(papers, cfg, subfolder_override=obsidian_folder)
+    _post_process(
+        papers,
+        cfg,
+        cache,
+        output=list(output),
+        do_download=download,
+        sort_by=sort_by,
+        oa_only=oa_only,
+        pdf_only=pdf_only,
+        zotero=zotero,
+        zotero_collection=zotero_collection,
+        zotero_local=zotero_local,
+        obsidian=obsidian,
+        obsidian_folder=obsidian_folder,
+    )
 
 
 @app.command()
@@ -678,6 +627,65 @@ def _print_search_stats(stats: dict, filters) -> None:
     )
 
 
+def _post_process(
+    papers: list,
+    cfg: dict,
+    cache: Cache,
+    *,
+    output: list[Path] | None = None,
+    do_download: bool = False,
+    sort_by: str = "",
+    oa_only: bool = False,
+    pdf_only: bool = False,
+    zotero: bool = False,
+    zotero_collection: str = "",
+    zotero_local: bool = False,
+    obsidian: bool = False,
+    obsidian_folder: str = "",
+) -> None:
+    """Shared post-processing: filter, export, download, push to Zotero/Obsidian."""
+    if sort_by and sort_by not in ("citations", "year"):
+        rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year[/red]')
+        raise typer.Exit(1)
+    papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by)
+
+    if not papers:
+        rprint("[yellow]No results found.[/yellow]")
+        raise typer.Exit()
+
+    for p in papers:
+        cache.save(p)
+
+    _print_results(papers)
+
+    if output:
+        from mosaic.exporter import export
+
+        for path in output:
+            try:
+                export(papers, path)
+                rprint(f"[green]Saved:[/green] {path}")
+            except ValueError as e:
+                rprint(f"[red]{e}[/red]")
+                raise typer.Exit(1) from None
+
+    pdf_map: dict[str, str] = {}
+    if do_download:
+        pdf_map = _download_all(papers, cfg, cache)
+
+    if zotero:
+        _push_to_zotero(
+            papers,
+            cfg,
+            collection_name=zotero_collection,
+            force_local=zotero_local,
+            pdf_map=pdf_map,
+        )
+
+    if obsidian:
+        _push_to_obsidian(papers, cfg, subfolder_override=obsidian_folder)
+
+
 def _print_results(papers: list) -> None:
     show_citations = any(p.citation_count is not None for p in papers)
 
@@ -881,27 +889,13 @@ def notebook_create(
         cfg["download_dir"] = download_dir
 
     # collect requested artifacts
-    _artifacts: set[str] = set()
-    if podcast:
-        _artifacts.add("podcast")
-    if video:
-        _artifacts.add("video")
-    if briefing:
-        _artifacts.add("briefing")
-    if study_guide:
-        _artifacts.add("study_guide")
-    if quiz:
-        _artifacts.add("quiz")
-    if flashcards:
-        _artifacts.add("flashcards")
-    if infographic:
-        _artifacts.add("infographic")
-    if slide_deck:
-        _artifacts.add("slide_deck")
-    if data_table:
-        _artifacts.add("data_table")
-    if mind_map:
-        _artifacts.add("mind_map")
+    _artifact_flags = {
+        "podcast": podcast, "video": video, "briefing": briefing,
+        "study_guide": study_guide, "quiz": quiz, "flashcards": flashcards,
+        "infographic": infographic, "slide_deck": slide_deck,
+        "data_table": data_table, "mind_map": mind_map,
+    }
+    _artifacts = {name for name, enabled in _artifact_flags.items() if enabled}
 
     # ── from-dir path ─────────────────────────────────────────────────────────
     if from_dir:

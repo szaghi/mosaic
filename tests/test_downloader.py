@@ -1,6 +1,6 @@
 """Tests for the PDF downloader."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from mosaic.downloader import download
 from mosaic.models import Paper
@@ -72,8 +72,7 @@ class TestDownload:
         with (
             patch("mosaic.sources.unpaywall.resolve", return_value=None),
             patch("mosaic.auth.find_session_for_url", return_value="elsevier"),
-            patch("mosaic.auth.browser_download", new=MagicMock(return_value=True)) as _mock_bd,
-            patch("asyncio.run", side_effect=lambda coro: True),
+            patch("mosaic.auth.browser_download", new=AsyncMock(return_value=True)),
         ):
             result = download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         assert result is not None
@@ -96,8 +95,7 @@ class TestDownload:
         with (
             patch("mosaic.sources.unpaywall.resolve", return_value=None),
             patch("mosaic.auth.find_session_for_url", return_value="elsevier"),
-            patch("mosaic.auth.browser_download", MagicMock(return_value=True)),
-            patch("asyncio.run", return_value=True),
+            patch("mosaic.auth.browser_download", AsyncMock(return_value=True)),
         ):
             download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         rec = tmp_cache.get_download(p.uid)
