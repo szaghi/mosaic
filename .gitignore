@@ -36,3 +36,6 @@ config.toml
 
 # Misc
 todo.md
+
+# Social experiments
+docs/social/
