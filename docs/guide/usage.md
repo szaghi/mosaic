@@ -165,24 +165,48 @@ mosaic search "large language model" -n 50 --source arxiv --oa-only --download
 
 ![Multi-filter search demo](/gifs/03_filter_search.gif)
 
-## Verbose mode
+## Warnings
 
-Add `--verbose` to any search to see a per-source breakdown and deduplication report printed before the results table:
+By default MOSAIC suppresses per-source warnings (rate-limits, timeouts, 5xx errors) to keep the output clean. Pass `--verbose` as a **global flag** (before the subcommand) to reveal them:
 
 ```bash
-mosaic search "transformer attention" --verbose
+mosaic --verbose search "transformer attention"
 ```
 
 ```
-╭─ Search stats ────────────────────────────────────────────────╮
-│ Sources    arXiv, Semantic Scholar, OpenAlex, Crossref        │
-│ Raw        arXiv=12  Semantic Scholar=18  OpenAlex=15  …  → 54 total │
-│ Unique     31 papers  (23 merged by DOI)                      │
-│ Filters    none                                               │
-╰───────────────────────────────────────────────────────────────╯
+Warning: Source Semantic Scholar failed: 429 Too Many Requests
+Warning: Source DBLP failed: 500 Internal Server Error
 ```
 
-Useful for tuning source selection and understanding which sources contribute unique results.
+Useful when debugging connectivity or API key issues.
+
+## Search stats
+
+Add `--stats` to a `search` command to print a per-source breakdown and deduplication report after the search completes:
+
+```bash
+mosaic search "transformer attention" --stats
+```
+
+```
+        Search stats
+  Source               Results
+  ───────────────────────────
+  arXiv                     12
+  Semantic Scholar          18
+  OpenAlex                  15
+  Crossref                   9
+  ───────────────────────────
+  Total raw                 54
+  Merged                    23
+  Unique                    31
+```
+
+Useful for tuning source selection and understanding which sources contribute unique results. Both flags can be combined:
+
+```bash
+mosaic --verbose search "protein folding" --stats
+```
 
 ## Sort results
 

@@ -13,11 +13,15 @@ mosaic [OPTIONS] COMMAND [ARGS]...
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--version` | `-v` | Print the installed version and exit |
+| `--verbose` | | Show per-source warnings (hidden by default) |
 | `--help` | | Show help and exit |
 
+`--verbose` must appear **before** the subcommand:
+
 ```bash
-mosaic --version   # e.g. mosaic 0.0.5
+mosaic --version           # e.g. mosaic 0.0.5
 mosaic -v
+mosaic --verbose search "protein folding"   # show source warnings
 ```
 
 ## Commands
@@ -36,16 +40,16 @@ mosaic search [OPTIONS] QUERY
 | `--download` | `-d` | flag | off | Download available PDFs after search |
 | `--oa-only` | | flag | off | Show only open-access papers |
 | `--pdf-only` | | flag | off | Show only papers with a known PDF URL |
-| `--source` | `-s` | str | all | Limit to one source |
+| `--source` | `-s` | str | all | Limit to one source — tab-completes all shorthands |
 | `--year` | `-y` | str | | Year filter (see formats below) |
 | `--author` | `-a` | str | | Author filter, repeatable |
 | `--journal` | `-j` | str | | Journal name substring filter |
-| `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
+| `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` — tab-completes |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
 | `--output` | `-o` | path | | Save results to file (repeatable); format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib` |
 | `--download-dir` | | path | config | Override PDF download directory for this run only |
-| `--sort` | | str | | Sort results: `citations` (most cited first) or `year` (newest first) |
-| `--verbose` | | flag | off | Print per-source counts and deduplication stats before results |
+| `--sort` | | str | | Sort results: `citations` or `year` — tab-completes |
+| `--stats` | | flag | off | Print per-source counts and deduplication stats |
 | `--zotero` | | flag | off | Export results to Zotero |
 | `--zotero-collection` | | str | | Zotero collection name (created if missing) |
 | `--zotero-local` | | flag | off | Force local API even when a web API key is configured |
@@ -202,7 +206,7 @@ mosaic similar [OPTIONS] IDENTIFIER
 | `--download` | `-d` | flag | off | Download available PDFs |
 | `--oa-only` | | flag | off | Show only open-access papers |
 | `--pdf-only` | | flag | off | Show only papers with a known PDF URL |
-| `--sort` | | str | | Sort: `citations` or `year` |
+| `--sort` | | str | | Sort: `citations` or `year` — tab-completes |
 | `--output` | `-o` | path | | Save results to file (repeatable) |
 | `--download-dir` | | path | config | Override PDF download directory |
 | `--zotero` | | flag | off | Export results to Zotero |
@@ -374,7 +378,7 @@ Requires the `[notebooklm]` extra — see [NotebookLM Integration](./notebooklm)
 | `--year` | `-y` | str | | Year filter (same formats as `search`) |
 | `--author` | `-a` | str | | Author filter, repeatable |
 | `--journal` | `-j` | str | | Journal name substring filter |
-| `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` |
+| `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` — tab-completes |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
 | `--download-dir` | | path | config | Override PDF download directory for this run only |
 | `--podcast` | | flag | off | Queue an Audio Overview after import |
@@ -425,7 +429,7 @@ mosaic auth login [OPTIONS] NAME
 
 | Argument / Option | Type | Description |
 |---|---|---|
-| `NAME` | str | Session label, e.g. `elsevier`, `springer`, `myuni` |
+| `NAME` | str | Session label — tab-completes common providers: `elsevier`, `springer`, `scopus` |
 | `--url` / `-u` | str | URL to open in the browser *(required)* |
 
 Requires the `[browser]` extra — see [Authenticated Access](./authenticated-access).
@@ -461,7 +465,7 @@ mosaic auth logout [OPTIONS] NAME
 
 | Argument | Description |
 |---|---|
-| `NAME` | Session name to remove |
+| `NAME` | Session name to remove — tab-completes from your saved sessions |
 
 ```bash
 mosaic auth logout elsevier

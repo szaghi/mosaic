@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from rich import print as rprint
+from rich import box, print as rprint
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
@@ -18,6 +18,7 @@ from mosaic.db import Cache
 from mosaic.downloader import download as dl_paper
 from mosaic.search import search_all
 from mosaic.services import build_filters, filter_papers
+from mosaic.errors import set_verbose_logging
 from mosaic.source_registry import SRC_MAP, build_sources
 
 
@@ -38,6 +39,9 @@ app.add_typer(notebook_app, name="notebook")
 app.add_typer(auth_app, name="auth")
 
 
+_verbose: bool = False
+
+
 @app.callback()
 def main(
     version: Annotated[
@@ -50,11 +54,23 @@ def main(
             help="Show version and exit",
         ),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", help="Show warnings and per-source stats"),
+    ] = False,
 ) -> None:
-    pass
+    global _verbose
+    _verbose = verbose
+    set_verbose_logging(verbose)
 
 
 console = Console()
+
+
+def warn(msg: str) -> None:
+    """Print a warning — only when --verbose is active."""
+    if _verbose:
+        rprint(msg)
 
 
 @app.command()
@@ -92,7 +108,9 @@ def search(
     field: Annotated[
         str,
         typer.Option(
-            "--field", "-f", help='Scope query to "title", "abstract", or "all" (default)'
+            "--field", "-f",
+            help='Scope query to "title", "abstract", or "all" (default)',
+            autocompletion=lambda: _FIELD_VALUES,
         ),
     ] = "all",
     raw_query: Annotated[
@@ -116,12 +134,11 @@ def search(
     sort_by: Annotated[
         str,
         typer.Option(
-            "--sort", help='Sort results: "citations" (most cited first) or "year" (newest first)'
+            "--sort",
+            help='Sort results: "citations" (most cited first) or "year" (newest first)',
+            autocompletion=lambda: _SORT_VALUES,
         ),
     ] = "",
-    verbose: Annotated[
-        bool, typer.Option("--verbose", help="Print per-source counts and deduplication stats")
-    ] = False,
     zotero: Annotated[bool, typer.Option("--zotero", help="Export results to Zotero")] = False,
     zotero_collection: Annotated[
         str, typer.Option("--zotero-collection", help="Zotero collection name (created if missing)")
@@ -146,6 +163,9 @@ def search(
             help="Fetch each PEDro record page to get authors, year, DOI and abstract (overrides config for this run)",
         ),
     ] = False,
+    stats: Annotated[
+        bool, typer.Option("--stats", help="Print per-source counts and deduplication stats")
+    ] = False,
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -166,7 +186,7 @@ def search(
         sources = [s for s in sources if s.name == name]
         if not sources:
             rprint(
-                f"[yellow]Source '{source}' is not active (missing API key or disabled in config).[/yellow]"
+                f"[dark_orange]Source '{source}' is not active (missing API key or disabled in config).[/dark_orange]"
             )
             raise typer.Exit(1)
 
@@ -197,9 +217,9 @@ def search(
         )
 
     for err in errors:
-        rprint(f"[yellow]Warning:[/yellow] {err}")
+        warn(f"[dark_orange]Warning:[/dark_orange] {err}")
 
-    if verbose:
+    if stats:
         _print_search_stats(search_stats, filters)
 
     _post_process(
@@ -242,7 +262,9 @@ def similar(
     sort_by: Annotated[
         str,
         typer.Option(
-            "--sort", help='Sort results: "citations" (most cited first) or "year" (newest first)'
+            "--sort",
+            help='Sort results: "citations" (most cited first) or "year" (newest first)',
+            autocompletion=lambda: _SORT_VALUES,
         ),
     ] = "",
     output: Annotated[
@@ -467,7 +489,7 @@ def config(
             cfg["zotero"]["user_id"] = uid
             rprint(f"[green]Zotero web API configured for user {uid}[/green]")
         except Exception as e:
-            rprint(f"[yellow]Could not auto-discover Zotero user ID: {e}[/yellow]")
+            warn(f"[dark_orange]Could not auto-discover Zotero user ID: {e}[/dark_orange]")
     if unpaywall_email:
         cfg["unpaywall"]["email"] = unpaywall_email
     if download_dir:
@@ -480,14 +502,14 @@ def config(
             rprint("[green]PEDro fair-use policy acknowledged. Source is now enabled.[/green]")
         else:
             rprint(
-                "[yellow]PEDro fair-use acknowledgement removed. Source is now disabled.[/yellow]"
+                "[dark_orange]PEDro fair-use acknowledgement removed. Source is now disabled.[/dark_orange]"
             )
     if pedro_fetch_details is not None:
         cfg["sources"]["pedro"]["fetch_details"] = pedro_fetch_details
         if pedro_fetch_details:
             rprint("[green]PEDro detail fetching enabled (authors, year, DOI, abstract).[/green]")
         else:
-            rprint("[yellow]PEDro detail fetching disabled.[/yellow]")
+            warn("[dark_orange]PEDro detail fetching disabled.[/dark_orange]")
 
     _pedro_changed = pedro_fair_use is not None or pedro_fetch_details is not None
     _any_changed = any(
@@ -533,7 +555,7 @@ def _bulk_download(
         raise typer.Exit(1) from None
 
     if not dois:
-        rprint(f"[yellow]No DOIs found in {from_file.name}[/yellow]")
+        rprint(f"[dark_orange]No DOIs found in {from_file.name}[/dark_orange]")
         raise typer.Exit()
 
     rprint(f"[dim]Found {len(dois)} DOI(s) in {from_file.name}[/dim]")
@@ -586,17 +608,30 @@ def _bulk_download(
 
 
 def _print_search_stats(stats: dict, filters) -> None:
-    from rich.panel import Panel
-
     per_source = stats.get("per_source", {})
     raw_total = stats.get("raw_total", 0)
     unique = stats.get("unique", 0)
     merged = stats.get("merged", 0)
 
-    source_names = list(per_source.keys())
-    sources_line = "  ".join(f"[bold]{n}[/bold]=[cyan]{c}[/cyan]" for n, c in per_source.items())
-    if not source_names:
-        sources_line = "[dim]none[/dim]"
+    table = Table(
+        show_header=True,
+        header_style="cyan",
+        box=box.SIMPLE,
+        show_edge=False,
+        title="[bold]Search stats[/bold]",
+    )
+    table.add_column("Source", min_width=20)
+    table.add_column("Results", justify="right", no_wrap=True)
+
+    for name, count in per_source.items():
+        src_color = _RAINBOW[hash(name) % len(_RAINBOW)]
+        label = f"[{src_color}]{name}[/{src_color}]"
+        table.add_row(label, f"[cyan]{count}[/cyan]")
+
+    table.add_section()
+    table.add_row("[dim]Total raw[/dim]", f"[cyan]{raw_total}[/cyan]")
+    table.add_row("[dim]Merged[/dim]",    f"[cyan]{merged}[/cyan]")
+    table.add_row("[dim]Unique[/dim]",    f"[cyan]{unique}[/cyan]")
 
     filter_parts = []
     if filters:
@@ -612,19 +647,11 @@ def _print_search_stats(stats: dict, filters) -> None:
             filter_parts.append(f"journal={filters.journal}")
         if filters.field and filters.field != "all":
             filter_parts.append(f"field={filters.field}")
-    filters_line = "  ".join(filter_parts) if filter_parts else "[dim]none[/dim]"
+    if filter_parts:
+        table.add_section()
+        table.add_row("[dim]Filters[/dim]", f"[dim]{', '.join(filter_parts)}[/dim]")
 
-    lines = [
-        f"[dim]Sources   [/dim] {', '.join(source_names) or '[dim]none[/dim]'}",
-        f"[dim]Raw       [/dim] {sources_line}  [dim]→ {raw_total} total[/dim]",
-        f"[dim]Unique    [/dim] [bold]{unique}[/bold] papers[dim]  ({merged} merged by DOI)[/dim]",
-        f"[dim]Filters   [/dim] {filters_line}",
-    ]
-    console.print(
-        Panel(
-            "\n".join(lines), title="[bold]Search stats[/bold]", border_style="dim", padding=(0, 1)
-        )
-    )
+    console.print(table)
 
 
 def _post_process(
@@ -650,7 +677,7 @@ def _post_process(
     papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by)
 
     if not papers:
-        rprint("[yellow]No results found.[/yellow]")
+        rprint("[dark_orange]No results found.[/dark_orange]")
         raise typer.Exit()
 
     for p in papers:
@@ -686,11 +713,29 @@ def _post_process(
         _push_to_obsidian(papers, cfg, subfolder_override=obsidian_folder)
 
 
+_RAINBOW = ["red", "dark_orange", "green", "cyan", "blue", "magenta"]
+
+_SORT_VALUES  = ["citations", "year"]
+_FIELD_VALUES = ["title", "abstract", "all"]
+_AUTH_PROVIDERS = ["elsevier", "springer", "scopus"]
+
+
+def _complete_session_names() -> list[str]:
+    from mosaic.auth import list_sessions
+    return [s["name"] for s in list_sessions()]
+
+
 def _print_results(papers: list) -> None:
     show_citations = any(p.citation_count is not None for p in papers)
 
-    table = Table(show_header=True, header_style="bold cyan", expand=True)
-    table.add_column("#", style="dim", width=3)
+    table = Table(
+        show_header=True,
+        header_style="cyan",
+        box=box.SIMPLE,
+        show_edge=False,
+        expand=True,
+    )
+    table.add_column("#", width=3)
     table.add_column("Title", min_width=30, ratio=3)
     table.add_column("Authors", ratio=2)
     table.add_column("Year", width=6)
@@ -705,7 +750,10 @@ def _print_results(papers: list) -> None:
         oa = "[green]yes[/green]" if p.is_open_access else "[red]no[/red]"
         pdf = "[green]✓[/green]" if p.pdf_url else "[dim]–[/dim]"
         doi = p.doi or "[dim]–[/dim]"
-        row = [str(i), p.title[:80], p.short_authors, str(p.year or ""), doi, p.source, oa, pdf]
+        color = _RAINBOW[(i - 1) % len(_RAINBOW)]
+        src_color = _RAINBOW[hash(p.source) % len(_RAINBOW)]
+        source = f"[{src_color}]{p.source}[/{src_color}]"
+        row = [f"[{color}]{i}[/{color}]", p.title[:80], p.short_authors, str(p.year or ""), doi, source, oa, pdf]
         if show_citations:
             cited = str(p.citation_count) if p.citation_count is not None else "[dim]–[/dim]"
             row.append(cited)
@@ -851,7 +899,9 @@ def notebook_create(
     field: Annotated[
         str,
         typer.Option(
-            "--field", "-f", help='Scope query to "title", "abstract", or "all" (default)'
+            "--field", "-f",
+            help='Scope query to "title", "abstract", or "all" (default)',
+            autocompletion=lambda: _FIELD_VALUES,
         ),
     ] = "all",
     raw_query: Annotated[
@@ -945,12 +995,12 @@ def notebook_create(
         )
 
     for err in errors:
-        rprint(f"[yellow]Warning:[/yellow] {err}")
+        warn(f"[dark_orange]Warning:[/dark_orange] {err}")
 
     papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only)
 
     if not papers:
-        rprint("[yellow]No results found.[/yellow]")
+        rprint("[dark_orange]No results found.[/dark_orange]")
         raise typer.Exit()
 
     rprint(f"[dim]Found {len(papers)} paper(s). Downloading PDFs…[/dim]")
@@ -1027,7 +1077,13 @@ def ui(
 
 @auth_app.command("login")
 def auth_login(
-    name: Annotated[str, typer.Argument(help="Session name, e.g. elsevier, springer, myuni")],
+    name: Annotated[
+        str,
+        typer.Argument(
+            help="Session name, e.g. elsevier, springer, myuni",
+            autocompletion=lambda: _AUTH_PROVIDERS,
+        ),
+    ],
     url: Annotated[str, typer.Option("--url", "-u", help="URL to open in the browser for login")],
 ) -> None:
     """Open a browser, log in to a site, and save the session for future PDF downloads."""
@@ -1040,7 +1096,13 @@ def auth_login(
 
 @auth_app.command("logout")
 def auth_logout(
-    name: Annotated[str, typer.Argument(help="Session name to remove")],
+    name: Annotated[
+        str,
+        typer.Argument(
+            help="Session name to remove",
+            autocompletion=_complete_session_names,
+        ),
+    ],
 ) -> None:
     """Remove a saved browser session."""
     from mosaic.auth import delete_session
@@ -1048,7 +1110,7 @@ def auth_logout(
     if delete_session(name):
         rprint(f"[green]Session removed:[/green] {name}")
     else:
-        rprint(f"[yellow]No session found for:[/yellow] {name}")
+        warn(f"[dark_orange]No session found for:[/dark_orange] {name}")
 
 
 @auth_app.command("status")
@@ -1062,7 +1124,7 @@ def auth_status() -> None:
             "[dim]No saved sessions. Use [bold]mosaic auth login <name> --url <url>[/bold] to add one.[/dim]"
         )
         return
-    table = Table(show_header=True, header_style="bold cyan")
+    table = Table(show_header=True, header_style="cyan", box=box.SIMPLE, show_edge=False)
     table.add_column("Name", style="bold")
     table.add_column("Domain")
     table.add_column("Saved")

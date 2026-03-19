@@ -15,7 +15,12 @@ if not logger.handlers:
     _handler = logging.StreamHandler()
     _handler.setFormatter(logging.Formatter("%(levelname)s [%(name)s] %(message)s"))
     logger.addHandler(_handler)
-    logger.setLevel(logging.WARNING)
+    logger.setLevel(logging.ERROR)
+
+
+def set_verbose_logging(verbose: bool) -> None:
+    """Lower log level to WARNING when verbose mode is active."""
+    logger.setLevel(logging.WARNING if verbose else logging.ERROR)
 
 
 # ---------------------------------------------------------------------------
