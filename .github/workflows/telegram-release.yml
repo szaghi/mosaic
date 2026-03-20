@@ -2,9 +2,10 @@ name: Telegram Release Announcement
 
 # Fires after build.yml creates the GitHub Release (binaries attached,
 # release notes generated). At this point PyPI publish is also complete.
+# Note: automatic release announcements are sent by the `notify` job in build.yml,
+# which runs after the GitHub Release is created. This workflow is kept for
+# manual re-sends and testing only.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       dry_run:
