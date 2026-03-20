@@ -50,6 +50,7 @@ mosaic search [OPTIONS] QUERY
 | `--download-dir` | | path | config | Override PDF download directory for this run only |
 | `--sort` | | str | | Sort results: `citations` or `year` — tab-completes |
 | `--stats` | | flag | off | Print per-source counts and deduplication stats |
+| `--cached` | | flag | off | Search only the local cache — no network requests |
 | `--zotero` | | flag | off | Export results to Zotero |
 | `--zotero-collection` | | str | | Zotero collection name (created if missing) |
 | `--zotero-local` | | flag | off | Force local API even when a web API key is configured |
@@ -249,6 +250,9 @@ mosaic get [OPTIONS] [DOI]
 | `--zotero-local` | flag | off | Force local API even when a web API key is configured |
 
 Provide either a `DOI` positional argument (single download) or `--from <file>` (bulk download) — not both.
+
+**Cache-first lookup:**
+Before hitting Unpaywall or a browser session, MOSAIC checks the local cache for the DOI. If the paper was seen in a previous search and a PDF URL is already known, the download starts immediately without any network resolution step. A dim confirmation line is printed when the cache is used.
 
 **Bulk mode behaviour:**
 - For `.bib` files: extracts all `doi = {…}` fields (case-insensitive, no extra dependency)

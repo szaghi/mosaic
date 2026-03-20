@@ -81,7 +81,7 @@ Already-downloaded files are skipped automatically.
 mosaic get 10.48550/arXiv.1706.03762
 ```
 
-Fetches a single paper by DOI. MOSAIC first checks the local cache, then tries Unpaywall if no PDF URL is known.
+MOSAIC checks the local cache first. If the paper was seen in a previous search and a PDF URL is already known, the download starts immediately — no Unpaywall round-trip. Otherwise it falls back to Unpaywall, then a saved browser session.
 
 ![Download by DOI demo](/gifs/04_doi_get.gif)
 
@@ -164,6 +164,26 @@ mosaic search "large language model" -n 50 --source arxiv --oa-only --download
 ```
 
 ![Multi-filter search demo](/gifs/03_filter_search.gif)
+
+## Offline / cached search
+
+Use `--cached` to search only the papers already stored in the local cache — no network requests, no API keys needed, instant results:
+
+```bash
+mosaic search "attention mechanism" --cached
+```
+
+All the usual filters, sort, and export options still apply:
+
+```bash
+# Filter cached papers by year and author, open-access only
+mosaic search "CRISPR" --cached -y 2020-2024 -a Zhang --oa-only
+
+# Sort cached results by citation count and export to BibTeX
+mosaic search "diffusion models" --cached --sort citations --output refs.bib
+```
+
+The cache is populated automatically by every regular `search`, `similar`, and `get` run — so the more you use MOSAIC, the richer your local library becomes.
 
 ## Warnings
 

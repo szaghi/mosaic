@@ -166,6 +166,9 @@ def search(
     stats: Annotated[
         bool, typer.Option("--stats", help="Print per-source counts and deduplication stats")
     ] = False,
+    cached: Annotated[
+        bool, typer.Option("--cached", help="Search only the local cache — no network requests")
+    ] = False,
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -174,6 +177,35 @@ def search(
     if pedro_fetch_details:
         cfg["sources"]["pedro"]["fetch_details"] = True
     cache = Cache(cfg["db_path"])
+
+    if cached:
+        filters, year_warning = build_filters(
+            year=year, author=list(author), journal=journal, field=field, raw_query=raw_query
+        )
+        if year_warning:
+            rprint(f"[red]{year_warning}[/red]")
+            raise typer.Exit(1)
+        rprint(f"[dim]Searching local cache for '{query}'…[/dim]")
+        papers = cache.search_local(query)
+        if filters:
+            papers = [p for p in papers if filters.match(p)]
+        _post_process(
+            papers,
+            cfg,
+            cache,
+            output=list(output),
+            do_download=download,
+            sort_by=sort_by,
+            oa_only=oa_only,
+            pdf_only=pdf_only,
+            zotero=zotero,
+            zotero_collection=zotero_collection,
+            zotero_local=zotero_local,
+            obsidian=obsidian,
+            obsidian_folder=obsidian_folder,
+        )
+        return
+
     sources = build_sources(cfg)
 
     # filter by source shorthand
@@ -412,7 +444,10 @@ def get(
 
     from mosaic.models import Paper
 
-    paper = Paper(title=doi, doi=doi, source="manual")
+    _bare = Paper(title=doi, doi=doi, source="manual")
+    paper = cache.get_by_uid(_bare.uid) or _bare
+    if paper is not _bare:
+        rprint(f"[dim]Found in local cache: {paper.title[:80]}[/dim]")
     path = dl_paper(
         paper,
         cfg["download_dir"],
@@ -571,7 +606,8 @@ def _bulk_download(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False
     ) as prog:
         for doi in dois:
-            paper = Paper(title=doi, doi=doi, source="manual")
+            _bare = Paper(title=doi, doi=doi, source="manual")
+            paper = cache.get_by_uid(_bare.uid) or _bare
             papers_list.append(paper)
             task = prog.add_task(f"{doi}…")
             path = dl_paper(paper, download_dir, cache, email, pattern)

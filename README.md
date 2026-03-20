@@ -228,6 +228,9 @@ mosaic search "deep learning" -n 25 --oa-only
 
 # Single source
 mosaic search "RNA velocity" --source epmc
+
+# Search only the local cache — instant, no network
+mosaic search "attention mechanism" --cached
 ```
 
 **Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc` · `oa` · `base` · `core` · `sp` · `springer` · `ads` · `ieee` · `zenodo` · `crossref` · `dblp` · `hal` · `pubmed` · `pmc` · `rxiv` · `pedro` · `scopus`
@@ -273,7 +276,7 @@ Uses **OpenAlex** `related_works` (always) and **Semantic Scholar** recommendati
 mosaic get 10.48550/arXiv.1706.03762
 ```
 
-Checks the local cache first, then tries Unpaywall if no PDF URL is known.
+Checks the local cache first — if the paper was seen in a previous search and a PDF URL is already known, downloads immediately without hitting Unpaywall.
 
 ### Bulk download from BibTeX / CSV
 
