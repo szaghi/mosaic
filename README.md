@@ -10,8 +10,8 @@
 
 ### Multi-sOurce Scientific Article Indexer and Collector
 
->Search, discover, and download scientific papers from multiple open databases — with a single command.
->Send results directly to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
+> Search, discover, and download scientific papers from multiple open databases — with a single command.
+> Send results directly to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
 
 [![Version](https://img.shields.io/pypi/v/mosaic-search?label=version)](https://pypi.org/project/mosaic-search/)
 [![Tests](https://github.com/szaghi/mosaic/actions/workflows/tests.yml/badge.svg)](https://github.com/szaghi/mosaic/actions/workflows/tests.yml)
@@ -31,7 +31,7 @@
 ## What MOSAIC does
 
 ```bash
-# Search 21 sources at once, deduplicate, download OA PDFs
+# Search dozens sources at once, deduplicate, download OA PDFs
 mosaic search "attention is all you need" --oa-only --download
 
 # Discover related literature from any DOI or arXiv ID — no query needed
@@ -67,88 +67,34 @@ Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://sza
 
 ## Key features
 
+<div>
 <table>
 <tr>
-<td align="center" width="33%">
-
-🌐 **21 sources, one command**
-
-arXiv · Semantic Scholar · OpenAlex · PubMed · PubMed Central · Europe PMC · DOAJ · Crossref · Springer · IEEE · NASA ADS · Zenodo · BASE · CORE · DBLP · HAL · ScienceDirect · bioRxiv/medRxiv · and more
-
-</td>
-<td align="center" width="33%">
-
-🔭 **Find similar papers**
-
-`mosaic similar <doi>` — discover related literature from any DOI or arXiv ID via OpenAlex graph + Semantic Scholar ML, no query needed
-
-</td>
-<td align="center" width="33%">
-
-✨ **Smart deduplication**
-
-Results merged by DOI: best citation count, richest abstract, earliest PDF URL wins
-
-</td>
+<td><b>🌐 Dozens sources, one command</b><br><sub>arXiv · Semantic Scholar · OpenAlex · PubMed · PubMed Central · Europe PMC · DOAJ · Crossref · Springer · IEEE · NASA ADS · Zenodo · BASE · CORE · DBLP · HAL · ScienceDirect · bioRxiv/medRxiv · and more — all with <code>mosaic search "query"</code>. <a href="https://szaghi.github.io/mosaic/guide/sources">Sources guide</a></sub></td>
+<td><b>🔭 Find similar papers</b><br><sub><code>mosaic similar &lt;doi&gt;</code> — discover related literature from any DOI or arXiv ID via OpenAlex graph + Semantic Scholar ML, no query needed. <a href="https://szaghi.github.io/mosaic/guide/similar">Find similar guide</a></sub></td>
+<td><b>✨ Smart deduplication</b><br><sub>Results merged by DOI: best citation count, richest abstract, earliest PDF URL wins. <a href="https://szaghi.github.io/mosaic/guide/usage">Usage guide</a></sub></td>
 </tr>
 <tr>
-<td align="center">
-
-📥 **OA PDF downloads**
-
-Direct links · Unpaywall fallback · browser-session authenticated access · bulk download from `.bib`/`.csv`
-
-</td>
-<td align="center">
-
-🎛️ **Sort & filter**
-
-Year · author · journal · open-access · citation count — composable, applied at API level where supported
-
-</td>
-<td align="center">
-
-📤 **Export anywhere**
-
-Markdown · CSV · JSON · BibTeX · Zotero (local & web API)
-
-</td>
+<td><b>📥 OA PDF downloads</b><br><sub>Direct links · Unpaywall fallback · browser-session authenticated access · bulk download from <code>.bib</code>/<code>.csv</code>. <a href="https://szaghi.github.io/mosaic/guide/authenticated-access">Authenticated access guide</a></sub></td>
+<td><b>🎛️ Sort &amp; filter</b><br><sub>Year · author · journal · open-access · citation count — composable, applied at API level where supported. <a href="https://szaghi.github.io/mosaic/guide/usage#sort-results">Usage guide</a></sub></td>
+<td><b>📤 Export anywhere</b><br><sub>Markdown · CSV · JSON · BibTeX · Zotero (local &amp; web API). <a href="https://szaghi.github.io/mosaic/guide/usage#save-results-to-a-file">Usage guide</a></sub></td>
 </tr>
 <tr>
-<td align="center">
-
-🤖 **NotebookLM integration**
-
-Podcast · video · slides · quiz · mind map · flashcards · briefing — queued in one command
-
-</td>
-<td align="center">
-
-⚡ **Offline-first cache**
-
-SQLite — repeated queries are instant, no re-fetching
-
-</td>
-<td align="center">
-
-🧩 **Custom sources**
-
-Wire any JSON REST API as a new source with a few lines of TOML — no Python needed
-
-</td>
+<td><b>🤖 NotebookLM integration</b><br><sub>Podcast · video · slides · quiz · mind map · flashcards · briefing — queued in one command with <code>mosaic notebook create</code>. <a href="https://szaghi.github.io/mosaic/guide/notebooklm">NotebookLM guide</a></sub></td>
+<td><b>⚡ Offline-first cache</b><br><sub>SQLite — repeated queries are instant, no re-fetching. <code>mosaic search "query" --cached</code> for instant offline search. <a href="https://szaghi.github.io/mosaic/guide/usage#offline--cached-search">Usage guide</a></sub></td>
+<td><b>🧩 Custom sources</b><br><sub>Wire any JSON REST API as a new source with a few lines of TOML — no Python needed. <a href="https://szaghi.github.io/mosaic/guide/custom-sources">Custom sources guide</a></sub></td>
 </tr>
 <tr>
-<td align="center" colspan="3">
-
-📚 **Zotero integration**
-
-Push results directly into your Zotero library — local API (Zotero running on your machine) or web API (api.zotero.org). Organise into collections, link downloaded PDFs as attachments, and sync across devices — all with a single `--zotero` flag.
-
-![Zotero integration screenshot](docs/public/zotero-01.png)
-
-</td>
+<td><b>🗒️ Obsidian integration</b><br><sub>Write paper notes directly into an Obsidian vault — YAML frontmatter, <code>&gt;[!abstract]</code> callout, metadata table, and <code>[[wikilinks]]</code> to related papers. Existing notes are never overwritten. <a href="https://szaghi.github.io/mosaic/guide/obsidian">Obsidian integration guide</a></sub></td>
+<td colspan="2"><b>🆓 FOSS licensing</b><br><sub>Available under your choice of <a href="licensing/LICENSE.gpl3.md">GPL v3</a>, <a href="licensing/LICENSE.bsd-2.md">BSD-2</a>, <a href="licensing/LICENSE.bsd-3.md">BSD-3</a>, or <a href="licensing/LICENSE.mit.md">MIT</a> — use whichever license best fits your project</sub></td>
+</tr>
+<tr>
+<td colspan="3"><b>📚 Zotero integration</b><br><sub>Push results directly into your Zotero library — local API (Zotero running on your machine) or web API (<code>api.zotero.org</code>). Organise into collections, link downloaded PDFs as attachments, and sync across devices — all with a single <code>--zotero</code> flag. <a href="https://szaghi.github.io/mosaic/guide/zotero">Zotero integration guide</a></sub></td>
 </tr>
 </table>
+</div>
+
+![Zotero integration screenshot](docs/public/zotero-01.png)
 
 ## Sources
 
