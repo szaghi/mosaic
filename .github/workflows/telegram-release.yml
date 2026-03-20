@@ -44,13 +44,13 @@ jobs:
 
           text = (
               f"🚀 <b>MOSAIC {tag} released!</b>\n\n"
-              "Multi-sOurce Scientific Article Indexer and Collector — "
-              "search, discover, and download scientific papers from 21+ open "
-              "databases with a single command.\n\n"
+              "<b>MOSAIC</b>\n"
+              "<i>a vivid mosaic of open scientific literature, assembled in seconds</i>\n"
+              "Multi-sOurce Scientific Article Indexer and Collector\n\n"
               f"<b>What's new:</b>\n{notes}\n\n"
               f'📦 <a href="https://pypi.org/project/mosaic-search/">PyPI</a>  ·  '
-              f'📝 <a href="{url}">Release notes &amp; binaries</a>  ·  '
-              f'📖 <a href="https://szaghi.github.io/mosaic/">Docs</a>\n\n'
+              f'🏷️ <a href="{url}">Release notes &amp; binaries</a>  ·  '
+              f'📘 <a href="https://szaghi.github.io/mosaic/">Docs</a>\n\n'
               "<code>pipx install --upgrade mosaic-search</code>"
           )
 
