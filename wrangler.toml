@@ -1,0 +1,8 @@
+name            = "mosaic-bot"
+main            = "bot/worker.js"
+compatibility_date = "2025-01-01"
+
+# Secrets (not stored here — set via `wrangler secret put` or the deploy workflow):
+#   TELEGRAM_BOT_TOKEN  — bot token from @BotFather
+#   WEBHOOK_SECRET      — arbitrary string; must match the value used in setWebhook
+#   GITHUB_TOKEN        — optional; raises GitHub API rate limit from 60 to 5000 req/h

@@ -1,0 +1,88 @@
+name: Deploy Telegram Bot Worker
+
+# Deploys the Cloudflare Worker and re-registers the Telegram webhook
+# whenever the bot script, wrangler config, or this workflow changes.
+#
+# Required GitHub secrets:
+#   CF_API_TOKEN        — Cloudflare API token (Workers Scripts: Edit)
+#   TELEGRAM_BOT_TOKEN  — bot token (used to register the webhook)
+#   WEBHOOK_SECRET      — shared secret injected into the Worker and registered
+#                         with Telegram so only Telegram can call the Worker
+#
+# Required GitHub variable (Settings → Variables → Actions):
+#   CF_WORKER_URL       — Worker URL, e.g. https://mosaic-bot.<account>.workers.dev
+#                         Set this after the first successful deploy.
+#
+# Optional GitHub secret:
+#   GITHUB_TOKEN_CF     — a PAT forwarded to the Worker as GITHUB_TOKEN to raise
+#                         the GitHub API rate limit (the default GITHUB_TOKEN
+#                         cannot be passed to Cloudflare as a Worker secret).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bot/worker.js"
+      - "wrangler.toml"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Workers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy worker and push secrets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          secrets: |
+            TELEGRAM_BOT_TOKEN
+            WEBHOOK_SECRET
+            GITHUB_TOKEN
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          WEBHOOK_SECRET:     ${{ secrets.WEBHOOK_SECRET }}
+          GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN_CF || '' }}
+
+      - name: Register Telegram webhook
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          WEBHOOK_SECRET:     ${{ secrets.WEBHOOK_SECRET }}
+          CF_WORKER_URL:      ${{ vars.CF_WORKER_URL }}
+        run: |
+          python3 - <<'EOF'
+          import os, json, urllib.request
+
+          token   = os.environ["TELEGRAM_BOT_TOKEN"]
+          secret  = os.environ["WEBHOOK_SECRET"]
+          url     = os.environ.get("CF_WORKER_URL", "").strip()
+
+          if not url:
+              print("CF_WORKER_URL not set — skipping webhook registration.")
+              print("Set it in Settings → Variables → Actions, then re-run this workflow.")
+              raise SystemExit(0)
+
+          payload = {
+              "url":          url,
+              "secret_token": secret,
+              # Only receive the update types the bot actually handles
+              "allowed_updates": ["message"],
+          }
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{token}/setWebhook",
+              data=json.dumps(payload).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req) as resp:
+              result = json.loads(resp.read())
+
+          if not result.get("ok"):
+              raise RuntimeError(f"setWebhook failed: {result}")
+          print(f"✓ Webhook registered → {url}")
+          EOF
