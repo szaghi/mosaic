@@ -606,10 +606,10 @@ merges to `main` and version tags respectively.
 Releases are managed by the maintainer using `release.sh`:
 
 ```bash
-./release.sh patch   # 1.2.3 -> 1.2.4
-./release.sh minor   # 1.2.3 -> 1.3.0
-./release.sh major   # 1.2.3 -> 2.0.0
-./release.sh 2.5.0   # exact version
+./release.sh --patch   # 1.2.3 -> 1.2.4
+./release.sh --minor   # 1.2.3 -> 1.3.0
+./release.sh --major   # 1.2.3 -> 2.0.0
+./release.sh 2.5.0     # exact version
 ```
 
 The script validates the working tree is clean, bumps the version in

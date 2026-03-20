@@ -2,9 +2,9 @@
 # release.sh — create a new MOSAIC release
 #
 # Usage:
-#   ./release.sh major          # bump major (1.2.3 → 2.0.0)
-#   ./release.sh minor          # bump minor (1.2.3 → 1.3.0)
-#   ./release.sh patch          # bump patch (1.2.3 → 1.2.4)
+#   ./release.sh --major        # bump major (1.2.3 → 2.0.0)
+#   ./release.sh --minor        # bump minor (1.2.3 → 1.3.0)
+#   ./release.sh --patch        # bump patch (1.2.3 → 1.2.4)
 #   ./release.sh 2.5.0          # set exact version
 #
 # What it does:
@@ -43,14 +43,14 @@ validate_semver() {
 
 # ── argument parsing ────────────────────────────────────────────────────────────
 
-[[ $# -eq 1 ]] || die "Usage: $0 major|minor|patch|X.Y.Z"
+[[ $# -eq 1 ]] || die "Usage: $0 --major|--minor|--patch|X.Y.Z"
 
 CURRENT=$(current_version)
 [[ -n "$CURRENT" ]] || die "could not read current version from pyproject.toml"
 
 case "$1" in
-    major|minor|patch)
-        NEW=$(bump "$CURRENT" "$1")
+    --major|--minor|--patch)
+        NEW=$(bump "$CURRENT" "${1#--}")
         ;;
     *)
         validate_semver "$1"
