@@ -12,11 +12,6 @@ name: Deploy Telegram Bot Worker
 # Required GitHub variable (Settings → Variables → Actions):
 #   CF_WORKER_URL       — Worker URL, e.g. https://mosaic-bot.<account>.workers.dev
 #                         Set this after the first successful deploy.
-#
-# Optional GitHub secret:
-#   GITHUB_TOKEN_CF     — a PAT forwarded to the Worker as GITHUB_TOKEN to raise
-#                         the GitHub API rate limit (the default GITHUB_TOKEN
-#                         cannot be passed to Cloudflare as a Worker secret).
 
 on:
   push:
@@ -44,11 +39,9 @@ jobs:
           secrets: |
             TELEGRAM_BOT_TOKEN
             WEBHOOK_SECRET
-            GITHUB_TOKEN
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           WEBHOOK_SECRET:     ${{ secrets.WEBHOOK_SECRET }}
-          GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN_CF || '' }}
 
       - name: Register Telegram webhook
         env:
