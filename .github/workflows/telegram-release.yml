@@ -1,0 +1,74 @@
+name: Telegram Release Announcement
+
+# Fires after build.yml creates the GitHub Release (binaries attached,
+# release notes generated). At this point PyPI publish is also complete.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Send a test message to the channel (no real release needed)"
+        required: false
+        default: "true"
+
+jobs:
+  notify:
+    name: Announce on Telegram
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send release announcement
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          DRY_RUN:      ${{ github.event.inputs.dry_run || 'false' }}
+          RELEASE_TAG:  ${{ github.event.release.tag_name }}
+          RELEASE_URL:  ${{ github.event.release.html_url }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          python3 - <<'EOF'
+          import os, json, urllib.request
+
+          dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
+          tag     = os.environ["RELEASE_TAG"]   or "v0.0.0-test"
+          url     = os.environ["RELEASE_URL"]   or "https://github.com/szaghi/mosaic/releases"
+          body    = os.environ.get("RELEASE_BODY", "").strip() or "This is a dry-run test message — no real release."
+          token   = os.environ["TELEGRAM_BOT_TOKEN"]
+          channel = os.environ["TELEGRAM_CHANNEL_ID"]
+
+          # Trim release notes to a readable length and escape HTML
+          MAX = 900
+          notes = body[:MAX] + ("…" if len(body) > MAX else "")
+          notes = notes.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+          text = (
+              f"🚀 <b>MOSAIC {tag} released!</b>\n\n"
+              "Multi-sOurce Scientific Article Indexer and Collector — "
+              "search, discover, and download scientific papers from 21+ open "
+              "databases with a single command.\n\n"
+              f"<b>What's new:</b>\n{notes}\n\n"
+              f'📦 <a href="https://pypi.org/project/mosaic-search/">PyPI</a>  ·  '
+              f'📝 <a href="{url}">Release notes &amp; binaries</a>  ·  '
+              f'📖 <a href="https://szaghi.github.io/mosaic/">Docs</a>\n\n'
+              "<code>pipx install --upgrade mosaic-search</code>"
+          )
+
+          payload = {
+              "chat_id": channel,
+              "text": text,
+              "parse_mode": "HTML",
+              "link_preview_options": {"is_disabled": True},
+          }
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{token}/sendMessage",
+              data=json.dumps(payload).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req) as resp:
+              result = json.loads(resp.read())
+
+          if not result.get("ok"):
+              raise RuntimeError(f"Telegram API error: {result}")
+          print(f"✓ sent message_id={result['result']['message_id']} to {channel}")
+          EOF
