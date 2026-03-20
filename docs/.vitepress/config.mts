@@ -29,6 +29,7 @@ export default withMermaid({
           { text: 'CLI Reference', link: '/guide/cli-reference' },
           { text: 'Changelog',     link: '/guide/changelog' },
           { text: 'Contributing',  link: '/guide/contributing' },
+          { text: 'Telegram Community', link: '/guide/telegram' },
         ],
       },
     ],
@@ -62,6 +63,12 @@ export default withMermaid({
             { text: 'CLI Reference', link: '/guide/cli-reference' },
             { text: 'Changelog',     link: '/guide/changelog' },
             { text: 'Contributing',  link: '/guide/contributing' },
+          ],
+        },
+        {
+          text: 'Community',
+          items: [
+            { text: 'Telegram', link: '/guide/telegram' },
           ],
         },
       ],

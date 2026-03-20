@@ -21,6 +21,8 @@
 [![License: BSD-2](https://img.shields.io/badge/license-BSD--2--Clause-blue)](licensing/LICENSE.bsd-2.md)
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-blue)](licensing/LICENSE.bsd-3.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](licensing/LICENSE.mit.md)
+[![Telegram Channel](https://img.shields.io/badge/Telegram-channel-26A5E4?logo=telegram&logoColor=white)](https://t.me/mosaic_search)
+[![Telegram Group](https://img.shields.io/badge/Telegram-support%20group-26A5E4?logo=telegram&logoColor=white)](https://t.me/mosaic_search_support)
 
 **[Full documentation](https://szaghi.github.io/mosaic/)**
 
@@ -331,6 +333,15 @@ flowchart LR
     DL --> Disk[(~/mosaic-papers/)]
     DL -->|mosaic notebook create| NLM[NotebookLM]
 ```
+
+## Community
+
+| | |
+|---|---|
+| 📢 **Announcements** | [t.me/mosaic_search](https://t.me/mosaic_search) — releases, CI events, weekly digest |
+| 💬 **Support group** | [t.me/mosaic_search_support](https://t.me/mosaic_search_support) — questions, bug reports, discussion |
+
+The support group has a bot that responds instantly to `/help`, `/install`, `/version`, `/docs`, `/sources`, `/changelog`, `/bug`, and `/roadmap`, and auto-replies to common questions.
 
 ## Development
 
