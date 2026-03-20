@@ -1,0 +1,76 @@
+name: Telegram Push Notification
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    name: Announce push on Telegram
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send push notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          PUSHER:       ${{ github.actor }}
+          BRANCH:       ${{ github.ref_name }}
+          COMPARE_URL:  ${{ github.event.compare }}
+          COMMITS_JSON: ${{ toJson(github.event.commits) }}
+        run: |
+          python3 - <<'EOF'
+          import os, json, urllib.request
+
+          pusher      = os.environ["PUSHER"]
+          branch      = os.environ["BRANCH"]
+          compare_url = os.environ["COMPARE_URL"]
+          token       = os.environ["TELEGRAM_BOT_TOKEN"]
+          channel     = os.environ["TELEGRAM_CHANNEL_ID"]
+          commits     = json.loads(os.environ["COMMITS_JSON"] or "[]")
+
+          MAX_COMMITS = 10
+          MAX_MSG_LEN = 60
+
+          if not commits:
+              print("No commits in payload — skipping.")
+              exit(0)
+
+          lines = []
+          for c in commits[:MAX_COMMITS]:
+              sha   = c["id"][:7]
+              msg   = c["message"].splitlines()[0]   # first line only
+              msg   = msg if len(msg) <= MAX_MSG_LEN else msg[:MAX_MSG_LEN - 1] + "…"
+              lines.append(f"{sha} {msg}")
+
+          if len(commits) > MAX_COMMITS:
+              lines.append(f"… and {len(commits) - MAX_COMMITS} more")
+
+          log_block = "\n".join(lines)
+          n = len(commits)
+
+          text = (
+              f"🔨 <b>Push to</b> <code>{branch}</code> · {n} commit{'s' if n != 1 else ''}\n\n"
+              f"<pre>{log_block}</pre>\n\n"
+              f"👤 {pusher}  ·  "
+              f'<a href="{compare_url}">View diff →</a>'
+          )
+
+          payload = {
+              "chat_id": channel,
+              "text": text,
+              "parse_mode": "HTML",
+              "link_preview_options": {"is_disabled": True},
+          }
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{token}/sendMessage",
+              data=json.dumps(payload).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req) as resp:
+              result = json.loads(resp.read())
+
+          if not result.get("ok"):
+              raise RuntimeError(f"Telegram API error: {result}")
+          print(f"✓ sent message_id={result['result']['message_id']} to {channel}")
+          EOF

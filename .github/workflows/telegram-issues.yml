@@ -1,0 +1,86 @@
+name: Telegram Issue Notification
+
+# Note: GitHub's `issues` event fires for PRs too (PRs are issues in the API).
+# We filter those out in the Python script by checking ISSUE_PR_URL.
+on:
+  issues:
+    types: [opened, closed, reopened]
+
+jobs:
+  notify:
+    name: Announce issue on Telegram
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send issue notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE:  ${{ github.event.issue.title }}
+          ISSUE_URL:    ${{ github.event.issue.html_url }}
+          ISSUE_BODY:   ${{ github.event.issue.body }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_PR_URL: ${{ github.event.issue.pull_request.url || '' }}
+          ACTION:       ${{ github.event.action }}
+        run: |
+          python3 - <<'EOF'
+          import os, json, urllib.request
+
+          # Skip if this event is actually a PR (GitHub fires `issues` for PRs too)
+          if os.environ.get("ISSUE_PR_URL", "").strip():
+              print("Event is a PR — skipping (handled by telegram-pr.yml).")
+              exit(0)
+
+          action  = os.environ["ACTION"]
+          number  = os.environ["ISSUE_NUMBER"]
+          title   = os.environ["ISSUE_TITLE"]
+          url     = os.environ["ISSUE_URL"]
+          body    = os.environ.get("ISSUE_BODY", "").strip()
+          author  = os.environ["ISSUE_AUTHOR"]
+          token   = os.environ["TELEGRAM_BOT_TOKEN"]
+          channel = os.environ["TELEGRAM_CHANNEL_ID"]
+
+          if action == "opened":
+              icon, status = "🐛", "opened"
+          elif action == "closed":
+              icon, status = "✔️", "closed"
+          elif action == "reopened":
+              icon, status = "🔁", "reopened"
+          else:
+              print(f"Unhandled action '{action}' — skipping.")
+              exit(0)
+
+          MAX_BODY = 250
+          snippet = ""
+          if body and action in ("opened", "reopened"):
+              snippet = body[:MAX_BODY] + ("…" if len(body) > MAX_BODY else "")
+              snippet = snippet.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+              snippet = f"\n\n{snippet}"
+
+          text = (
+              f"{icon} <b>Issue #{number} {status}</b>\n"
+              f"<b>{title}</b>"
+              f"{snippet}\n\n"
+              f"👤 {author}  ·  "
+              f'<a href="{url}">View issue →</a>'
+          )
+
+          payload = {
+              "chat_id": channel,
+              "text": text,
+              "parse_mode": "HTML",
+              "link_preview_options": {"is_disabled": True},
+          }
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{token}/sendMessage",
+              data=json.dumps(payload).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req) as resp:
+              result = json.loads(resp.read())
+
+          if not result.get("ok"):
+              raise RuntimeError(f"Telegram API error: {result}")
+          print(f"✓ sent message_id={result['result']['message_id']} to {channel}")
+          EOF

@@ -1,0 +1,127 @@
+name: Telegram Weekly Digest
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"   # every Monday at 08:00 UTC
+  workflow_dispatch:        # allow manual trigger for testing
+
+jobs:
+  digest:
+    name: Post weekly digest on Telegram
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch stats and send digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'EOF'
+          import os, json, urllib.request, urllib.parse
+          from datetime import datetime, timezone, timedelta
+
+          token       = os.environ["TELEGRAM_BOT_TOKEN"]
+          channel     = os.environ["TELEGRAM_CHANNEL_ID"]
+          gh_token    = os.environ["GITHUB_TOKEN"]
+          repo        = os.environ["REPO"]
+
+          since = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+          api   = f"https://api.github.com/repos/{repo}"
+          hdrs  = {"Authorization": f"Bearer {gh_token}", "Accept": "application/vnd.github+json",
+                   "X-GitHub-Api-Version": "2022-11-28"}
+
+          def gh_get(path, params=None):
+              url = f"{api}/{path}"
+              if params:
+                  url += "?" + urllib.parse.urlencode(params)
+              req = urllib.request.Request(url, headers=hdrs)
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read())
+
+          # ── Commits ────────────────────────────────────────────────────────────
+          commits = gh_get("commits", {"sha": "main", "since": since, "per_page": 100})
+          authors = sorted({c["commit"]["author"]["name"] for c in commits})
+          n_commits = len(commits)
+
+          # ── Merged PRs ─────────────────────────────────────────────────────────
+          # closed PRs updated in the last week; filter to merged ones
+          prs_raw = gh_get("pulls", {"state": "closed", "base": "main",
+                                     "sort": "updated", "direction": "desc", "per_page": 30})
+          cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+          merged_prs = [
+              p for p in prs_raw
+              if p.get("merged_at") and
+                 datetime.fromisoformat(p["merged_at"].replace("Z", "+00:00")) >= cutoff
+          ]
+
+          # ── Issues ─────────────────────────────────────────────────────────────
+          issues_all = gh_get("issues", {"state": "all", "since": since, "per_page": 100})
+          # exclude PRs (GitHub returns PRs in the issues endpoint too)
+          issues_only = [i for i in issues_all if "pull_request" not in i]
+          opened_issues = [i for i in issues_only if i["state"] == "open"
+                           and i["created_at"] >= since]
+          closed_issues = [i for i in issues_only if i["state"] == "closed"
+                           and (i.get("closed_at") or "") >= since]
+          open_total = gh_get("issues", {"state": "open", "per_page": 1})
+
+          # ── Build message ──────────────────────────────────────────────────────
+          week_start = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%b %-d")
+          week_end   = datetime.now(timezone.utc).strftime("%b %-d, %Y")
+
+          lines = [
+              f"📊 <b>Weekly digest · MOSAIC</b>",
+              f"📅 {week_start} – {week_end}",
+              "",
+          ]
+
+          # commits block
+          if n_commits:
+              lines.append(f"🔨 <b>Commits to main:</b> {n_commits}")
+              if authors:
+                  lines.append(f"   Contributors: {', '.join(authors)}")
+          else:
+              lines.append("🔨 No commits to main this week.")
+
+          lines.append("")
+
+          # merged PRs block
+          if merged_prs:
+              lines.append(f"✅ <b>PRs merged:</b> {len(merged_prs)}")
+              for p in merged_prs[:5]:
+                  lines.append(f'   · <a href="{p["html_url"]}">#{p["number"]}</a> {p["title"]}')
+              if len(merged_prs) > 5:
+                  lines.append(f"   … and {len(merged_prs) - 5} more")
+          else:
+              lines.append("✅ No PRs merged this week.")
+
+          lines.append("")
+
+          # issues block
+          open_count = len([i for i in issues_only if i["state"] == "open"])
+          lines.append(f"🐛 <b>Issues:</b> {len(opened_issues)} opened · {len(closed_issues)} closed · {open_count} total open")
+
+          lines.append("")
+          lines.append(f'🔗 <a href="https://github.com/{repo}">szaghi/mosaic</a>')
+
+          text = "\n".join(lines)
+
+          payload = {
+              "chat_id": channel,
+              "text": text,
+              "parse_mode": "HTML",
+              "link_preview_options": {"is_disabled": True},
+          }
+          req = urllib.request.Request(
+              f"https://api.telegram.org/bot{token}/sendMessage",
+              data=json.dumps(payload).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req) as resp:
+              result = json.loads(resp.read())
+
+          if not result.get("ok"):
+              raise RuntimeError(f"Telegram API error: {result}")
+          print(f"✓ sent message_id={result['result']['message_id']} to {channel}")
+          EOF
