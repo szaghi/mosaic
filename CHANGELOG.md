@@ -4,6 +4,15 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.14] — 2026-03-20
+### Added
+- **bot**: Add Telegram support bot via Cloudflare Worker webhook
+
+
+### Documentation
+- **telegram**: Fix channel and group usernames to mosaic_search / mosaic_search_support
+
+
 ## [1.3.13] — 2026-03-20
 ### Added
 - **cli**: Improve output aesthetics, verbosity control, and tab completion
