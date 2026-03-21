@@ -165,6 +165,25 @@ mosaic search "large language model" -n 50 --source arxiv --oa-only --download
 
 ![Multi-filter search demo](/gifs/03_filter_search.gif)
 
+## Cache-first search
+
+Pass `--prefer-cache` to substitute rich cached records for freshly fetched ones:
+
+```bash
+mosaic search "transformer attention" --prefer-cache
+```
+
+When a fetched paper has a matching UID already in the local cache **and** that record is considered *rich* (has abstract + year + at least one author), MOSAIC uses the cached version instead of the freshly fetched one. This avoids redundant Unpaywall lookups and preserves metadata accumulated across earlier runs.
+
+Combine with any other flags:
+
+```bash
+# Cache-enriched records, open-access only, sorted by citations
+mosaic search "protein folding" --prefer-cache --oa-only --sort citations
+```
+
+See [Cache Management](./cache) for how records are enriched when the same paper arrives from multiple sources.
+
 ## Offline / cached search
 
 Use `--cached` to search only the papers already stored in the local cache — no network requests, no API keys needed, instant results:

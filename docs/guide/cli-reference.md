@@ -51,6 +51,7 @@ mosaic search [OPTIONS] QUERY
 | `--sort` | | str | | Sort results: `citations` or `year` — tab-completes |
 | `--stats` | | flag | off | Print per-source counts and deduplication stats |
 | `--cached` | | flag | off | Search only the local cache — no network requests |
+| `--prefer-cache` | | flag | off | Substitute rich cached records for freshly fetched ones (see [Cache Management](./cache)) |
 | `--zotero` | | flag | off | Export results to Zotero |
 | `--zotero-collection` | | str | | Zotero collection name (created if missing) |
 | `--zotero-local` | | flag | off | Force local API even when a web API key is configured |
@@ -474,6 +475,100 @@ mosaic auth logout [OPTIONS] NAME
 ```bash
 mosaic auth logout elsevier
 ```
+
+---
+
+### `cache stats`
+
+Print a summary of the local cache.
+
+```bash
+mosaic cache stats
+```
+
+---
+
+### `cache list`
+
+List cached papers, newest-first.
+
+```
+mosaic cache list [OPTIONS]
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--limit` | `-n` | int | `20` | Max papers to show |
+| `--offset` | | int | `0` | Skip this many rows (pagination) |
+| `--query` | `-q` | str | | Substring filter on title and abstract |
+
+---
+
+### `cache show`
+
+Show the full cached record for a paper identified by DOI or arXiv ID.
+
+```
+mosaic cache show IDENTIFIER
+```
+
+`IDENTIFIER` accepts the same formats as `mosaic get`: bare DOI, `doi:10.xxx`, `arxiv:NNNN.NNNNN`, etc.
+
+---
+
+### `cache verify`
+
+Check whether each tracked PDF file still exists on disk.
+
+```bash
+mosaic cache verify
+```
+
+Prints a line per tracked download with a ✓ / ✗ indicator and a final count of missing files.
+
+---
+
+### `cache clean`
+
+Remove download records whose PDF files no longer exist on disk.
+
+```bash
+mosaic cache clean
+```
+
+Only records with `status=ok` are checked. Paper metadata is never deleted.
+
+---
+
+### `cache clear`
+
+Wipe all papers, downloads, searches, and exports from the cache.
+
+```
+mosaic cache clear [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--yes` | Skip the confirmation prompt |
+
+PDF files already on disk are not deleted.
+
+---
+
+### `cache export`
+
+Bulk-export all cached papers to a file. Format is inferred from the extension.
+
+```
+mosaic cache export [OPTIONS] OUTPUT
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--query` | `-q` | str | | Substring filter before exporting |
+
+Supported extensions: `.csv`, `.json`, `.bib`, `.md`, `.markdown` — same semantics as `--output` on `search`.
 
 ---
 

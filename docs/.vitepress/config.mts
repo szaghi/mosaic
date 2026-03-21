@@ -26,6 +26,7 @@ export default withMermaid({
           { text: 'Zotero Integration',  link: '/guide/zotero' },
           { text: 'Obsidian Integration', link: '/guide/obsidian' },
           { text: 'Web UI',             link: '/guide/web-ui' },
+          { text: 'Cache Management',  link: '/guide/cache' },
           { text: 'CLI Reference', link: '/guide/cli-reference' },
           { text: 'Changelog',     link: '/guide/changelog' },
           { text: 'Contributing',  link: '/guide/contributing' },
@@ -55,6 +56,7 @@ export default withMermaid({
             { text: 'Zotero Integration',    link: '/guide/zotero' },
             { text: 'Obsidian Integration', link: '/guide/obsidian' },
             { text: 'Web UI',              link: '/guide/web-ui' },
+            { text: 'Cache Management',   link: '/guide/cache' },
           ],
         },
         {
