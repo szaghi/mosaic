@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.3.16] — 2026-03-21
+### Added
+- **cache**: Add smart upsert enrichment, cache management CLI, and --prefer-cache
+
+
 ## [1.3.14] — 2026-03-20
 ### Added
 - **bot**: Add Telegram support bot via Cloudflare Worker webhook
