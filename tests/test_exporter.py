@@ -240,6 +240,88 @@ class TestBibTeX:
         assert "Open Access" in out.read_text()
 
 
+class TestRIS:
+    def test_creates_file(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        assert out.exists()
+
+    def test_ty_jour_for_journal_paper(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        text = out.read_text()
+        assert "TY  - JOUR" in text
+
+    def test_ty_gen_for_preprint(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        text = out.read_text()
+        assert "TY  - GEN" in text
+
+    def test_title_field(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        assert "TI  - Attention Is All You Need" in out.read_text()
+
+    def test_author_per_line(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        text = out.read_text()
+        assert "AU  - Ashish Vaswani" in text
+        assert "AU  - Noam Shazeer" in text
+
+    def test_year_field(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        assert "PY  - 2017" in out.read_text()
+
+    def test_journal_field(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        assert "JO  - NeurIPS" in out.read_text()
+
+    def test_doi_field(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        assert "DO  - 10.48550/arXiv.1706.03762" in out.read_text()
+
+    def test_abstract_field(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        assert "AB  - We propose the Transformer." in out.read_text()
+
+    def test_pages_split_into_sp_ep(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        text = out.read_text()
+        assert "SP  - 1" in text
+        assert "EP  - 11" in text
+
+    def test_url_field(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        assert "UR  - https://arxiv.org/abs/1706.03762" in out.read_text()
+
+    def test_pdf_url_fallback_when_no_url(self, tmp_path):
+        # BERT paper has pdf_url but no url
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        text = out.read_text()
+        assert "UR  - https://arxiv.org/pdf/1810.04805" in text
+
+    def test_each_record_ends_with_er(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        text = out.read_text()
+        assert text.count("ER  - ") == len(_PAPERS)
+
+    def test_record_count(self, tmp_path):
+        out = tmp_path / "results.ris"
+        export(_PAPERS, out)
+        text = out.read_text()
+        assert text.count("TY  - ") == len(_PAPERS)
+
+
 class TestDispatch:
     def test_unsupported_extension_raises(self, tmp_path):
         with pytest.raises(ValueError, match="Unsupported format"):

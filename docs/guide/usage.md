@@ -275,6 +275,7 @@ mosaic search "diffusion models" -y 2022-2024 --oa-only --output refs.bib
 mosaic search "CRISPR" --output papers.json
 mosaic search "protein folding" --output summary.md
 mosaic search "RNA velocity" --output report.markdown
+mosaic search "CRISPR" --output refs.ris
 ```
 
 ### Supported formats
@@ -284,6 +285,7 @@ mosaic search "RNA velocity" --output report.markdown
 | `.csv` | CSV table | Excel, Google Sheets, data analysis |
 | `.json` | JSON array | Scripting, pipelines, custom tooling |
 | `.bib` | BibTeX | LaTeX, Zotero, JabRef, Mendeley |
+| `.ris` | RIS | EndNote, Mendeley, Papers, RefWorks, any reference manager |
 | `.md` | Markdown table | Quick README or wiki table |
 | `.markdown` | Markdown sections | Detailed per-paper notes, static-site generators |
 
@@ -295,6 +297,11 @@ mosaic search "RNA velocity" --output report.markdown
 
 **`.json`** — JSON array of objects; `authors` is a native JSON array; `null` for
 missing fields; pretty-printed with 2-space indentation.
+
+**`.ris`** — standard RIS format accepted by virtually every reference manager
+(EndNote, Mendeley, Papers, RefWorks, Zotero, JabRef). Entry type `JOUR` for
+journal papers, `GEN` for preprints. One `AU` line per author; pages split
+into `SP`/`EP`; `UR` set from `url`, falling back to `pdf_url`.
 
 **`.bib`** — `@article` for papers with a journal, `@misc` for preprints.
 Auto-generated cite key: `LastName + Year + FirstTitleWord`

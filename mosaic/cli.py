@@ -127,7 +127,7 @@ def search(
         typer.Option(
             "--output",
             "-o",
-            help="Save results to file (.md, .markdown, .csv, .json, .bib); repeatable",
+            help="Save results to file (.md, .markdown, .csv, .json, .bib, .ris); repeatable",
         ),
     ] = [],
     download_dir: Annotated[
@@ -317,7 +317,7 @@ def similar(
         typer.Option(
             "--output",
             "-o",
-            help="Save results to file (.md, .markdown, .csv, .json, .bib); repeatable",
+            help="Save results to file (.md, .markdown, .csv, .json, .bib, .ris); repeatable",
         ),
     ] = [],
     download_dir: Annotated[
@@ -1370,7 +1370,7 @@ def cache_clear(
 @cache_app.command("export")
 def cache_export(
     output: Annotated[
-        Path, typer.Argument(help="Output file (.md, .csv, .json, .bib)")
+        Path, typer.Argument(help="Output file (.md, .markdown, .csv, .json, .bib, .ris)")
     ],
     query: Annotated[
         str, typer.Option("--query", "-q", help="Filter by title/abstract")

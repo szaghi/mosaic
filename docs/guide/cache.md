@@ -141,6 +141,7 @@ Bulk-export cached papers to a file. The format is inferred from the file extens
 ```bash
 mosaic cache export results.csv
 mosaic cache export refs.bib
+mosaic cache export refs.ris
 mosaic cache export papers.json
 mosaic cache export summary.md
 mosaic cache export report.markdown
@@ -151,6 +152,7 @@ mosaic cache export report.markdown
 | `.csv` | CSV table |
 | `.json` | JSON array |
 | `.bib` | BibTeX |
+| `.ris` | RIS (EndNote, Mendeley, RefWorks, Papers, …) |
 | `.md` | Markdown table |
 | `.markdown` | Markdown sections (one `##` per paper) |
 

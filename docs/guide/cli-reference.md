@@ -46,7 +46,7 @@ mosaic search [OPTIONS] QUERY
 | `--journal` | `-j` | str | | Journal name substring filter |
 | `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` — tab-completes |
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
-| `--output` | `-o` | path | | Save results to file (repeatable); format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib` |
+| `--output` | `-o` | path | | Save results to file (repeatable); format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib`, `.ris` |
 | `--download-dir` | | path | config | Override PDF download directory for this run only |
 | `--sort` | | str | | Sort results: `citations` or `year` — tab-completes |
 | `--stats` | | flag | off | Print per-source counts and deduplication stats |
@@ -136,6 +136,7 @@ Format is inferred from the file extension:
 | `.csv` | CSV | All fields; authors joined with `;`; opens in Excel / Google Sheets |
 | `.json` | JSON array | All fields as a JSON list; authors as a native array; suitable for scripting |
 | `.bib` | BibTeX | `@article` for journal papers, `@misc` for preprints; includes `eprint`/`eprinttype` for arXiv, `abstract`, `pdf`, OA note |
+| `.ris` | RIS | Standard interchange format; `JOUR`/`GEN` type; one `AU` per author; `SP`/`EP` pages; compatible with EndNote, Mendeley, RefWorks, Papers |
 
 **Examples:**
 

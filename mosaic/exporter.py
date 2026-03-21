@@ -20,10 +20,11 @@ def export(papers: list[Paper], path: Path) -> None:
         ".csv": _to_csv,
         ".json": _to_json,
         ".bib": _to_bibtex,
+        ".ris": _to_ris,
     }
     fn = dispatch.get(ext)
     if fn is None:
-        raise ValueError(f"Unsupported format '{ext}'. Use: .md, .markdown, .csv, .json, .bib")
+        raise ValueError(f"Unsupported format '{ext}'. Use: .md, .markdown, .csv, .json, .bib, .ris")
     fn(papers, path)
 
 
@@ -205,3 +206,49 @@ def _bibtex_key(p: Paper, index: int) -> str:
 def _brace(s: str) -> str:
     """Wrap in extra braces to preserve capitalisation in BibTeX."""
     return f"{{{s}}}"
+
+
+# ── RIS ───────────────────────────────────────────────────────────────────────
+
+
+def _to_ris(papers: list[Paper], path: Path) -> None:
+    records = [_ris_record(p) for p in papers]
+    path.write_text("\n".join(records) + "\n", encoding="utf-8")
+
+
+def _ris_record(p: Paper) -> str:
+    ty = "JOUR" if p.journal else "GEN"
+    lines: list[str] = [f"TY  - {ty}"]
+
+    lines.append(f"TI  - {p.title}")
+
+    for author in p.authors:
+        lines.append(f"AU  - {author}")
+
+    if p.year:
+        lines.append(f"PY  - {p.year}")
+    if p.journal:
+        lines.append(f"JO  - {p.journal}")
+    if p.volume:
+        lines.append(f"VL  - {p.volume}")
+    if p.issue:
+        lines.append(f"IS  - {p.issue}")
+    if p.pages:
+        # RIS uses SP/EP for start/end page; keep full range in SP if not splittable
+        if "-" in p.pages:
+            sp, _, ep = p.pages.partition("-")
+            lines.append(f"SP  - {sp.strip()}")
+            lines.append(f"EP  - {ep.strip()}")
+        else:
+            lines.append(f"SP  - {p.pages}")
+    if p.doi:
+        lines.append(f"DO  - {p.doi}")
+    if p.url:
+        lines.append(f"UR  - {p.url}")
+    elif p.pdf_url:
+        lines.append(f"UR  - {p.pdf_url}")
+    if p.abstract:
+        lines.append(f"AB  - {p.abstract}")
+
+    lines.append("ER  - ")
+    return "\n".join(lines)
