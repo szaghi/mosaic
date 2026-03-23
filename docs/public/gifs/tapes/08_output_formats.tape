@@ -7,18 +7,23 @@ Set Framerate 24
 Set WaitTimeout 60s
 
 Sleep 1s
-Type "mosaic search 'maxwell pic conservative high order' -n 1 --output results.bib --output results.csv --output results.json"
+
+Type "# output formats"
+Enter
+Sleep 500ms
+
+Type "mosaic search 'maxwell pic conservative high order' -n 1 --output results.bib --output results.csv --output results.md"
 Sleep 500ms
 Enter
 Hide    # suppress the long network-wait from the recording
 Wait    # command still runs to completion
 Show    # reveal terminal with results already present
 Sleep 5s
-Type "cat results.bib"
+Type "head -50 results.bib | slowout 0.1"
 Enter
 Wait
 Sleep 5s
-Type "head -5 results.csv"
+Type "head -50 results.md | slowout 0.1"
 Enter
 Wait
 Sleep 5s

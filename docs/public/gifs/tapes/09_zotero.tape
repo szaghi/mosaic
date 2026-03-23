@@ -7,6 +7,11 @@ Set Framerate 24
 Set WaitTimeout 60s
 
 Sleep 1s
+
+Type "# zotero integration"
+Enter
+Sleep 500ms
+
 Type "mosaic search 'adaptive mesh refinement cfd gpu' --oa-only --sort citations --zotero --zotero-collection 'amr-cfd-gpu'"
 Sleep 500ms
 Enter

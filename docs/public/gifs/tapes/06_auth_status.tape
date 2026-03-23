@@ -7,6 +7,11 @@ Set Framerate 24
 Set WaitTimeout 10s
 
 Sleep 1s
+
+Type "# auth status"
+Enter
+Sleep 500ms
+
 Type "mosaic auth status"
 Sleep 500ms
 Enter
@@ -17,7 +22,7 @@ Sleep 1s
 Type ""
 Enter
 Sleep 500ms
-Type "# mosaic auth login elsevier https://www.sciencedirect.com"
+Type "mosaic auth login elsevier --url https://www.sciencedirect.com"
 Sleep 2s
 Enter
-Sleep 3s
+Sleep 8s

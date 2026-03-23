@@ -113,6 +113,8 @@ Found 42 DOI(s) in refs.bib
 Done: 35 downloaded, 4 failed, 3 skipped (no OA copy)
 ```
 
+![Bulk download from BibTeX demo](/gifs/12_bulk_get.gif)
+
 ## Filter by year
 
 ```bash
@@ -203,6 +205,8 @@ mosaic search "diffusion models" --cached --sort citations --output refs.bib
 ```
 
 The cache is populated automatically by every regular `search`, `similar`, and `get` run — so the more you use MOSAIC, the richer your local library becomes.
+
+![Offline cached search demo](/gifs/14_cached_search.gif)
 
 ## Warnings
 
@@ -411,3 +415,5 @@ Two sources contribute results:
 - **Semantic Scholar** recommendations — used when `ss-key` is set in config (dramatically increases recall)
 
 See the [Find Similar Papers guide](./similar) for the full reference, identifier formats, and workflow tips.
+
+![Find similar papers demo](/gifs/10_similar.gif)

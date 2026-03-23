@@ -47,6 +47,8 @@ mosaic get 10.1234/example --obsidian
 mosaic search "diffusion models" --obsidian --obsidian-folder "AI/diffusion"
 ```
 
+![Obsidian integration demo](/gifs/13_obsidian.gif)
+
 ## Note format
 
 A generated note looks like this:

@@ -20,6 +20,8 @@ mosaic cache clear          # wipe the whole cache
 mosaic cache export out.csv # bulk export to file
 ```
 
+![Cache management demo](/gifs/11_cache.gif)
+
 ## stats
 
 Print a summary of the cache contents:
@@ -209,3 +211,5 @@ mosaic search "attention mechanism" --cached
 ```
 
 All the usual filters, sort, and export options still apply. See [Usage → Offline / cached search](./usage#offline-cached-search) for details.
+
+![Offline cached search demo](/gifs/14_cached_search.gif)

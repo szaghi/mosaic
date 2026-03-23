@@ -42,19 +42,24 @@ cat > public/gifs/tapes/01_quick_search.tape <<'TAPE'
 Output public/gifs/01_quick_search.gif
 Set FontSize 12
 Set Width 1200
-Set Height 900
+Set Height 1100
 Set Theme "Dracula"
 Set Framerate 24
 Set WaitTimeout 60s
 
 Sleep 1s
+
+Type "# simple search on all enabled sources"
+Enter
+Sleep 500ms
+
 Type "mosaic search 'scramjet high order simulation' --max 1"
 Sleep 500ms
 Enter
 Hide    # suppress the long network-wait from the recording
 Wait    # command still runs to completion
 Show    # reveal terminal with results already present
-Sleep 8s
+Sleep 6s
 TAPE
 
 # ─── 2. Search + OA download ─────────────────────────────────────────────────
@@ -62,19 +67,24 @@ cat > public/gifs/tapes/02_search_download.tape <<'TAPE'
 Output public/gifs/02_search_download.gif
 Set FontSize 12
 Set Width 1200
-Set Height 600
+Set Height 800
 Set Theme "Dracula"
 Set Framerate 24
 Set WaitTimeout 120s
 
 Sleep 1s
+
+Type "# search and download open-access only"
+Enter
+Sleep 500ms
+
 Type "mosaic search 'mhd amr solver' --oa-only --download -n 1"
 Sleep 500ms
 Enter
 Hide    # suppress the long network-wait from the recording
 Wait    # command still runs to completion
 Show    # reveal terminal with results already present
-Sleep 8s
+Sleep 6s
 TAPE
 
 # ─── 3. Multi-filter search ───────────────────────────────────────────────────
@@ -82,13 +92,18 @@ cat > public/gifs/tapes/03_filter_search.tape <<'TAPE'
 Output public/gifs/03_filter_search.gif
 Set FontSize 12
 Set Width 1100
-Set Height 600
+Set Height 500
 Set Theme "Dracula"
 Set Framerate 24
 Set WaitTimeout 60s
 
 Sleep 1s
-Type "mosaic search 'amr hypersonic high order simulation' -y 2022-2024 --source sp -n 5"
+
+Type "# search with multi-filter on specific source"
+Enter
+Sleep 500ms
+
+Type "mosaic search 'hypersonic high order simulation' -y 2022-2024 --source sp -n 5"
 Sleep 500ms
 Enter
 Hide    # suppress the long network-wait from the recording
@@ -102,12 +117,17 @@ cat > public/gifs/tapes/04_doi_get.tape <<'TAPE'
 Output public/gifs/04_doi_get.gif
 Set FontSize 12
 Set Width 1100
-Set Height 180
+Set Height 200
 Set Theme "Dracula"
 Set Framerate 24
 Set WaitTimeout 60s
 
 Sleep 1s
+
+Type "# fetch a single paper by DOI"
+Enter
+Sleep 500ms
+
 Type "mosaic get 10.48550/arXiv.1706.03762"
 Sleep 500ms
 Enter
@@ -122,22 +142,26 @@ cat > public/gifs/tapes/05_config.tape <<'TAPE'
 Output public/gifs/05_config.gif
 Set FontSize 12
 Set Width 800
-Set Height 1100
+Set Height 1200
 Set Theme "Dracula"
 Set Framerate 24
-Set WaitTimeout 10s
+Set WaitTimeout 60s
 
 Sleep 1s
+
+Type "# configuration setup"
+Enter
+Sleep 500ms
+
 Type "mosaic config --unpaywall-email username@affiliation.xyz"
 Sleep 500ms
 Enter
 Wait
 Sleep 1s
-Type "mosaic config --show"
-Sleep 500ms
+Type "mosaic config --show | slowout 0.15"
 Enter
 Wait
-Sleep 8s
+Sleep 2s
 TAPE
 
 # ─── 6. Auth status ───────────────────────────────────────────────────────────
@@ -152,6 +176,11 @@ Set Framerate 24
 Set WaitTimeout 10s
 
 Sleep 1s
+
+Type "# auth status"
+Enter
+Sleep 500ms
+
 Type "mosaic auth status"
 Sleep 500ms
 Enter
@@ -162,10 +191,10 @@ Sleep 1s
 Type ""
 Enter
 Sleep 500ms
-Type "# mosaic auth login elsevier https://www.sciencedirect.com"
+Type "mosaic auth login elsevier --url https://www.sciencedirect.com"
 Sleep 2s
 Enter
-Sleep 3s
+Sleep 8s
 TAPE
 
 # ─── 7. NotebookLM ────────────────────────────────────────────────────────────
@@ -178,7 +207,7 @@ TAPE
 # The tape below shows the command and its startup output only.
 cat > public/gifs/tapes/07_notebook.tape <<'TAPE'
 Output public/gifs/07_notebook.gif
-Set FontSize 14
+Set FontSize 12
 Set Width 1100
 Set Height 600
 Set Theme "Dracula"
@@ -186,6 +215,11 @@ Set Framerate 24
 Set WaitTimeout 180s
 
 Sleep 1s
+
+Type "# NotebookLM integration"
+Enter
+Sleep 500ms
+
 Type "# First-time: authenticate with your Google account"
 Enter
 Sleep 500ms
@@ -197,7 +231,7 @@ Sleep 2s
 Type "# Then create a notebook from a search in one command:"
 Enter
 Sleep 500ms
-Type "mosaic notebook create Transformers --query 'attention is all you need' --oa-only --podcast"
+Type "mosaic notebook create Transformers --query 'plasma MHD' --oa-only --podcast"
 Sleep 500ms
 Enter
 Wait
@@ -216,18 +250,23 @@ Set Framerate 24
 Set WaitTimeout 60s
 
 Sleep 1s
-Type "mosaic search 'maxwell pic conservative high order' -n 1 --output results.bib --output results.csv --output results.json"
+
+Type "# output formats"
+Enter
+Sleep 500ms
+
+Type "mosaic search 'maxwell pic conservative high order' -n 1 --output results.bib --output results.csv --output results.md"
 Sleep 500ms
 Enter
 Hide    # suppress the long network-wait from the recording
 Wait    # command still runs to completion
 Show    # reveal terminal with results already present
 Sleep 5s
-Type "cat results.bib"
+Type "head -50 results.bib | slowout 0.1"
 Enter
 Wait
 Sleep 5s
-Type "head -5 results.csv"
+Type "head -50 results.md | slowout 0.1"
 Enter
 Wait
 Sleep 5s
@@ -244,6 +283,11 @@ Set Framerate 24
 Set WaitTimeout 60s
 
 Sleep 1s
+
+Type "# zotero integration"
+Enter
+Sleep 500ms
+
 Type "mosaic search 'adaptive mesh refinement cfd gpu' --oa-only --sort citations --zotero --zotero-collection 'amr-cfd-gpu'"
 Sleep 500ms
 Enter
@@ -251,6 +295,162 @@ Hide    # suppress the long network-wait from the recording
 Wait    # command still runs to completion
 Show    # reveal terminal with results already present
 Sleep 8s
+TAPE
+
+# ─── 10. Similar papers ───────────────────────────────────────────────────────
+# Find papers similar to a known DOI via OpenAlex + Semantic Scholar
+cat > public/gifs/tapes/10_similar.tape <<'TAPE'
+Output public/gifs/10_similar.gif
+Set FontSize 12
+Set Width 1200
+Set Height 400
+Set Theme "Dracula"
+Set Framerate 24
+Set WaitTimeout 60s
+
+Sleep 1s
+
+Type "# find papers similar to 'Attention is All You Need'"
+Enter
+Sleep 500ms
+
+Type "mosaic similar 10.48550/arXiv.1706.03762 -n 5 --sort citations"
+Sleep 500ms
+Enter
+Hide    # suppress the long network-wait from the recording
+Wait    # command still runs to completion
+Show    # reveal terminal with results already present
+Sleep 8s
+TAPE
+
+# ─── 11. Cache management ─────────────────────────────────────────────────────
+# Inspect the local SQLite cache: stats, list, and bulk export
+cat > public/gifs/tapes/11_cache.tape <<'TAPE'
+Output public/gifs/11_cache.gif
+Set FontSize 12
+Set Width 1000
+Set Height 600
+Set Theme "Dracula"
+Set Framerate 24
+Set WaitTimeout 60s
+
+Sleep 1s
+
+Type "# cache statistics"
+Enter
+Sleep 500ms
+
+Type "mosaic cache stats | slowout 0.1"
+Sleep 500ms
+Enter
+Wait
+Sleep 2s
+
+Type "# list recently cached papers"
+Enter
+Sleep 500ms
+
+Type "mosaic cache list -n 5 | slowout 0.1"
+Sleep 500ms
+Enter
+Wait
+Sleep 3s
+
+Type "# bulk export cached papers to BibTeX | slowout 0.1"
+Enter
+Sleep 500ms
+
+Type "mosaic cache export cached.bib -n 10 | slowout 0.1"
+Sleep 500ms
+Enter
+Wait
+Sleep 2s
+TAPE
+
+# ─── 12. Bulk download from .bib ──────────────────────────────────────────────
+# Download all papers whose DOIs appear in a .bib file
+cat > public/gifs/tapes/12_bulk_get.tape <<'TAPE'
+Output public/gifs/12_bulk_get.gif
+Set FontSize 12
+Set Width 1100
+Set Height 300
+Set Theme "Dracula"
+Set Framerate 24
+Set WaitTimeout 120s
+
+Sleep 1s
+
+Type "# create a small .bib file with a couple of DOIs"
+Enter
+Sleep 500ms
+
+Type "printf '@article{a,doi={10.48550/arXiv.1706.03762}}\n@article{b,doi={10.48550/arXiv.2005.14165}}\n' > sample.bib"
+Sleep 500ms
+Enter
+Wait
+Sleep 500ms
+
+Type "# bulk-download open-access PDFs for every DOI in sample.bib"
+Enter
+Sleep 500ms
+
+Type "mosaic get --from sample.bib --oa-only"
+Sleep 500ms
+Enter
+Hide    # suppress the long network-wait from the recording
+Wait    # command still runs to completion
+Show    # reveal terminal with results already present
+Sleep 6s
+TAPE
+
+# ─── 13. Obsidian integration ─────────────────────────────────────────────────
+# Export search results as Markdown notes into an Obsidian vault
+cat > public/gifs/tapes/13_obsidian.tape <<'TAPE'
+Output public/gifs/13_obsidian.gif
+Set FontSize 12
+Set Width 1200
+Set Height 800
+Set Theme "Dracula"
+Set Framerate 24
+Set WaitTimeout 60s
+
+Sleep 1s
+
+Type "# export results to Obsidian vault"
+Enter
+Sleep 500ms
+
+Type "mosaic search 'neural scaling laws' -n 3 --oa-only --obsidian --obsidian-folder 'scaling-papers' | slowout 0.1"
+Sleep 500ms
+Enter
+# Hide    # suppress the long network-wait from the recording
+Wait    # command still runs to completion
+# Show    # reveal terminal with results already present
+Sleep 8s
+TAPE
+
+# ─── 14. Cached / offline search ─────────────────────────────────────────────
+# Search only the local cache — no network requests
+cat > public/gifs/tapes/14_cached_search.tape <<'TAPE'
+Output public/gifs/14_cached_search.gif
+Set FontSize 12
+Set Width 1200
+Set Height 600
+Set Theme "Dracula"
+Set Framerate 24
+Set WaitTimeout 60s
+
+Sleep 1s
+
+Type "# search the local cache (no network)"
+Enter
+Sleep 500ms
+
+Type "mosaic search 'transformer' --cached -n 5 | slowout 0.1"
+Sleep 500ms
+Enter
+Wait
+Sleep 5s
 TAPE
 
 # ─── Run tapes ────────────────────────────────────────────────────────────────

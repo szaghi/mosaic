@@ -23,6 +23,8 @@ Similar to: Attention Is All You Need
 10 result(s)
 ```
 
+![Find similar papers demo](/gifs/10_similar.gif)
+
 ---
 
 ## How it works
