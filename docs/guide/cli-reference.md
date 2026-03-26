@@ -330,13 +330,38 @@ mosaic config [OPTIONS]
 | Option | Type | Description |
 |--------|------|-------------|
 | `--show` | flag | Print current config as JSON |
+| **API keys** | | |
 | `--elsevier-key TEXT` | str | Set Elsevier/ScienceDirect API key |
 | `--ss-key TEXT` | str | Set Semantic Scholar API key |
-| `--ncbi-key TEXT` | str | Set NCBI/PubMed API key |
+| `--ncbi-key TEXT` | str | Set NCBI API key (PubMed + PMC) |
+| `--core-key TEXT` | str | Set CORE API key |
+| `--ads-key TEXT` | str | Set NASA ADS API key |
+| `--ieee-key TEXT` | str | Set IEEE Xplore API key |
+| `--springer-key TEXT` | str | Set Springer Nature API key |
+| `--scopus-key TEXT` | str | Set Scopus API key |
+| `--scopus-inst-token TEXT` | str | Set Scopus institutional token |
+| `--zenodo-key TEXT` | str | Set Zenodo API key / token |
 | `--zotero-key TEXT` | str | Set Zotero API key (web API); auto-discovers and caches user ID |
 | `--unpaywall-email TEXT` | str | Set Unpaywall email |
+| **Sources** | | |
+| `--enable-source TEXT` | str | Enable a source by name (repeatable) |
+| `--disable-source TEXT` | str | Disable a source by name (repeatable) |
+| **Downloads** | | |
 | `--download-dir TEXT` | str | Set PDF download directory |
+| `--db-path TEXT` | str | Set SQLite cache path |
 | `--filename-pattern TEXT` | str | Set PDF filename pattern (see below) |
+| `--rate-limit-delay FLOAT` | float | Set default delay between API calls in seconds |
+| **Obsidian** | | |
+| `--obsidian-vault TEXT` | str | Set Obsidian vault path |
+| `--obsidian-subfolder TEXT` | str | Set subfolder inside vault for paper notes |
+| `--obsidian-filename-pattern TEXT` | str | Set Obsidian note filename pattern |
+| `--obsidian-tag TEXT` | str | Set Obsidian tags (repeatable, replaces existing list) |
+| `--obsidian-wikilinks / --no-obsidian-wikilinks` | bool | Use `[[wikilinks]]` in generated notes |
+| **PEDro** | | |
+| `--pedro-fair-use / --no-pedro-fair-use` | bool | Acknowledge PEDro fair-use policy (required to enable source) |
+| `--pedro-fetch-details / --no-pedro-fetch-details` | bool | Fetch detail pages for richer metadata (slower) |
+| `--pedro-rate-limit-delay FLOAT` | float | Delay between PEDro requests in seconds (default: 3.0) |
+| **LLM** | | |
 | `--llm-provider TEXT` | str | LLM provider for relevance ranking: `openai` or `anthropic` |
 | `--llm-api-key TEXT` | str | API key for the LLM provider (any string for local servers) |
 | `--llm-model TEXT` | str | Model name; defaults to `gpt-4o-mini` (openai) or `claude-haiku-4-5-20251001` (anthropic) |
@@ -364,14 +389,29 @@ mosaic config --show
 # Set multiple values at once
 mosaic config --unpaywall-email me@uni.edu --download-dir ~/papers
 
-# Enable ScienceDirect
+# API keys
 mosaic config --elsevier-key abc123def456
+mosaic config --ncbi-key YOUR_KEY          # sets both PubMed and PMC
+mosaic config --core-key YOUR_KEY
+mosaic config --ads-key YOUR_KEY
+mosaic config --ieee-key YOUR_KEY
+mosaic config --springer-key YOUR_KEY
+mosaic config --scopus-key YOUR_KEY --scopus-inst-token YOUR_INST_TOKEN
+mosaic config --zenodo-key YOUR_TOKEN
 
-# Change filename pattern (author first, then year and title)
+# Enable / disable sources
+mosaic config --disable-source dblp --disable-source hal
+mosaic config --enable-source dblp
+
+# Downloads
 mosaic config --filename-pattern "{author}_{year}_{title}"
+mosaic config --rate-limit-delay 0.5
+mosaic config --db-path ~/mydata/mosaic.db
 
-# Include DOI in filename
-mosaic config --filename-pattern "{year}_{doi}"
+# Obsidian integration
+mosaic config --obsidian-vault ~/Documents/MyVault --obsidian-subfolder literature
+mosaic config --obsidian-tag paper --obsidian-tag science
+mosaic config --no-obsidian-wikilinks
 
 # Configure LLM relevance scoring — cloud OpenAI
 mosaic config --llm-provider openai --llm-api-key sk-... --llm-model gpt-4o-mini

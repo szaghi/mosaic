@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, List, Optional
 
 import typer
 from rich import box, print as rprint
@@ -491,34 +491,90 @@ def get(
 
 
 @app.command()
-def config(
+def config(  # noqa: PLR0912, PLR0915
     show: Annotated[bool, typer.Option("--show", help="Print current config")] = False,
-    elsevier_key: Annotated[str, typer.Option(help="Set Elsevier API key")] = "",
+    # --- API keys ---
+    elsevier_key: Annotated[str, typer.Option(help="Set Elsevier / ScienceDirect API key")] = "",
     ss_key: Annotated[str, typer.Option(help="Set Semantic Scholar API key")] = "",
-    ncbi_key: Annotated[str, typer.Option(help="Set NCBI/PubMed API key")] = "",
+    ncbi_key: Annotated[str, typer.Option(help="Set NCBI API key (used for PubMed and PMC)")] = "",
+    core_key: Annotated[str, typer.Option(help="Set CORE API key")] = "",
+    ads_key: Annotated[str, typer.Option(help="Set NASA ADS API key")] = "",
+    ieee_key: Annotated[str, typer.Option(help="Set IEEE Xplore API key")] = "",
+    springer_key: Annotated[str, typer.Option(help="Set Springer API key")] = "",
+    scopus_key: Annotated[str, typer.Option(help="Set Scopus API key")] = "",
+    scopus_inst_token: Annotated[str, typer.Option(help="Set Scopus institutional token")] = "",
+    zenodo_key: Annotated[str, typer.Option(help="Set Zenodo API key")] = "",
     zotero_key: Annotated[str, typer.Option(help="Set Zotero API key (web API)")] = "",
     unpaywall_email: Annotated[str, typer.Option(help="Set Unpaywall email")] = "",
-    download_dir: Annotated[str, typer.Option(help="Set download directory")] = "",
+    # --- download / files ---
+    download_dir: Annotated[str, typer.Option(help="Set PDF download directory")] = "",
+    db_path: Annotated[str, typer.Option(help="Set SQLite cache path")] = "",
     filename_pattern: Annotated[
         str,
         typer.Option(
             help="Set PDF filename pattern (placeholders: {year}, {source}, {author}, {title}, {doi})"
         ),
     ] = "",
+    rate_limit_delay: Annotated[
+        Optional[float],
+        typer.Option(help="Set default delay between API calls in seconds"),
+    ] = None,
+    # --- source enable/disable ---
+    enable_source: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--enable-source",
+            help="Enable a source by name (repeatable). Known names: arxiv, semantic_scholar, sciencedirect, doaj, europepmc, openalex, base, springer_api, core, nasa_ads, ieee, zenodo, crossref, dblp, hal, pubmed, pmc, biorxiv, pedro, scopus",
+        ),
+    ] = None,
+    disable_source: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--disable-source",
+            help="Disable a source by name (repeatable). Same names as --enable-source",
+        ),
+    ] = None,
+    # --- obsidian ---
+    obsidian_vault: Annotated[str, typer.Option(help="Set Obsidian vault path")] = "",
+    obsidian_subfolder: Annotated[str, typer.Option(help="Set subfolder inside vault for paper notes")] = "",
+    obsidian_filename_pattern: Annotated[
+        str,
+        typer.Option(help="Set Obsidian note filename pattern (placeholders: {year}, {author}, {title})"),
+    ] = "",
+    obsidian_tag: Annotated[
+        Optional[List[str]],
+        typer.Option(
+            "--obsidian-tag",
+            help="Set Obsidian tags (repeatable, replaces existing list). E.g. --obsidian-tag paper --obsidian-tag science",
+        ),
+    ] = None,
+    obsidian_wikilinks: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--obsidian-wikilinks/--no-obsidian-wikilinks",
+            help="Use Obsidian [[wikilinks]] in generated notes",
+        ),
+    ] = None,
+    # --- pedro ---
     pedro_fair_use: Annotated[
-        bool,
+        Optional[bool],
         typer.Option(
             "--pedro-fair-use/--no-pedro-fair-use",
             help="Acknowledge PEDro fair-use policy to enable the source",
         ),
     ] = None,
     pedro_fetch_details: Annotated[
-        bool,
+        Optional[bool],
         typer.Option(
             "--pedro-fetch-details/--no-pedro-fetch-details",
             help="Fetch each PEDro record page to get authors, year, DOI and abstract (slower)",
         ),
     ] = None,
+    pedro_rate_limit_delay: Annotated[
+        Optional[float],
+        typer.Option(help="Set PEDro-specific rate-limit delay in seconds (default: 3.0)"),
+    ] = None,
+    # --- llm ---
     llm_provider: Annotated[
         str, typer.Option("--llm-provider", help='LLM provider for relevance ranking: "openai" or "anthropic"')
     ] = "",
@@ -535,15 +591,27 @@ def config(
     """View or update MOSAIC configuration."""
     cfg = cfg_mod.load()
 
+    # --- API keys ---
     api_keys_changed = apply_api_keys(
-        cfg, {"elsevier_key": elsevier_key, "ss_key": ss_key, "ncbi_key": ncbi_key}
+        cfg,
+        {
+            "elsevier_key": elsevier_key,
+            "ss_key": ss_key,
+            "ncbi_key": ncbi_key,
+            "core_key": core_key,
+            "ads_key": ads_key,
+            "ieee_key": ieee_key,
+            "springer_key": springer_key,
+            "scopus_key": scopus_key,
+            "scopus_inst_token": scopus_inst_token,
+            "zenodo_key": zenodo_key,
+        },
     )
-    # Also set PMC key to same NCBI key
+    # PMC shares the NCBI key
     if ncbi_key:
         cfg["sources"]["pmc"]["api_key"] = ncbi_key
     if zotero_key:
         cfg["zotero"]["api_key"] = zotero_key
-        # auto-discover and cache the user ID
         from mosaic.zotero import ZoteroClient
 
         client = ZoteroClient(api_key=zotero_key)
@@ -555,25 +623,71 @@ def config(
             warn(f"[dark_orange]Could not auto-discover Zotero user ID: {e}[/dark_orange]")
     if unpaywall_email:
         cfg["unpaywall"]["email"] = unpaywall_email
+
+    # --- download / files ---
     if download_dir:
         cfg["download_dir"] = download_dir
+    if db_path:
+        cfg["db_path"] = db_path
     if filename_pattern:
         cfg["filename_pattern"] = filename_pattern
+    if rate_limit_delay is not None:
+        cfg["rate_limit_delay"] = rate_limit_delay
+
+    # --- source enable/disable ---
+    _sources_changed = False
+    for name in enable_source or []:
+        if name not in cfg_mod._KNOWN_SOURCES:
+            rprint(f"[red]Unknown source: {name!r}. Known sources: {', '.join(sorted(cfg_mod._KNOWN_SOURCES))}[/red]")
+            raise typer.Exit(1)
+        cfg["sources"].setdefault(name, {})["enabled"] = True
+        rprint(f"[green]Source '{name}' enabled.[/green]")
+        _sources_changed = True
+    for name in disable_source or []:
+        if name not in cfg_mod._KNOWN_SOURCES:
+            rprint(f"[red]Unknown source: {name!r}. Known sources: {', '.join(sorted(cfg_mod._KNOWN_SOURCES))}[/red]")
+            raise typer.Exit(1)
+        cfg["sources"].setdefault(name, {})["enabled"] = False
+        rprint(f"[dark_orange]Source '{name}' disabled.[/dark_orange]")
+        _sources_changed = True
+
+    # --- obsidian ---
+    _obsidian_changed = False
+    if obsidian_vault:
+        cfg["obsidian"]["vault_path"] = obsidian_vault
+        _obsidian_changed = True
+    if obsidian_subfolder:
+        cfg["obsidian"]["subfolder"] = obsidian_subfolder
+        _obsidian_changed = True
+    if obsidian_filename_pattern:
+        cfg["obsidian"]["filename_pattern"] = obsidian_filename_pattern
+        _obsidian_changed = True
+    if obsidian_tag is not None:
+        cfg["obsidian"]["tags"] = obsidian_tag
+        _obsidian_changed = True
+    if obsidian_wikilinks is not None:
+        cfg["obsidian"]["wikilinks"] = obsidian_wikilinks
+        _obsidian_changed = True
+    if _obsidian_changed:
+        rprint("[green]Obsidian config updated.[/green]")
+
+    # --- pedro ---
     if pedro_fair_use is not None:
         cfg["sources"]["pedro"]["acknowledge_fair_use"] = pedro_fair_use
         if pedro_fair_use:
             rprint("[green]PEDro fair-use policy acknowledged. Source is now enabled.[/green]")
         else:
-            rprint(
-                "[dark_orange]PEDro fair-use acknowledgement removed. Source is now disabled.[/dark_orange]"
-            )
+            rprint("[dark_orange]PEDro fair-use acknowledgement removed. Source is now disabled.[/dark_orange]")
     if pedro_fetch_details is not None:
         cfg["sources"]["pedro"]["fetch_details"] = pedro_fetch_details
         if pedro_fetch_details:
             rprint("[green]PEDro detail fetching enabled (authors, year, DOI, abstract).[/green]")
         else:
             warn("[dark_orange]PEDro detail fetching disabled.[/dark_orange]")
+    if pedro_rate_limit_delay is not None:
+        cfg["sources"]["pedro"]["rate_limit_delay"] = pedro_rate_limit_delay
 
+    # --- llm ---
     if llm_provider:
         cfg["llm"]["provider"] = llm_provider
     if llm_api_key:
@@ -586,14 +700,18 @@ def config(
     if _llm_changed:
         rprint("[green]LLM config updated.[/green]")
 
-    _pedro_changed = pedro_fair_use is not None or pedro_fetch_details is not None
+    _pedro_changed = pedro_fair_use is not None or pedro_fetch_details is not None or pedro_rate_limit_delay is not None
     _any_changed = any(
         [
             api_keys_changed,
             zotero_key,
             unpaywall_email,
             download_dir,
+            db_path,
             filename_pattern,
+            rate_limit_delay is not None,
+            _sources_changed,
+            _obsidian_changed,
             _pedro_changed,
             _llm_changed,
         ]
