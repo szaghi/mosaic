@@ -83,7 +83,7 @@ Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://sza
 </tr>
 <tr>
 <td><b>🤖 NotebookLM integration</b><br><sub>Podcast · video · slides · quiz · mind map · flashcards · briefing — queued in one command with <code>mosaic notebook create</code>. <a href="https://szaghi.github.io/mosaic/guide/notebooklm">NotebookLM guide</a></sub></td>
-<td><b>⚡ Offline-first cache</b><br><sub>SQLite — repeated queries are instant, no re-fetching. <code>mosaic search "query" --cached</code> for instant offline search. <a href="https://szaghi.github.io/mosaic/guide/usage#offline--cached-search">Usage guide</a></sub></td>
+<td><b>⚡ Offline-first cache</b><br><sub>SQLite — repeated queries are instant, no re-fetching. <code>mosaic search "query" --cached</code> for instant offline search. Combine with <code>--sort relevance</code> to re-rank a local bibliography against any query — no network needed. <a href="https://szaghi.github.io/mosaic/guide/usage#offline--cached-search">Usage guide</a></sub></td>
 <td><b>🧩 Custom sources</b><br><sub>Wire any JSON REST API as a new source with a few lines of TOML — no Python needed. <a href="https://szaghi.github.io/mosaic/guide/custom-sources">Custom sources guide</a></sub></td>
 </tr>
 <tr>
@@ -179,6 +179,10 @@ mosaic search "RNA velocity" --source epmc
 
 # Search only the local cache — instant, no network
 mosaic search "attention mechanism" --cached
+
+# Re-rank a local bibliography by relevance — no network, no API keys
+mosaic get --from refs.bib                             # load .bib into cache once
+mosaic search "transformer attention" --cached --sort relevance
 ```
 
 **Source shorthands:** `arxiv` · `ss` · `sd` · `doaj` · `epmc` · `oa` · `base` · `core` · `sp` · `springer` · `ads` · `ieee` · `zenodo` · `crossref` · `dblp` · `hal` · `pubmed` · `pmc` · `rxiv` · `pedro` · `scopus`
@@ -360,6 +364,22 @@ cd docs && npm install && npm run docs:dev
 ```
 
 Coverage report and badge JSON are written to `docs/public/` after every test run.
+
+### Testing local changes with a pipx install
+
+If you run MOSAIC via `pipx install mosaic-search` and want to test local changes
+without affecting your stable install, use `make dev`:
+
+```bash
+make dev   # reinstalls from source into the pipx venv (no-deps, instant)
+```
+
+**New dependency added to `pyproject.toml`?** `make dev` skips dependency installation.
+Inject the new package into the pipx venv once:
+
+```bash
+pipx inject mosaic-search <new-package>
+```
 
 ## License
 

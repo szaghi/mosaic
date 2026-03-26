@@ -78,6 +78,7 @@ class Paper:
     is_open_access: bool = False
     url: str | None = None
     citation_count: int | None = None
+    relevance_score: float | None = None
 
     def to_dict(self) -> dict:
         """Serialise to a plain dict (thread-safe passing, JSON export)."""

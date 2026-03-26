@@ -57,6 +57,7 @@ _DEFAULTS: dict = {
         "wikilinks": True,
     },
     "custom_sources": [],
+    "llm": {"provider": "", "api_key": "", "model": "", "base_url": ""},
 }
 
 

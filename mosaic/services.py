@@ -79,6 +79,17 @@ def filter_papers(
     return result
 
 
+def sort_by_relevance(query: str, papers: list[Paper], cfg: dict) -> list[Paper]:
+    """Score and sort *papers* by relevance to *query* (highest first).
+
+    Uses BM25 by default; falls back to an LLM scorer when ``cfg["llm"]`` is configured.
+    """
+    from mosaic.ranking import score_papers
+
+    scored = score_papers(query, papers, cfg)
+    return sorted(scored, key=lambda p: p.relevance_score or 0.0, reverse=True)
+
+
 def merge_papers(seen: dict[str, Paper], paper: Paper) -> None:
     """Merge *paper* into *seen*, preferring richer metadata.
 

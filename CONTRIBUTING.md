@@ -132,6 +132,19 @@ make dev
 mosaic search "..." --source pubmed
 ```
 
+> **Adding a new core dependency to `pyproject.toml`?**
+> `make dev` uses `--no-deps` and will **not** install new packages into the pipx venv.
+> Run `pipx inject` once after updating `pyproject.toml`:
+>
+> ```bash
+> pipx inject mosaic-search <new-package>
+> # e.g.: pipx inject mosaic-search rank-bm25
+> ```
+>
+> You only need to do this once per new dependency. After that, `make dev` works
+> as normal. When the package is published to PyPI, users get the dependency
+> automatically via the normal `pipx install` / `pip install` flow.
+
 `pipx upgrade mosaic-search` continues to work normally and will overwrite the
 local build with the latest PyPI release whenever you want to go back to a
 stable version.

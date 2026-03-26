@@ -206,6 +206,32 @@ mosaic search "diffusion models" --cached --sort citations --output refs.bib
 
 The cache is populated automatically by every regular `search`, `similar`, and `get` run — so the more you use MOSAIC, the richer your local library becomes.
 
+### Relevance-ranking your local library
+
+Combine `--cached` with `--sort relevance` to re-rank your collected bibliography
+against any query — with no network access and no API keys required:
+
+```bash
+mosaic search "transformer attention" --cached --sort relevance
+```
+
+This is the fastest way to sift a bibliography you have already built.  To load
+a `.bib` or `.csv` file into the cache first:
+
+```bash
+mosaic get --from refs.bib            # populate cache from a BibTeX export
+mosaic search "your query" --cached --sort relevance   # then rank offline
+```
+
+To rank every paper in the cache (not pre-filtered by keyword), pass an empty query:
+
+```bash
+mosaic search "" --cached --sort relevance
+```
+
+See the [Relevance Ranking guide](./relevance-ranking#ranking-your-local-library)
+for the full reference including filters, export, and LLM setup.
+
 ![Offline cached search demo](/gifs/14_cached_search.gif)
 
 ## Warnings
@@ -262,11 +288,20 @@ mosaic search "transformer attention" --sort citations
 # Newest papers first
 mosaic search "diffusion models" --sort year
 
+# Most relevant to the query first (BM25 or LLM scoring)
+mosaic search "transformer attention" --sort relevance
+
 # Combine with other flags
 mosaic search "protein folding" --oa-only --sort citations -n 20
 ```
 
 When `--sort citations` is active, the results table gains a **Cited** column showing the citation count for each paper. Papers from sources that do not return citation data (arXiv, DOAJ, …) show `–` and are placed after all papers with known counts.
+
+When `--sort relevance` is active, the results table gains a **Rel.** column (0.00 – 1.00) showing each paper's normalised relevance score. The highest-scoring paper always shows 1.00.
+
+Relevance scoring uses **BM25** by default (fast, local, no setup) and upgrades to an **LLM** when one is configured — enabling semantic understanding, synonym matching, and conceptual relevance that keyword overlap alone cannot capture.
+
+See the [Relevance Ranking guide](./relevance-ranking) for setup instructions, local LLM options (Ollama, LM Studio, llama.cpp), and configuration details.
 
 ## Save results to a file
 

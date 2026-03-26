@@ -14,6 +14,12 @@ Browser sessions (saved via `mosaic auth login`) are stored separately at `~/.co
 # Set your Unpaywall email (enables PDF fallback for any DOI)
 mosaic config --unpaywall-email you@example.com
 
+# Enable LLM relevance scoring (optional — BM25 is used when not set)
+# Cloud OpenAI
+mosaic config --llm-provider openai --llm-api-key sk-... --llm-model gpt-4o-mini
+# Local Ollama
+mosaic config --llm-provider openai --llm-base-url http://localhost:11434/v1 --llm-api-key ollama --llm-model llama3.2
+
 # Set an Elsevier API key (enables ScienceDirect API search)
 mosaic config --elsevier-key YOUR_KEY
 
@@ -172,6 +178,33 @@ api_key = ""
 # lists for subscribers. Request from Elsevier support if your institution
 # has a Scopus subscription.
 inst_token = ""
+
+[llm]
+# Optional LLM backend for --sort relevance (see Relevance Ranking guide).
+# When provider and api_key are both set, LLM scoring replaces BM25.
+# Leave all fields empty to use BM25 (the default, always available).
+
+# Provider — "openai" or "anthropic".
+# Use "openai" for any OpenAI-compatible server, including local ones
+# (Ollama, LM Studio, llama.cpp, LocalAI, …).
+provider = ""
+
+# API key for the chosen provider.
+# For local servers, any non-empty string works (e.g. "ollama", "lmstudio").
+api_key = ""
+
+# Model name.  Defaults per provider when left empty:
+#   openai    → gpt-4o-mini
+#   anthropic → claude-haiku-4-5-20251001
+model = ""
+
+# Base URL for a local or custom OpenAI-compatible endpoint.
+# Leave empty to use the official provider API.
+# Examples:
+#   Ollama     → http://localhost:11434/v1
+#   LM Studio  → http://localhost:1234/v1
+#   llama.cpp  → http://localhost:8080/v1
+base_url = ""
 ```
 
 ## Source credentials

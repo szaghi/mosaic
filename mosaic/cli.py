@@ -17,7 +17,7 @@ from mosaic.config import apply_api_keys
 from mosaic.db import Cache
 from mosaic.downloader import download as dl_paper
 from mosaic.search import search_all
-from mosaic.services import build_filters, filter_papers
+from mosaic.services import build_filters, filter_papers, sort_by_relevance
 from mosaic.errors import set_verbose_logging
 from mosaic.source_registry import SRC_MAP, build_sources
 
@@ -137,7 +137,7 @@ def search(
         str,
         typer.Option(
             "--sort",
-            help='Sort results: "citations" (most cited first) or "year" (newest first)',
+            help='Sort results: "citations" (most cited first), "year" (newest first), or "relevance" (most relevant first)',
             autocompletion=lambda: _SORT_VALUES,
         ),
     ] = "",
@@ -202,6 +202,7 @@ def search(
             papers,
             cfg,
             cache,
+            query=query,
             output=list(output),
             do_download=download,
             sort_by=sort_by,
@@ -271,6 +272,7 @@ def search(
         papers,
         cfg,
         cache,
+        query=query,
         output=list(output),
         do_download=download,
         sort_by=sort_by,
@@ -308,7 +310,7 @@ def similar(
         str,
         typer.Option(
             "--sort",
-            help='Sort results: "citations" (most cited first) or "year" (newest first)',
+            help='Sort results: "citations" (most cited first), "year" (newest first), or "relevance" (most relevant first)',
             autocompletion=lambda: _SORT_VALUES,
         ),
     ] = "",
@@ -378,6 +380,7 @@ def similar(
         papers,
         cfg,
         cache,
+        query=seed_title or identifier,
         output=list(output),
         do_download=download,
         sort_by=sort_by,
@@ -516,6 +519,18 @@ def config(
             help="Fetch each PEDro record page to get authors, year, DOI and abstract (slower)",
         ),
     ] = None,
+    llm_provider: Annotated[
+        str, typer.Option("--llm-provider", help='LLM provider for relevance ranking: "openai" or "anthropic"')
+    ] = "",
+    llm_api_key: Annotated[
+        str, typer.Option("--llm-api-key", help="API key for the LLM provider (any string for local servers)")
+    ] = "",
+    llm_model: Annotated[
+        str, typer.Option("--llm-model", help="Model name (leave empty for provider default)")
+    ] = "",
+    llm_base_url: Annotated[
+        str, typer.Option("--llm-base-url", help="Base URL for a local OpenAI-compatible server (e.g. http://localhost:11434/v1)")
+    ] = "",
 ):
     """View or update MOSAIC configuration."""
     cfg = cfg_mod.load()
@@ -559,6 +574,18 @@ def config(
         else:
             warn("[dark_orange]PEDro detail fetching disabled.[/dark_orange]")
 
+    if llm_provider:
+        cfg["llm"]["provider"] = llm_provider
+    if llm_api_key:
+        cfg["llm"]["api_key"] = llm_api_key
+    if llm_model:
+        cfg["llm"]["model"] = llm_model
+    if llm_base_url:
+        cfg["llm"]["base_url"] = llm_base_url
+    _llm_changed = any([llm_provider, llm_api_key, llm_model, llm_base_url])
+    if _llm_changed:
+        rprint("[green]LLM config updated.[/green]")
+
     _pedro_changed = pedro_fair_use is not None or pedro_fetch_details is not None
     _any_changed = any(
         [
@@ -568,6 +595,7 @@ def config(
             download_dir,
             filename_pattern,
             _pedro_changed,
+            _llm_changed,
         ]
     )
     if _any_changed:
@@ -708,6 +736,7 @@ def _post_process(
     cfg: dict,
     cache: Cache,
     *,
+    query: str = "",
     output: list[Path] | None = None,
     do_download: bool = False,
     sort_by: str = "",
@@ -720,10 +749,13 @@ def _post_process(
     obsidian_folder: str = "",
 ) -> None:
     """Shared post-processing: filter, export, download, push to Zotero/Obsidian."""
-    if sort_by and sort_by not in ("citations", "year"):
-        rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year[/red]')
+    if sort_by and sort_by not in ("citations", "year", "relevance"):
+        rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year, relevance[/red]')
         raise typer.Exit(1)
-    papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by)
+    non_relevance_sort = sort_by if sort_by != "relevance" else ""
+    papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=non_relevance_sort)
+    if sort_by == "relevance":
+        papers = sort_by_relevance(query, papers, cfg)
 
     if not papers:
         rprint("[dark_orange]No results found.[/dark_orange]")
@@ -732,7 +764,7 @@ def _post_process(
     for p in papers:
         cache.save(p)
 
-    _print_results(papers)
+    _print_results(papers, show_relevance=sort_by == "relevance")
 
     if output:
         from mosaic.exporter import export
@@ -764,7 +796,7 @@ def _post_process(
 
 _RAINBOW = ["red", "dark_orange", "green", "cyan", "blue", "magenta"]
 
-_SORT_VALUES  = ["citations", "year"]
+_SORT_VALUES  = ["citations", "year", "relevance"]
 _FIELD_VALUES = ["title", "abstract", "all"]
 _AUTH_PROVIDERS = ["elsevier", "springer", "scopus"]
 
@@ -774,7 +806,7 @@ def _complete_session_names() -> list[str]:
     return [s["name"] for s in list_sessions()]
 
 
-def _print_results(papers: list) -> None:
+def _print_results(papers: list, show_relevance: bool = False) -> None:
     show_citations = any(p.citation_count is not None for p in papers)
 
     table = Table(
@@ -794,6 +826,8 @@ def _print_results(papers: list) -> None:
     table.add_column("PDF", width=5)
     if show_citations:
         table.add_column("Cited", width=7, justify="right")
+    if show_relevance:
+        table.add_column("Rel.", width=6, justify="right")
 
     for i, p in enumerate(papers, 1):
         oa = "[green]yes[/green]" if p.is_open_access else "[red]no[/red]"
@@ -806,6 +840,9 @@ def _print_results(papers: list) -> None:
         if show_citations:
             cited = str(p.citation_count) if p.citation_count is not None else "[dim]–[/dim]"
             row.append(cited)
+        if show_relevance:
+            rel = f"{p.relevance_score:.2f}" if p.relevance_score is not None else "[dim]–[/dim]"
+            row.append(rel)
         table.add_row(*row)
 
     console.print(table)

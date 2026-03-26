@@ -48,7 +48,7 @@ mosaic search [OPTIONS] QUERY
 | `--raw-query` | | str | | Raw query sent directly to APIs, bypasses all transforms |
 | `--output` | `-o` | path | | Save results to file (repeatable); format from extension: `.md`, `.markdown`, `.csv`, `.json`, `.bib`, `.ris` |
 | `--download-dir` | | path | config | Override PDF download directory for this run only |
-| `--sort` | | str | | Sort results: `citations` or `year` — tab-completes |
+| `--sort` | | str | | Sort results: `citations`, `year`, or `relevance` — tab-completes |
 | `--stats` | | flag | off | Print per-source counts and deduplication stats |
 | `--cached` | | flag | off | Search only the local cache — no network requests |
 | `--prefer-cache` | | flag | off | Substitute rich cached records for freshly fetched ones (see [Cache Management](./cache)) |
@@ -115,6 +115,11 @@ Each filter is applied at the **source API level** where supported, then as a **
 | NASA ADS | ✓ native | post-process | post-process |
 | bioRxiv/medRxiv | ✓ native | ✓ native | post-process |
 
+**`--sort` behaviour:**
+- `citations`: sort by citation count descending; adds a **Cited** column to the results table
+- `year`: sort by publication year descending (newest first)
+- `relevance`: re-score every paper against the query and sort by score descending; adds a **Rel.** column (0.00 – 1.00).  Uses BM25 by default; upgrades to LLM scoring when `[llm]` is configured.  See the [Relevance Ranking guide](./relevance-ranking) for setup.
+
 **`--field` / `-f` behaviour:**
 - `all` (default): query is sent as a general full-text search to each source
 - `title`: scopes the query to the title field using each source's native syntax
@@ -149,6 +154,9 @@ mosaic search "deep learning" -n 25 --oa-only
 
 # Filter by year range
 mosaic search "diffusion models" -y 2020-2023
+
+# Relevance-ranked results (BM25 or LLM — see Relevance Ranking guide)
+mosaic search "transformer attention" --sort relevance
 
 # Filter by exact year and author
 mosaic search "attention" -y 2017 -a Vaswani
@@ -209,7 +217,7 @@ mosaic similar [OPTIONS] IDENTIFIER
 | `--download` | `-d` | flag | off | Download available PDFs |
 | `--oa-only` | | flag | off | Show only open-access papers |
 | `--pdf-only` | | flag | off | Show only papers with a known PDF URL |
-| `--sort` | | str | | Sort: `citations` or `year` — tab-completes |
+| `--sort` | | str | | Sort: `citations`, `year`, or `relevance` — tab-completes |
 | `--output` | `-o` | path | | Save results to file (repeatable) |
 | `--download-dir` | | path | config | Override PDF download directory |
 | `--zotero` | | flag | off | Export results to Zotero |
@@ -329,6 +337,10 @@ mosaic config [OPTIONS]
 | `--unpaywall-email TEXT` | str | Set Unpaywall email |
 | `--download-dir TEXT` | str | Set PDF download directory |
 | `--filename-pattern TEXT` | str | Set PDF filename pattern (see below) |
+| `--llm-provider TEXT` | str | LLM provider for relevance ranking: `openai` or `anthropic` |
+| `--llm-api-key TEXT` | str | API key for the LLM provider (any string for local servers) |
+| `--llm-model TEXT` | str | Model name; defaults to `gpt-4o-mini` (openai) or `claude-haiku-4-5-20251001` (anthropic) |
+| `--llm-base-url TEXT` | str | Base URL for a local OpenAI-compatible server (e.g. `http://localhost:11434/v1`) |
 
 **`--filename-pattern` placeholders:**
 
@@ -360,6 +372,15 @@ mosaic config --filename-pattern "{author}_{year}_{title}"
 
 # Include DOI in filename
 mosaic config --filename-pattern "{year}_{doi}"
+
+# Configure LLM relevance scoring — cloud OpenAI
+mosaic config --llm-provider openai --llm-api-key sk-... --llm-model gpt-4o-mini
+
+# Configure LLM relevance scoring — local Ollama
+mosaic config --llm-provider openai \
+              --llm-base-url http://localhost:11434/v1 \
+              --llm-api-key ollama \
+              --llm-model llama3.2
 ```
 
 ---
