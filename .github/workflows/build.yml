@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
   workflow_dispatch:
 
 env:
@@ -80,6 +82,32 @@ jobs:
             MOSAIC-macOS-arm64/MOSAIC-macOS-arm64.zip
             MOSAIC-Linux/MOSAIC-Linux.tar.gz
             MOSAIC-Windows/MOSAIC-Windows.zip
+
+  update-release:
+    name: Refresh latest release assets
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Replace assets on latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          TAG=$(gh release list --repo "$REPO" --limit 1 --json tagName -q '.[0].tagName')
+          echo "Updating assets on release $TAG"
+          gh release upload "$TAG" \
+            MOSAIC-macOS-arm64/MOSAIC-macOS-arm64.zip \
+            MOSAIC-Linux/MOSAIC-Linux.tar.gz \
+            MOSAIC-Windows/MOSAIC-Windows.zip \
+            --repo "$REPO" \
+            --clobber
 
   notify:
     name: Telegram announcement
