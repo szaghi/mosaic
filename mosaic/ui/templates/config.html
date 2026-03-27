@@ -20,11 +20,17 @@
         <input type="text" name="filename_pattern" value="{{ cfg.get('filename_pattern', '{year}_{source}_{author}_{title}') }}" placeholder="{year}_{source}_{author}_{title}">
       </label>
     </div>
-    <label>
-      Global rate-limit delay <small>(seconds between requests across all sources; per-source overrides take precedence)</small>
-      <input type="number" name="rate_limit_delay" step="0.5" min="0"
-             value="{{ cfg.get('rate_limit_delay', 1.0) }}" placeholder="1.0">
-    </label>
+    <div class="grid">
+      <label>
+        Global rate-limit delay <small>(seconds between requests across all sources; per-source overrides take precedence)</small>
+        <input type="number" name="rate_limit_delay" step="0.5" min="0"
+               value="{{ cfg.get('rate_limit_delay', 1.0) }}" placeholder="1.0">
+      </label>
+      <label>
+        Database path <small>(absolute path; leave empty to keep default)</small>
+        <input type="text" name="db_path" value="{{ cfg.get('db_path', '') }}" placeholder="~/.local/share/mosaic/cache.db">
+      </label>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -187,6 +193,86 @@
              {% if cfg.get('obsidian', {}).get('wikilinks', true) %}checked{% endif %}>
       Add <code>[[wikilinks]]</code> between papers exported in the same batch
     </label>
+  </fieldset>
+
+  <fieldset>
+    <legend><strong>LLM (AI / RAG generator)</strong></legend>
+    <input type="hidden" name="_llm_section" value="1">
+    <p><small>Used by <code>mosaic ask</code> / <code>mosaic chat</code> and the AI pages in this UI.
+    Leave empty if you do not plan to use AI features.</small></p>
+    {% set llm_cfg = cfg.get('llm', {}) %}
+    <div class="grid">
+      <label>
+        Provider
+        <select name="llm_provider">
+          <option value="" {% if not llm_cfg.get('provider') %}selected{% endif %}>— not set —</option>
+          <option value="openai"    {% if llm_cfg.get('provider') == 'openai'    %}selected{% endif %}>OpenAI</option>
+          <option value="anthropic" {% if llm_cfg.get('provider') == 'anthropic' %}selected{% endif %}>Anthropic</option>
+          <option value="custom"    {% if llm_cfg.get('provider') == 'custom'    %}selected{% endif %}>Custom (OpenAI-compatible)</option>
+        </select>
+      </label>
+      <label>
+        Model <small>(e.g. gpt-4o-mini, claude-haiku-4-5-20251001)</small>
+        <input type="text" name="llm_model" value="{{ llm_cfg.get('model', '') }}" placeholder="gpt-4o-mini">
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        API key
+        <input type="password" name="llm_api_key" value="{{ llm_cfg.get('api_key', '') }}" placeholder="sk-…">
+      </label>
+      <label>
+        Base URL <small>(leave empty for hosted APIs; set for Ollama etc.)</small>
+        <input type="text" name="llm_base_url" value="{{ llm_cfg.get('base_url', '') }}" placeholder="http://localhost:11434/v1">
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend><strong>Embeddings &amp; RAG</strong></legend>
+    <input type="hidden" name="_rag_section" value="1">
+    <p><small>Used for vector indexing and semantic retrieval. Embedding provider/key/URL fall back
+    to the LLM settings above when left empty.</small></p>
+    {% set rag_cfg = cfg.get('rag', {}) %}
+    <div class="grid">
+      <label>
+        Embedding provider <small>(leave empty to inherit LLM provider)</small>
+        <select name="rag_embedding_provider">
+          <option value="" {% if not rag_cfg.get('embedding_provider') %}selected{% endif %}>— inherit from LLM —</option>
+          <option value="openai"    {% if rag_cfg.get('embedding_provider') == 'openai'    %}selected{% endif %}>OpenAI</option>
+          <option value="custom"    {% if rag_cfg.get('embedding_provider') == 'custom'    %}selected{% endif %}>Custom (OpenAI-compatible)</option>
+        </select>
+      </label>
+      <label>
+        Embedding model <small>(e.g. text-embedding-3-small, snowflake-arctic-embed2)</small>
+        <input type="text" name="rag_embedding_model" value="{{ rag_cfg.get('embedding_model', '') }}"
+               placeholder="text-embedding-3-small">
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        Embedding API key <small>(leave empty to inherit LLM key)</small>
+        <input type="password" name="rag_embedding_api_key" value="{{ rag_cfg.get('embedding_api_key', '') }}" placeholder="sk-…">
+      </label>
+      <label>
+        Embedding base URL <small>(e.g. http://localhost:11434/v1 for Ollama)</small>
+        <input type="text" name="rag_embedding_base_url" value="{{ rag_cfg.get('embedding_base_url', '') }}"
+               placeholder="http://localhost:11434/v1">
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        Top-k papers retrieved per query
+        <input type="number" name="rag_top_k" min="1" max="100"
+               value="{{ rag_cfg.get('top_k', 10) }}" placeholder="10">
+      </label>
+      <label>
+        <br>
+        <input type="checkbox" name="rag_auto_index"
+               {% if rag_cfg.get('auto_index', false) %}checked{% endif %}>
+        Auto-index new papers after each search / get
+      </label>
+    </div>
   </fieldset>
 
   <button type="submit" hx-indicator="#config-spinner">Save Configuration</button>

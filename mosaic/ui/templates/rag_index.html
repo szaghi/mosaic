@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}AI Index &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>AI &mdash; Index Management</h2>
+
+<p>The vector index lets MOSAIC answer questions about your cached papers using semantic search.
+Before using <a href="{{ url_for('ui.rag_ask_page') }}">Ask</a> or
+<a href="{{ url_for('ui.rag_chat_page') }}">Chat</a>, you need an
+<a href="{{ url_for('ui.config_page') }}">embedding model configured</a>.</p>
+
+<div id="index-status">
+  <article>
+    <dl class="paper-meta">
+      <dt>Papers in cache</dt><dd>{{ total_papers }}</dd>
+      <dt>Papers indexed</dt><dd>{{ indexed_count }}</dd>
+      {% if embedding_model %}
+      <dt>Embedding model</dt><dd><code>{{ embedding_model }}</code></dd>
+      {% else %}
+      <dt>Embedding model</dt><dd><em>Not configured &mdash; set it in <a href="{{ url_for('ui.config_page') }}">Config</a></em></dd>
+      {% endif %}
+    </dl>
+  </article>
+</div>
+
+<div class="action-bar">
+  <form onsubmit="return false">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
+      <label style="margin:0;">
+        Batch size
+        <input type="number" name="batch_size" value="96" min="1" max="512" style="width:90px;">
+      </label>
+      <label style="margin:0;display:flex;align-items:center;gap:.3rem;">
+        <input type="checkbox" name="reindex" id="reindex-chk">
+        Rebuild from scratch
+      </label>
+      <button hx-post="{{ url_for('ui.rag_index_submit') }}"
+              hx-include="closest form"
+              hx-target="#index-job"
+              hx-swap="innerHTML"
+              hx-indicator="#index-spinner">
+        Build / Update Index
+      </button>
+      <span id="index-spinner" class="htmx-indicator" aria-busy="true">Indexing&hellip;</span>
+    </div>
+  </form>
+</div>
+
+<div id="index-job"></div>
+{% endblock %}

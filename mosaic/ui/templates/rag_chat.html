@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}AI Chat &mdash; MOSAIC{% endblock %}
+
+{% block head %}
+<style>
+  .chat-thread { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem; }
+  .chat-msg { padding: .75rem 1rem; border-radius: 6px; max-width: 90%; }
+  .chat-user { background: var(--pico-primary-background); align-self: flex-end; font-style: italic; }
+  .chat-assistant { background: var(--pico-secondary-background); align-self: flex-start; }
+  .chat-assistant p { margin-bottom: .5rem; }
+  #chat-input-area { display: flex; gap: .5rem; align-items: flex-end; }
+  #chat-input-area textarea { flex: 1; resize: vertical; min-height: 3rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>AI &mdash; Chat</h2>
+
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;">
+  <p style="margin:0;">Multi-turn conversation with your indexed papers.
+  Requires <a href="{{ url_for('ui.rag_index_page') }}">indexed papers</a> and a
+  <a href="{{ url_for('ui.config_page') }}">configured LLM</a>.</p>
+  <div style="display:flex;gap:.5rem;align-items:center;">
+    <label style="margin:0;font-size:.9em;">
+      Mode
+      <select id="chat-mode" style="margin:0;padding:.2rem .4rem;height:auto;font-size:.9em;">
+        <option value="synthesis">Synthesis</option>
+        <option value="gaps">Gaps</option>
+        <option value="compare">Compare</option>
+        <option value="extract">Extract</option>
+      </select>
+    </label>
+    <button class="outline secondary" style="padding:.2rem .6rem;font-size:.85em;"
+            hx-post="{{ url_for('ui.rag_chat_clear') }}"
+            hx-target="#chat-thread"
+            hx-swap="innerHTML">
+      Clear
+    </button>
+  </div>
+</div>
+
+<div id="chat-thread" class="chat-thread">
+  {% for msg in history %}
+  <div class="chat-msg chat-{{ msg.role }}">{{ msg.content }}</div>
+  {% else %}
+  <p class="stats-line"><em>No messages yet. Ask your first question below.</em></p>
+  {% endfor %}
+</div>
+
+{# Poll trigger lives OUTSIDE #chat-thread so HTMX never destroys it during swaps #}
+<div id="chat-poll"></div>
+
+{# Hidden form — HTMX reads from this; JS populates it before submission #}
+<form id="chat-form" style="display:none;">
+  <input type="hidden" id="chat-query-hidden" name="query" value="">
+  <input type="hidden" id="chat-mode-hidden" name="mode" value="synthesis">
+</form>
+
+<div id="chat-input-area">
+  <textarea id="chat-q" placeholder="Ask a question about your papers…" rows="2"></textarea>
+  <button id="chat-send"
+          hx-post="{{ url_for('ui.rag_chat_send') }}"
+          hx-include="#chat-form"
+          hx-target="#chat-thread"
+          hx-swap="innerHTML"
+          hx-indicator="#chat-spinner">
+    Send
+  </button>
+  <span id="chat-spinner" class="htmx-indicator" aria-busy="true"></span>
+</div>
+<small style="color:var(--pico-muted-color);">Ctrl+Enter to send</small>
+
+<script src="{{ url_for('static', filename='marked.min.js') }}"></script>
+<script>
+function sendChat() {
+  var q = document.getElementById('chat-q').value.trim();
+  if (!q) return;
+  // Populate hidden form before HTMX reads it
+  document.getElementById('chat-query-hidden').value = q;
+  document.getElementById('chat-mode-hidden').value = document.getElementById('chat-mode').value;
+  // Clear visible textarea now that value is safely copied
+  document.getElementById('chat-q').value = '';
+  document.getElementById('chat-send').click();
+}
+
+document.getElementById('chat-q').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    sendChat();
+  }
+});
+
+// Override the Send button click to go through sendChat()
+document.getElementById('chat-send').addEventListener('click', function(e) {
+  // Only intercept if the textarea has content (i.e. not already triggered via sendChat)
+  var q = document.getElementById('chat-q').value.trim();
+  if (q) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    sendChat();
+  }
+}, true);  // capture phase so we run before HTMX
+
+// Render markdown in assistant messages after each update
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (e.detail.target.id === 'chat-thread') {
+    document.querySelectorAll('#chat-thread .chat-assistant').forEach(function(el) {
+      if (!el.dataset.rendered) {
+        el.innerHTML = marked.parse(el.textContent);
+        el.dataset.rendered = '1';
+      }
+    });
+    e.detail.target.scrollIntoView({block: 'end', behavior: 'smooth'});
+  }
+});
+</script>
+{% endblock %}

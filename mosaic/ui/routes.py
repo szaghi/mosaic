@@ -166,6 +166,32 @@ def search_submit():
 
     max_results = _safe_int(request.form.get("max_results", 10))
     filters, year_warning = _build_filters(request.form)
+    cached_only = request.form.get("cached") == "on"
+    prefer_cache = request.form.get("prefer_cache") == "on"
+    sort_by = request.form.get("sort_by", "")
+
+    # Cache-only mode: skip network, search local DB directly
+    if cached_only:
+        cache = _cache()
+        papers = cache.search_local(query)
+        if filters:
+            papers = [p for p in papers if filters.match(p)]
+        from mosaic.services import filter_papers as _fp
+        papers = _fp(papers, oa_only=request.form.get("oa_only") == "on",
+                     pdf_only=request.form.get("pdf_only") == "on",
+                     sort_by=sort_by if sort_by != "relevance" else "")
+        if sort_by == "relevance":
+            from mosaic.services import sort_by_relevance as _sbr
+            papers = _sbr(query, papers, cfg)
+        cache.save_search(query=query, filters_json=json.dumps({}), result_count=len(papers))
+        import uuid
+        job_id = str(uuid.uuid4())
+        current_app.config[f"export_{job_id}"] = papers
+        errors = [year_warning] if year_warning else []
+        return render_template(
+            "partials/results.html",
+            papers=papers, errors=errors, stats={}, job_id=job_id, version=_version(),
+        )
 
     # Build sources filtered by user selection
     selected = request.form.getlist("sources")
@@ -198,7 +224,8 @@ def search_submit():
         "query": query,
         "oa_only": request.form.get("oa_only") == "on",
         "pdf_only": request.form.get("pdf_only") == "on",
-        "sort_by": request.form.get("sort_by", ""),
+        "sort_by": sort_by,
+        "prefer_cache": prefer_cache,
         "year_warning": year_warning,
         "filters": {
             "year": request.form.get("year", ""),
@@ -260,15 +287,22 @@ def search_status(job_id):
     meta = current_app.config.pop(f"job_meta_{job_id}", {})
     if meta.get("year_warning"):
         errors.insert(0, meta["year_warning"])
+    sort_by = meta.get("sort_by", "")
     papers = filter_papers(
         papers,
         oa_only=meta.get("oa_only", False),
         pdf_only=meta.get("pdf_only", False),
-        sort_by=meta.get("sort_by", ""),
+        sort_by=sort_by if sort_by != "relevance" else "",
     )
+    if sort_by == "relevance":
+        from mosaic.services import sort_by_relevance as _sbr
+        papers = _sbr(meta.get("query", ""), papers, _cfg())
 
     # Save to cache and record search history
     cache = _cache()
+    if meta.get("prefer_cache"):
+        rich = cache.rich_uids()
+        papers = [cache.get_by_uid(p.uid) or p if p.uid in rich else p for p in papers]
     for p in papers:
         cache.save(p)
     cache.save_search(
@@ -472,12 +506,16 @@ def similar_status(job_id):
     seed_title = result.get("seed_title")
 
     meta = current_app.config.pop(f"job_meta_{job_id}", {})
+    sort_by = meta.get("sort_by", "")
     papers = filter_papers(
         papers,
         oa_only=meta.get("oa_only", False),
         pdf_only=meta.get("pdf_only", False),
-        sort_by=meta.get("sort_by", ""),
+        sort_by=sort_by if sort_by != "relevance" else "",
     )
+    if sort_by == "relevance" and result.get("seed_title"):
+        from mosaic.services import sort_by_relevance as _sbr
+        papers = _sbr(result["seed_title"], papers, _cfg())
 
     cache = _cache()
     for p in papers:
@@ -584,6 +622,44 @@ def config_save():
         tags_raw = request.form.get("obsidian_tags", "paper").strip()
         obs["tags"] = [t.strip() for t in tags_raw.split(",") if t.strip()] or ["paper"]
         obs["wikilinks"] = request.form.get("obsidian_wikilinks") == "on"
+
+    # LLM settings
+    if request.form.get("_llm_section"):
+        llm = cfg.setdefault("llm", {})
+        provider = request.form.get("llm_provider", "").strip()
+        llm["provider"] = provider
+        api_key = request.form.get("llm_api_key", "").strip()
+        if api_key:
+            llm["api_key"] = api_key
+        model = request.form.get("llm_model", "").strip()
+        llm["model"] = model
+        base_url = request.form.get("llm_base_url", "").strip()
+        llm["base_url"] = base_url
+
+    # RAG / embedding settings
+    if request.form.get("_rag_section"):
+        rag = cfg.setdefault("rag", {})
+        emb_provider = request.form.get("rag_embedding_provider", "").strip()
+        rag["embedding_provider"] = emb_provider
+        emb_model = request.form.get("rag_embedding_model", "").strip()
+        rag["embedding_model"] = emb_model
+        emb_base_url = request.form.get("rag_embedding_base_url", "").strip()
+        rag["embedding_base_url"] = emb_base_url
+        emb_api_key = request.form.get("rag_embedding_api_key", "").strip()
+        if emb_api_key:
+            rag["embedding_api_key"] = emb_api_key
+        top_k = request.form.get("rag_top_k", "").strip()
+        if top_k:
+            try:
+                rag["top_k"] = int(top_k)
+            except ValueError:
+                pass
+        rag["auto_index"] = request.form.get("rag_auto_index") == "on"
+
+    # Advanced: db_path
+    db_path = request.form.get("db_path", "").strip()
+    if db_path:
+        cfg["db_path"] = db_path
 
     cfg_mod.save(cfg)
 
@@ -1035,6 +1111,276 @@ def bulk_status(job_id):
             )
         html += "</tbody></table>"
     return html
+
+
+# ---------------------------------------------------------------------------
+# RAG — Index, Ask, Chat
+# ---------------------------------------------------------------------------
+
+# In-process chat history: session_id → list of {"role": "user"|"assistant", "content": str}
+_chat_histories: dict[str, list[dict]] = {}
+
+
+def _rag_index_status(cache):
+    """Return dict with index stats for the template."""
+    total = cache.count_papers()
+    indexed = len(cache.get_indexed_uids())
+    model = cache.get_rag_meta("embedding_model") or ""
+    return {"total_papers": total, "indexed_count": indexed, "embedding_model": model}
+
+
+@bp.route("/rag")
+def rag_landing():
+    cache = _cache()
+    info = _rag_index_status(cache)
+    cfg = _cfg()
+    llm_configured = bool(cfg.get("llm", {}).get("provider") and cfg.get("llm", {}).get("api_key"))
+    return render_template("rag_landing.html", version=_version(), llm_configured=llm_configured, **info)
+
+
+@bp.route("/rag/index")
+def rag_index_page():
+    cache = _cache()
+    info = _rag_index_status(cache)
+    return render_template("rag_index.html", version=_version(), **info)
+
+
+def _run_rag_index(cfg, db_path, reindex, batch_size):
+    """Executed in a worker thread."""
+    from mosaic.db import Cache
+    from mosaic.rag import index_papers
+
+    cache = Cache(db_path)
+    papers = cache.list_papers(limit=100_000)
+    newly, skipped = index_papers(papers, cfg, cache, reindex=reindex, progress=False)
+    return {"newly": newly, "skipped": skipped, "total": len(papers)}
+
+
+@bp.route("/rag/index", methods=["POST"])
+def rag_index_submit():
+    cfg = _cfg()
+    reindex = request.form.get("reindex") == "on"
+    batch_size = _safe_int(request.form.get("batch_size", 96), default=96, lo=1, hi=512)
+    job_id = _jobs().submit(_run_rag_index, cfg, cfg["db_path"], reindex, batch_size)
+    status_url = url_for("ui.rag_index_status", job_id=job_id)
+    return (
+        f'<div hx-get="{status_url}" hx-trigger="every 2s" hx-target="#index-job" hx-swap="innerHTML">'
+        f'<article aria-busy="true">Indexing papers&hellip;</article></div>'
+    )
+
+
+@bp.route("/rag/index/status/<job_id>")
+def rag_index_status(job_id):
+    job = _jobs().get(job_id)
+    if job is None:
+        return "<article>Job not found.</article>"
+    if job.status == "running":
+        status_url = url_for("ui.rag_index_status", job_id=job_id)
+        return (
+            f'<div hx-get="{status_url}" hx-trigger="every 2s" hx-target="#index-job" hx-swap="innerHTML">'
+            f'<article aria-busy="true">Indexing papers&hellip;</article></div>'
+        )
+    _jobs().pop(job_id)
+    if job.status == "error":
+        return f"<article><mark>Indexing failed: {escape(job.error_message)}</mark></article>"
+    r = job.result
+    return (
+        f"<article><ins>Done.</ins> {r['newly']} paper(s) newly indexed, "
+        f"{r['skipped']} skipped (already indexed), {r['total']} total in cache.</article>"
+    )
+
+
+@bp.route("/rag/ask")
+def rag_ask_page():
+    return render_template("rag_ask.html", version=_version())
+
+
+def _run_rag_ask(query, cfg, db_path, mode, top_k, subset_query, year):
+    """Executed in a worker thread — full RAG pipeline."""
+    from mosaic.db import Cache
+    from mosaic.rag import ask
+    from mosaic.services import build_filters
+
+    cache = Cache(db_path)
+    pre_filter = None
+    if subset_query or year:
+        filters, _ = build_filters(year=year)
+        candidates = cache.search_local(subset_query) if subset_query else cache.list_papers(limit=100_000)
+        if filters:
+            candidates = [p for p in candidates if filters.match(p)]
+        pre_filter = [p.uid for p in candidates]
+
+    answer, papers = ask(query, cfg, cache, mode=mode, k=top_k or None, pre_filter=pre_filter)
+    return {"answer": answer, "papers": [p.to_dict() for p in papers]}
+
+
+@bp.route("/rag/ask", methods=["POST"])
+def rag_ask_submit():
+    query = request.form.get("query", "").strip()
+    if not query:
+        return "<article>Please enter a question.</article>"
+
+    cfg = _cfg()
+    mode = request.form.get("mode", "synthesis")
+    top_k_raw = request.form.get("top_k", "").strip()
+    top_k = int(top_k_raw) if top_k_raw.isdigit() else None
+    subset_query = request.form.get("subset_query", "").strip()
+    year = request.form.get("year", "").strip()
+    show_sources = request.form.get("show_sources") == "on"
+
+    job_id = _jobs().submit(_run_rag_ask, query, cfg, cfg["db_path"], mode, top_k, subset_query, year)
+    current_app.config[f"job_meta_{job_id}"] = {"show_sources": show_sources}
+    status_url = url_for("ui.rag_ask_status", job_id=job_id)
+    return (
+        f'<div hx-get="{status_url}" hx-trigger="every 2s" hx-target="#ask-result" hx-swap="innerHTML">'
+        f'<article aria-busy="true">Retrieving papers and generating answer&hellip;</article></div>'
+    )
+
+
+@bp.route("/rag/ask/status/<job_id>")
+def rag_ask_status(job_id):
+    job = _jobs().get(job_id)
+    if job is None:
+        return "<article>Job not found.</article>"
+    if job.status == "running":
+        status_url = url_for("ui.rag_ask_status", job_id=job_id)
+        return (
+            f'<div hx-get="{status_url}" hx-trigger="every 2s" hx-target="#ask-result" hx-swap="innerHTML">'
+            f'<article aria-busy="true">Retrieving papers and generating answer&hellip;</article></div>'
+        )
+    meta = current_app.config.pop(f"job_meta_{job_id}", {})
+    _jobs().pop(job_id)
+    if job.status == "error":
+        return f"<article><mark>Error: {escape(job.error_message)}</mark></article>"
+
+    result = job.result
+    answer = result["answer"]
+    papers = result["papers"]
+    show_sources = meta.get("show_sources", True)
+
+    html = f'<article><div class="rag-answer">{escape(answer)}</div></article>'
+    if show_sources and papers:
+        html += '<details open><summary><strong>Source papers</strong></summary><ol class="source-list">'
+        for p in papers:
+            from mosaic.models import Paper as _Paper
+            pobj = _Paper.from_dict(p)
+            title = escape(pobj.title or "Untitled")
+            authors = escape(", ".join(pobj.authors[:3]))
+            year_str = escape(str(pobj.year or ""))
+            detail_url = url_for("ui.paper_detail", uid=pobj.uid)
+            html += f'<li><a href="{detail_url}">{title}</a> &mdash; {authors} ({year_str})</li>'
+        html += "</ol></details>"
+    return html
+
+
+@bp.route("/rag/chat")
+def rag_chat_page():
+    from flask import session
+    session.permanent = True
+    sid = session.setdefault("chat_id", str(__import__("uuid").uuid4()))
+    history = _chat_histories.get(sid, [])
+    return render_template("rag_chat.html", version=_version(), history=history)
+
+
+def _run_rag_chat(query, cfg, db_path, mode):
+    """Executed in a worker thread."""
+    from mosaic.db import Cache
+    from mosaic.rag import ask
+    cache = Cache(db_path)
+    answer, _ = ask(query, cfg, cache, mode=mode)
+    return {"answer": answer}
+
+
+def _render_chat_thread(history, thinking: bool = False) -> str:
+    """Return HTML for the chat thread content."""
+    if not history and not thinking:
+        return '<p class="stats-line"><em>No messages yet. Ask your first question below.</em></p>'
+    parts = []
+    for msg in history:
+        role = escape(msg["role"])
+        content = escape(msg["content"])
+        parts.append(f'<div class="chat-msg chat-{role}">{content}</div>')
+    if thinking:
+        parts.append(
+            '<div class="chat-msg chat-assistant" style="opacity:.6;">'
+            '<span aria-busy="true">Thinking&hellip;</span></div>'
+        )
+    return "\n".join(parts)
+
+
+def _oob_poll(status_url: str) -> str:
+    """OOB swap that keeps the poll trigger alive outside #chat-thread."""
+    return (
+        f'<div id="chat-poll" hx-swap-oob="true">'
+        f'<div hx-get="{status_url}" hx-trigger="every 2s"'
+        f' hx-target="#chat-thread" hx-swap="innerHTML"></div>'
+        f'</div>'
+    )
+
+
+def _oob_poll_stop() -> str:
+    """OOB swap that clears #chat-poll, stopping the poll loop."""
+    return '<div id="chat-poll" hx-swap-oob="true"></div>'
+
+
+@bp.route("/rag/chat/send", methods=["POST"])
+def rag_chat_send():
+    from flask import session
+    query = request.form.get("query", "").strip()
+    mode = request.form.get("mode", "synthesis")
+    sid = session.get("chat_id", "default")
+    history = _chat_histories.setdefault(sid, [])
+
+    if not query:
+        return _render_chat_thread(history)
+
+    history.append({"role": "user", "content": query})
+    cfg = _cfg()
+    job_id = _jobs().submit(_run_rag_chat, query, cfg, cfg["db_path"], mode)
+    current_app.config[f"job_meta_{job_id}"] = {"sid": sid}
+
+    # Main swap → #chat-thread; OOB swap → #chat-poll (outside thread, survives swaps)
+    status_url = url_for("ui.rag_chat_status", job_id=job_id)
+    return _render_chat_thread(history, thinking=True) + "\n" + _oob_poll(status_url)
+
+
+@bp.route("/rag/chat/status/<job_id>")
+def rag_chat_status(job_id):
+    from flask import session
+    job = _jobs().get(job_id)
+    if job is None:
+        sid = session.get("chat_id", "default")
+        return _render_chat_thread(_chat_histories.get(sid, [])) + "\n" + _oob_poll_stop()
+
+    if job.status == "running":
+        meta = current_app.config.get(f"job_meta_{job_id}", {})
+        sid = meta.get("sid", session.get("chat_id", "default"))
+        history = _chat_histories.get(sid, [])
+        status_url = url_for("ui.rag_chat_status", job_id=job_id)
+        return _render_chat_thread(history, thinking=True) + "\n" + _oob_poll(status_url)
+
+    meta = current_app.config.pop(f"job_meta_{job_id}", {})
+    _jobs().pop(job_id)
+    sid = meta.get("sid", session.get("chat_id", "default"))
+    history = _chat_histories.setdefault(sid, [])
+
+    if job.status == "error":
+        history.append({"role": "assistant", "content": f"[Error: {job.error_message}]"})
+    else:
+        history.append({"role": "assistant", "content": job.result["answer"]})
+
+    return _render_chat_thread(history) + "\n" + _oob_poll_stop()
+
+
+@bp.route("/rag/chat/clear", methods=["POST"])
+def rag_chat_clear():
+    from flask import session
+    sid = session.get("chat_id", "default")
+    _chat_histories.pop(sid, None)
+    return (
+        '<p class="stats-line"><em>Conversation cleared.</em></p>'
+        + "\n" + _oob_poll_stop()
+    )
 
 
 # ---------------------------------------------------------------------------

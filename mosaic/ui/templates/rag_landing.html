@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}AI Features &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>AI Features</h2>
+
+<p>MOSAIC includes a local RAG (Retrieval-Augmented Generation) pipeline that lets you
+query and chat with your cached papers using a semantic vector index and an LLM of your choice.</p>
+
+{% if not embedding_model or not llm_configured %}
+<article class="alert-warning">
+  <strong>&#9888; Setup required</strong> &mdash;
+  {% if not embedding_model and not llm_configured %}
+    Neither an embedding model nor an LLM is configured.
+  {% elif not embedding_model %}
+    No embedding model configured.
+  {% else %}
+    No LLM configured.
+  {% endif %}
+  Go to <a href="{{ url_for('ui.config_page') }}">Config &rarr; Embeddings &amp; RAG / LLM</a> to set them up.
+</article>
+{% endif %}
+
+<div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:1rem; margin-top:1.5rem;">
+  <article>
+    <header><strong>&#128202; Index</strong></header>
+    <p>Build or rebuild the vector index over your cached papers.
+    Must be run at least once before using Ask or Chat.</p>
+    <dl class="paper-meta" style="font-size:.9em;">
+      <dt>Papers in cache</dt><dd>{{ total_papers }}</dd>
+      <dt>Papers indexed</dt><dd>{{ indexed_count }}</dd>
+      {% if embedding_model %}
+      <dt>Embedding model</dt><dd><code>{{ embedding_model }}</code></dd>
+      {% endif %}
+    </dl>
+    <a href="{{ url_for('ui.rag_index_page') }}" role="button">Go to Index &rarr;</a>
+  </article>
+
+  <article>
+    <header><strong>&#10067; Ask</strong></header>
+    <p>Ask a single question about your indexed papers. Choose a mode:</p>
+    <ul style="font-size:.9em;">
+      <li><strong>Synthesis</strong> &mdash; state-of-the-art summary</li>
+      <li><strong>Gaps</strong> &mdash; open problems and limitations</li>
+      <li><strong>Compare</strong> &mdash; structured paper comparison</li>
+      <li><strong>Extract</strong> &mdash; task / method / dataset / metric</li>
+    </ul>
+    <a href="{{ url_for('ui.rag_ask_page') }}" role="button">Go to Ask &rarr;</a>
+  </article>
+
+  <article>
+    <header><strong>&#128172; Chat</strong></header>
+    <p>Multi-turn conversation with your papers. The assistant retains context across
+    messages within the same browser session.</p>
+    <p style="font-size:.9em;">Session history is kept in memory and resets on server restart.</p>
+    <a href="{{ url_for('ui.rag_chat_page') }}" role="button">Go to Chat &rarr;</a>
+  </article>
+</div>
+{% endblock %}

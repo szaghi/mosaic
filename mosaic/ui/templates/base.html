@@ -43,6 +43,7 @@
         <li><a href="{{ url_for('ui.notebook_page') }}" {% if '/notebook' in request.path %}aria-current="page"{% endif %}>NotebookLM</a></li>
         <li><a href="{{ url_for('ui.history_page') }}" {% if '/history' in request.path %}aria-current="page"{% endif %}>History</a></li>
         <li><a href="{{ url_for('ui.sessions_page') }}" {% if '/sessions' in request.path %}aria-current="page"{% endif %}>Sessions</a></li>
+        <li><a href="{{ url_for('ui.rag_landing') }}" {% if '/rag' in request.path %}aria-current="page"{% endif %}>AI</a></li>
         <li><a href="{{ url_for('ui.config_page') }}" {% if '/config' in request.path %}aria-current="page"{% endif %}>Config</a></li>
         <li><a href="#" id="theme-toggle" onclick="toggleTheme();return false" title="Toggle dark/light mode">&#9681;</a></li>
       </ul>
