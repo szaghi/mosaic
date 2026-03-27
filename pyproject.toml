@@ -40,6 +40,7 @@ notebooklm = ["notebooklm-py[browser]>=0.10"]
 browser = ["playwright>=1.40"]
 ui = ["flask>=3.0", "waitress>=3.0"]
 desktop = ["flask>=3.0", "waitress>=3.0"]
+rag = ["sqlite-vec>=0.1.6"]
 
 [project.urls]
 Homepage      = "https://szaghi.github.io/mosaic/"

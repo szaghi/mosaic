@@ -91,6 +91,9 @@ Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://sza
 <td colspan="2"><b>🆓 FOSS licensing</b><br><sub>Available under your choice of <a href="licensing/LICENSE.gpl3.md">GPL v3</a>, <a href="licensing/LICENSE.bsd-2.md">BSD-2</a>, <a href="licensing/LICENSE.bsd-3.md">BSD-3</a>, or <a href="licensing/LICENSE.mit.md">MIT</a> — use whichever license best fits your project</sub></td>
 </tr>
 <tr>
+<td colspan="3"><b>🧠 Local RAG &amp; literature analysis</b><br><sub>Ask questions, find gaps, compare methods, and extract structured data — fully local with <code>sqlite-vec</code> + any Ollama model. <code>mosaic index</code> → <code>mosaic ask</code> → <code>mosaic chat</code>. No data leaves your machine. <a href="https://szaghi.github.io/mosaic/guide/rag">RAG guide</a></sub></td>
+</tr>
+<tr>
 <td colspan="3"><b>📚 Zotero integration</b><br><sub>Push results directly into your Zotero library — local API (Zotero running on your machine) or web API (<code>api.zotero.org</code>). Organise into collections, link downloaded PDFs as attachments, and sync across devices — all with a single <code>--zotero</code> flag. <a href="https://szaghi.github.io/mosaic/guide/zotero">Zotero integration guide</a></sub></td>
 </tr>
 </table>

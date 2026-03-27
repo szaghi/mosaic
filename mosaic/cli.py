@@ -491,6 +491,304 @@ def get(
 
 
 @app.command()
+def index(
+    reindex: Annotated[bool, typer.Option("--reindex", help="Re-embed all papers, even already-indexed ones")] = False,
+    query: Annotated[str, typer.Option("--query", "-q", help="Embed only papers matching this query")] = "",
+    from_file: Annotated[Optional[Path], typer.Option("--from", help="Embed only papers from a .bib or .csv file")] = None,
+    batch_size: Annotated[int, typer.Option("--batch-size", help="Texts per embedding API call")] = 96,
+):
+    """Build or update the vector index for semantic search and RAG."""
+    from mosaic.rag import index_papers
+
+    cfg = cfg_mod.load()
+    cache = Cache(cfg["db_path"])
+
+    # Gather candidate papers
+    if from_file:
+        from mosaic.bulk import read_dois
+        dois = read_dois(from_file)
+        papers_from_file = []
+        for doi in dois:
+            papers_from_file.extend(cache.search_local(doi))
+        seen: set[str] = set()
+        unique: list = []
+        for p in papers_from_file:
+            if p.uid not in seen:
+                seen.add(p.uid)
+                unique.append(p)
+        papers = unique
+    elif query:
+        papers = cache.search_local(query)
+    else:
+        papers = cache.get_all_papers()
+
+    if not papers:
+        rprint("[yellow]No papers found in cache. Run some searches first.[/yellow]")
+        raise typer.Exit()
+
+    rprint(f"[cyan]Indexing {len(papers)} papers…[/cyan]")
+    try:
+        newly, skipped = index_papers(papers, cfg, cache, reindex=reindex)
+        rprint(f"[green]Indexed {newly} new paper(s).[/green] {skipped} already indexed.")
+    except ValueError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def ask(
+    question: Annotated[str, typer.Argument(help="Question or topic to analyse")],
+    mode: Annotated[str, typer.Option("--mode", help="synthesis (default), gaps, compare, extract")] = "synthesis",
+    query: Annotated[str, typer.Option("--query", "-q", help="Pre-filter: restrict to papers matching this FTS query")] = "",
+    from_file: Annotated[Optional[Path], typer.Option("--from", help="Pre-filter: restrict to papers from a .bib or .csv file")] = None,
+    year: Annotated[Optional[str], typer.Option("--year", "-y", help="Year or range filter (e.g. 2020-2024)")] = None,
+    n: Annotated[Optional[int], typer.Option("-n", "--top", help="Override rag.top_k for this query")] = None,
+    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Write answer to file (.md or .json)")] = None,
+    show_sources: Annotated[bool, typer.Option("--show-sources", help="Print retrieved papers before the answer")] = False,
+):
+    """Ask a question about your cached papers using RAG."""
+    from mosaic.rag import ask as rag_ask
+    from rich.markdown import Markdown
+    from rich.rule import Rule
+
+    cfg = cfg_mod.load()
+    cache = Cache(cfg["db_path"])
+
+    # Build pre_filter from --query or --from
+    pre_filter: Optional[list[str]] = None
+    if from_file:
+        from mosaic.bulk import read_dois
+        dois = read_dois(from_file)
+        papers_from_file = []
+        for doi in dois:
+            papers_from_file.extend(cache.search_local(doi))
+        pre_filter = list({p.uid for p in papers_from_file})
+    elif query:
+        filtered = cache.search_local(query)
+        pre_filter = [p.uid for p in filtered]
+
+    # Apply year filter to pre_filter if provided
+    if year and pre_filter is not None:
+        from mosaic.services import build_filters, filter_papers
+        filters, _ = build_filters(year=year)
+        all_papers = cache.get_papers_by_uids(pre_filter)
+        filtered_papers = filter_papers(all_papers, oa_only=False, pdf_only=False)
+        filtered_papers = [p for p in all_papers if filters and filters.match(p)]
+        pre_filter = [p.uid for p in filtered_papers]
+    elif year:
+        from mosaic.services import build_filters
+        filters, _ = build_filters(year=year)
+        all_papers = cache.get_all_papers()
+        filtered_papers = [p for p in all_papers if filters and filters.match(p)]
+        pre_filter = [p.uid for p in filtered_papers]
+
+    valid_modes = {"synthesis", "gaps", "compare", "extract"}
+    if mode not in valid_modes:
+        rprint(f"[red]Unknown mode {mode!r}. Choose from: {', '.join(sorted(valid_modes))}[/red]")
+        raise typer.Exit(1)
+
+    console.print(Rule(f"[cyan]mosaic ask[/cyan] · mode: {mode}"))
+
+    try:
+        answer, papers = rag_ask(question, cfg, cache, mode=mode, k=n, pre_filter=pre_filter)
+    except ValueError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    if show_sources:
+        rprint(f"\n[bold]Sources retrieved ({len(papers)}):[/bold]")
+        for i, p in enumerate(papers, 1):
+            authors = ", ".join(p.authors[:2]) if p.authors else "Unknown"
+            rprint(f"  [{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})")
+        rprint()
+
+    console.print(Markdown(answer))
+
+    # References footer
+    rprint("\n[bold]References[/bold]")
+    for i, p in enumerate(papers, 1):
+        authors = ", ".join(p.authors[:3]) if p.authors else "Unknown"
+        if len(p.authors) > 3:
+            authors += " et al."
+        rprint(f"  [{i}] {p.title or 'Untitled'} — {authors}, {p.year or '?'}")
+
+    if output:
+        if str(output).endswith(".json"):
+            import json as _json
+            data = {
+                "question": question,
+                "mode": mode,
+                "answer": answer,
+                "sources": [
+                    {"title": p.title, "authors": p.authors, "year": p.year, "doi": p.doi}
+                    for p in papers
+                ],
+            }
+            output.write_text(_json.dumps(data, indent=2, default=str))
+        else:
+            # Markdown
+            lines = [f"# {question}\n", f"*Mode: {mode}*\n\n", answer, "\n\n## References\n"]
+            for i, p in enumerate(papers, 1):
+                authors = ", ".join(p.authors[:3]) if p.authors else "Unknown"
+                lines.append(f"- [{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})")
+            output.write_text("\n".join(lines))
+        rprint(f"[green]Answer saved to {output}[/green]")
+
+
+@app.command()
+def chat(
+    query: Annotated[str, typer.Option("--query", "-q", help="Narrow retrieval pool to papers matching this query")] = "",
+    from_file: Annotated[Optional[Path], typer.Option("--from", help="Narrow retrieval pool to papers from a .bib or .csv file")] = None,
+    mode: Annotated[str, typer.Option("--mode", help="Default prompt mode: synthesis, gaps, compare, extract")] = "synthesis",
+):
+    """Interactive RAG chat session over your cached papers."""
+    from mosaic.rag import _PROMPTS, _build_context, retrieve
+    from rich.markdown import Markdown
+    from rich.rule import Rule
+
+    cfg = cfg_mod.load()
+    cache = Cache(cfg["db_path"])
+
+    # Build pre_filter
+    pre_filter: Optional[list[str]] = None
+    if from_file:
+        from mosaic.bulk import read_dois
+        dois = read_dois(from_file)
+        papers_from_file = []
+        for doi in dois:
+            papers_from_file.extend(cache.search_local(doi))
+        pre_filter = list({p.uid for p in papers_from_file})
+    elif query:
+        filtered = cache.search_local(query)
+        pre_filter = [p.uid for p in filtered]
+
+    current_mode = mode
+    history: list[dict] = []
+
+    console.print(Rule("[cyan]mosaic chat[/cyan]"))
+    rprint("[dim]Commands: /mode <synthesis|gaps|compare|extract>  /sources  /clear  /quit[/dim]\n")
+
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            rprint("\n[dim]Goodbye.[/dim]")
+            break
+
+        if not user_input:
+            continue
+
+        if user_input.startswith("/"):
+            parts = user_input.split(None, 1)
+            cmd = parts[0].lower()
+            arg = parts[1] if len(parts) > 1 else ""
+            if cmd == "/quit":
+                rprint("[dim]Goodbye.[/dim]")
+                break
+            elif cmd == "/clear":
+                history.clear()
+                rprint("[dim]Conversation history cleared.[/dim]")
+            elif cmd == "/mode":
+                valid = {"synthesis", "gaps", "compare", "extract"}
+                if arg in valid:
+                    current_mode = arg
+                    rprint(f"[dim]Mode set to {current_mode}.[/dim]")
+                else:
+                    rprint(f"[red]Unknown mode. Choose from: {', '.join(sorted(valid))}[/red]")
+            elif cmd == "/sources":
+                show_papers = retrieve(query or "research", cfg, cache, pre_filter=pre_filter)
+                for i, p in enumerate(show_papers, 1):
+                    authors = ", ".join(p.authors[:2]) if p.authors else "Unknown"
+                    rprint(f"  [{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})")
+            else:
+                rprint(f"[red]Unknown command: {cmd}[/red]")
+            continue
+
+        # Retrieve papers for this turn
+        try:
+            papers = retrieve(user_input, cfg, cache, pre_filter=pre_filter)
+        except Exception as e:
+            rprint(f"[red]Retrieval error: {e}[/red]")
+            continue
+
+        if not papers:
+            rprint("[yellow]No indexed papers found. Run `mosaic index` first.[/yellow]")
+            continue
+
+        context = _build_context(papers)
+        template = _PROMPTS.get(current_mode, _PROMPTS["synthesis"])
+        system_prompt = template.format(query=user_input, context=context)
+
+        # Build messages with history
+        messages = [{"role": "user", "content": system_prompt}]
+        for h in history[-6:]:  # last 3 turns
+            messages.append(h)
+        # The actual question is already in the system prompt; add a short user turn
+        messages.append({"role": "user", "content": user_input})
+
+        try:
+            import httpx as _httpx
+            llm_cfg = cfg.get("llm", {})
+            provider = llm_cfg.get("provider", "").lower()
+            api_key = llm_cfg.get("api_key", "")
+            llm_model = llm_cfg.get("model", "") or (
+                "gpt-4o-mini" if provider == "openai" else "claude-haiku-4-5-20251001"
+            )
+            base_url = llm_cfg.get("base_url", "").rstrip("/")
+
+            if not api_key or not provider:
+                rprint(
+                    "[red]No LLM configured. Run: mosaic config --llm-provider ... "
+                    "--llm-api-key ... --llm-model ...[/red]"
+                )
+                continue
+
+            if provider == "openai" or base_url:
+                url = (
+                    f"{base_url}/chat/completions"
+                    if base_url
+                    else "https://api.openai.com/v1/chat/completions"
+                )
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                resp = _httpx.post(
+                    url,
+                    headers=headers,
+                    json={"model": llm_model, "messages": messages},
+                    timeout=180,
+                )
+                resp.raise_for_status()
+                answer = resp.json()["choices"][0]["message"]["content"]
+            elif provider == "anthropic":
+                url = "https://api.anthropic.com/v1/messages"
+                headers = {
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                }
+                resp = _httpx.post(
+                    url,
+                    headers=headers,
+                    json={"model": llm_model, "max_tokens": 2048, "messages": messages},
+                    timeout=180,
+                )
+                resp.raise_for_status()
+                answer = resp.json()["content"][0]["text"]
+            else:
+                rprint(f"[red]Unknown provider: {provider}[/red]")
+                continue
+
+            history.append({"role": "user", "content": user_input})
+            history.append({"role": "assistant", "content": answer})
+
+            rprint("\n[bold cyan]mosaic:[/bold cyan]")
+            console.print(Markdown(answer))
+            rprint()
+
+        except Exception as e:
+            rprint(f"[red]LLM error: {e}[/red]")
+
+
+@app.command()
 def config(  # noqa: PLR0912, PLR0915
     show: Annotated[bool, typer.Option("--show", help="Print current config")] = False,
     # --- API keys ---
@@ -587,6 +885,23 @@ def config(  # noqa: PLR0912, PLR0915
     llm_base_url: Annotated[
         str, typer.Option("--llm-base-url", help="Base URL for a local OpenAI-compatible server (e.g. http://localhost:11434/v1)")
     ] = "",
+    # --- rag / embeddings ---
+    embedding_model: Annotated[
+        str, typer.Option("--embedding-model", help="Embedding model name (e.g. snowflake-arctic-embed2, text-embedding-3-small)")
+    ] = "",
+    embedding_base_url: Annotated[
+        str, typer.Option("--embedding-base-url", help="Base URL for the embedding server (e.g. http://localhost:11434/v1)")
+    ] = "",
+    embedding_api_key: Annotated[
+        str, typer.Option("--embedding-api-key", help="API key for the embedding server (any string for local servers)")
+    ] = "",
+    rag_top_k: Annotated[
+        Optional[int], typer.Option("--rag-top-k", help="Number of papers retrieved per RAG query (default: 10)")
+    ] = None,
+    rag_auto_index: Annotated[
+        Optional[bool],
+        typer.Option("--rag-auto-index/--no-rag-auto-index", help="Auto-index new papers after each search/get run")
+    ] = None,
 ):
     """View or update MOSAIC configuration."""
     cfg = cfg_mod.load()
@@ -700,6 +1015,26 @@ def config(  # noqa: PLR0912, PLR0915
     if _llm_changed:
         rprint("[green]LLM config updated.[/green]")
 
+    # --- rag ---
+    _rag_changed = False
+    if embedding_model:
+        cfg["rag"]["embedding_model"] = embedding_model
+        _rag_changed = True
+    if embedding_base_url:
+        cfg["rag"]["embedding_base_url"] = embedding_base_url
+        _rag_changed = True
+    if embedding_api_key:
+        cfg["rag"]["embedding_api_key"] = embedding_api_key
+        _rag_changed = True
+    if rag_top_k is not None:
+        cfg["rag"]["top_k"] = rag_top_k
+        _rag_changed = True
+    if rag_auto_index is not None:
+        cfg["rag"]["auto_index"] = rag_auto_index
+        _rag_changed = True
+    if _rag_changed:
+        rprint("[green]RAG config updated.[/green]")
+
     _pedro_changed = pedro_fair_use is not None or pedro_fetch_details is not None or pedro_rate_limit_delay is not None
     _any_changed = any(
         [
@@ -714,6 +1049,7 @@ def config(  # noqa: PLR0912, PLR0915
             _obsidian_changed,
             _pedro_changed,
             _llm_changed,
+            _rag_changed,
         ]
     )
     if _any_changed:
@@ -910,6 +1246,14 @@ def _post_process(
 
     if obsidian:
         _push_to_obsidian(papers, cfg, subfolder_override=obsidian_folder)
+
+    # Auto-index if configured
+    if cfg.get("rag", {}).get("auto_index") and papers:
+        try:
+            from mosaic.rag import index_papers
+            index_papers(papers, cfg, cache, progress=False)
+        except Exception:
+            pass  # auto-index failures are always silent
 
 
 _RAINBOW = ["red", "dark_orange", "green", "cyan", "blue", "magenta"]

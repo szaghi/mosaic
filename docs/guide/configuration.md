@@ -47,6 +47,15 @@ mosaic config --no-obsidian-wikilinks
 mosaic config --llm-provider openai --llm-api-key sk-... --llm-model gpt-4o-mini
 mosaic config --llm-provider openai --llm-base-url http://localhost:11434/v1 --llm-api-key ollama --llm-model llama3.2
 
+# --- RAG / embeddings ---
+mosaic config --embedding-model snowflake-arctic-embed2 \
+              --embedding-base-url http://localhost:11434/v1 \
+              --embedding-api-key ollama
+mosaic config --embedding-model text-embedding-3-small --embedding-api-key sk-...
+mosaic config --rag-top-k 15
+mosaic config --rag-auto-index           # silently index after every search
+mosaic config --no-rag-auto-index        # disable auto-index
+
 # Print current config
 mosaic config --show
 ```
@@ -220,6 +229,42 @@ model = ""
 #   LM Studio  → http://localhost:1234/v1
 #   llama.cpp  → http://localhost:8080/v1
 base_url = ""
+
+[rag]
+# Local RAG pipeline — requires: pipx inject mosaic-search sqlite-vec
+# See the RAG & Literature Analysis guide for full setup instructions.
+
+# Embedding model name — required for mosaic index / ask / chat.
+# Examples:
+#   Local (Ollama)  → snowflake-arctic-embed2, nomic-embed-text
+#   Cloud (OpenAI)  → text-embedding-3-small, text-embedding-3-large
+embedding_model = ""
+
+# Base URL for the embedding server.
+# Leave empty to use the official OpenAI API endpoint.
+# When empty, falls back to llm.base_url if set.
+# Examples:
+#   Ollama     → http://localhost:11434/v1
+#   LM Studio  → http://localhost:1234/v1
+embedding_base_url = ""
+
+# API key for the embedding server.
+# Any non-empty string works for local servers (e.g. "ollama", "lmstudio").
+# When empty, falls back to llm.api_key if set.
+embedding_api_key = ""
+
+# Provider — leave empty to inherit from [llm].
+# Set only if your embedding server differs from the generation server.
+embedding_provider = ""
+
+# Number of papers retrieved per RAG query.
+top_k = 10
+
+# Max characters per text chunk — reserved for future full-PDF indexing.
+chunk_size = 512
+
+# Set to true to silently index new papers after every search / get run.
+auto_index = false
 ```
 
 ## Source credentials

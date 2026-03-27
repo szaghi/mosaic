@@ -23,6 +23,18 @@ def _connect(db_path: str) -> sqlite3.Connection:
     return con
 
 
+def _load_sqlite_vec(con: sqlite3.Connection) -> bool:
+    """Try to load the sqlite-vec extension.  Returns True on success."""
+    try:
+        import sqlite_vec
+        con.enable_load_extension(True)
+        sqlite_vec.load(con)
+        con.enable_load_extension(False)
+        return True
+    except Exception:
+        return False
+
+
 def _init(con: sqlite3.Connection) -> None:
     con.executescript("""
         CREATE TABLE IF NOT EXISTS papers (
@@ -66,6 +78,10 @@ def _init(con: sqlite3.Connection) -> None:
             exported_at TEXT DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS exports_uid_fmt ON exports(uid, format, destination);
+        CREATE TABLE IF NOT EXISTS rag_meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
     """)
     con.commit()
     # Migrations — add columns introduced after the initial schema
@@ -193,6 +209,9 @@ class Cache:
         self._db_path = db_path
         self.con = _connect(db_path)
         self._lock = threading.RLock()
+        self._vec_available = _load_sqlite_vec(self.con)
+        # Alias for internal methods that use _conn naming convention
+        self._conn = self.con
 
     # ── Basic read/write ──────────────────────────────────────────────────────
 
@@ -389,3 +408,96 @@ class Cache:
                 "SELECT 1 FROM exports WHERE uid=? AND format=? AND destination=?",
                 (uid, fmt, destination),
             ).fetchone() is not None
+
+    # ── RAG / vector index ────────────────────────────────────────────────────
+
+    def get_rag_meta(self, key: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute("SELECT value FROM rag_meta WHERE key=?", (key,)).fetchone()
+            return row[0] if row else None
+
+    def set_rag_meta(self, key: str, value: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO rag_meta (key, value) VALUES (?, ?)", (key, value)
+            )
+            self._conn.commit()
+
+    def _ensure_vec_table(self, dim: int) -> None:
+        """Create vec_papers virtual table for given embedding dimension if not exists."""
+        if not self._vec_available:
+            raise RuntimeError(
+                "sqlite-vec is not installed. Run: pipx inject mosaic-search sqlite-vec"
+            )
+        self._conn.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_papers USING vec0(uid TEXT PRIMARY KEY, embedding float[{dim}])"
+        )
+        self._conn.commit()
+
+    def upsert_embedding(self, uid: str, embedding: list[float], dim: int) -> None:
+        with self._lock:
+            self._ensure_vec_table(dim)
+            self._conn.execute(
+                "INSERT OR REPLACE INTO vec_papers(uid, embedding) VALUES (?, ?)",
+                (uid, json.dumps(embedding))
+            )
+            self._conn.commit()
+
+    def upsert_embeddings_batch(self, rows: list[tuple[str, list[float]]], dim: int) -> None:
+        """Batch upsert for efficiency."""
+        with self._lock:
+            self._ensure_vec_table(dim)
+            self._conn.executemany(
+                "INSERT OR REPLACE INTO vec_papers(uid, embedding) VALUES (?, ?)",
+                [(uid, json.dumps(emb)) for uid, emb in rows]
+            )
+            self._conn.commit()
+
+    def get_indexed_uids(self) -> set[str]:
+        """Return set of UIDs already present in vec_papers."""
+        if not self._vec_available:
+            return set()
+        with self._lock:
+            try:
+                rows = self._conn.execute("SELECT uid FROM vec_papers").fetchall()
+                return {r[0] for r in rows}
+            except Exception:
+                return set()
+
+    def vector_search(self, query_embedding: list[float], k: int) -> list[str]:
+        """Return up to k UIDs ordered by cosine similarity (closest first)."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT uid
+                FROM vec_papers
+                WHERE embedding MATCH ?
+                  AND k = ?
+                ORDER BY distance
+                """,
+                (json.dumps(query_embedding), k),
+            ).fetchall()
+            return [r[0] for r in rows]
+
+    def rebuild_vec_table(self) -> None:
+        """Drop and recreate vec_papers (needed when embedding model changes)."""
+        with self._lock:
+            self._conn.execute("DROP TABLE IF EXISTS vec_papers")
+            self._conn.commit()
+
+    def get_papers_by_uids(self, uids: list[str]) -> list[Paper]:
+        """Fetch Paper objects for the given UIDs from the papers table."""
+        if not uids:
+            return []
+        with self._lock:
+            placeholders = ",".join("?" * len(uids))
+            rows = self._conn.execute(
+                f"SELECT * FROM papers WHERE uid IN ({placeholders})", uids
+            ).fetchall()
+            return [row_to_paper(r) for r in rows]
+
+    def get_all_papers(self) -> list[Paper]:
+        """Return all papers from the cache."""
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM papers").fetchall()
+            return [row_to_paper(r) for r in rows]

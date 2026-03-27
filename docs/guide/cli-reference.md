@@ -289,6 +289,117 @@ mosaic get --from refs.bib --download-dir ~/papers
 
 ---
 
+### `index`
+
+Build or update the local vector index for semantic search and RAG.
+
+```
+mosaic index [OPTIONS]
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--reindex` | | flag | off | Re-embed all papers, even already-indexed ones (required after changing the embedding model) |
+| `--query` | `-q` | str | | Embed only papers matching this cache query |
+| `--from` | | path | | Embed only papers listed in a `.bib` or `.csv` file |
+| `--batch-size` | | int | `96` | Texts sent per embedding API call |
+
+Requires `sqlite-vec`: `pipx inject mosaic-search sqlite-vec`.
+See the [RAG & Literature Analysis guide](./rag) for full setup instructions.
+
+**Examples:**
+
+```bash
+# Index all cached papers
+mosaic index
+
+# Re-index after switching embedding model
+mosaic index --reindex
+
+# Index only a topic subset
+mosaic index --query "protein folding"
+
+# Index papers from a BibTeX file
+mosaic index --from refs.bib
+```
+
+---
+
+### `ask`
+
+Ask a question about your indexed papers using RAG.
+
+```
+mosaic ask [OPTIONS] QUESTION
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--mode` | | str | `synthesis` | Prompt mode: `synthesis`, `gaps`, `compare`, `extract` |
+| `--query` | `-q` | str | | Pre-filter: restrict retrieval to papers matching this query |
+| `--from` | | path | | Pre-filter: restrict retrieval to papers from a `.bib`/`.csv` |
+| `--year` | `-y` | str | | Year filter (same formats as `search`) |
+| `--top` | `-n` | int | config | Override `rag.top_k` for this query |
+| `--output` | `-o` | path | | Save answer to `.md` or `.json` |
+| `--show-sources` | | flag | off | Print retrieved papers before the answer |
+
+**Prompt modes:**
+
+| Mode | What it produces |
+|------|-----------------|
+| `synthesis` | Comprehensive state-of-the-art summary with [n] citations |
+| `gaps` | Open problems, contradictions, and methodological limitations |
+| `compare` | Structured comparison: methods, datasets, metrics, results, trade-offs |
+| `extract` | Per-paper structured extraction: Task, Method, Dataset, Metric, Key Result |
+
+**Examples:**
+
+```bash
+mosaic ask "What are the main approaches to neural machine translation?"
+mosaic ask "Open problems in protein structure prediction" --mode gaps
+mosaic ask "transformer vs LSTM" --mode compare
+mosaic ask "diffusion model scaling" --year 2023-2025
+mosaic ask "RLHF" -n 20 --show-sources
+mosaic ask "attention mechanisms" --output analysis.md
+mosaic ask "CRISPR" --output crispr.json
+```
+
+---
+
+### `chat`
+
+Interactive multi-turn RAG session over your cached papers.
+
+```
+mosaic chat [OPTIONS]
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--query` | `-q` | str | | Narrow retrieval to papers matching this query |
+| `--from` | | path | | Narrow retrieval to papers from a `.bib`/`.csv` |
+| `--mode` | | str | `synthesis` | Default prompt mode for the session |
+
+**In-session commands:**
+
+| Command | Effect |
+|---------|--------|
+| `/mode <mode>` | Switch prompt mode (`synthesis`, `gaps`, `compare`, `extract`) |
+| `/sources` | Show the retrieval pool for the current session |
+| `/clear` | Clear conversation history |
+| `/quit` | Exit the chat |
+
+**Examples:**
+
+```bash
+mosaic chat
+mosaic chat -q "protein folding"
+mosaic chat --mode gaps
+mosaic chat --from refs.bib
+```
+
+---
+
 ### `ui`
 
 Launch the MOSAIC web interface in your browser.
@@ -366,6 +477,12 @@ mosaic config [OPTIONS]
 | `--llm-api-key TEXT` | str | API key for the LLM provider (any string for local servers) |
 | `--llm-model TEXT` | str | Model name; defaults to `gpt-4o-mini` (openai) or `claude-haiku-4-5-20251001` (anthropic) |
 | `--llm-base-url TEXT` | str | Base URL for a local OpenAI-compatible server (e.g. `http://localhost:11434/v1`) |
+| **RAG / Embeddings** | | |
+| `--embedding-model TEXT` | str | Embedding model name (e.g. `snowflake-arctic-embed2`, `text-embedding-3-small`) |
+| `--embedding-base-url TEXT` | str | Base URL for the embedding server (e.g. `http://localhost:11434/v1`) |
+| `--embedding-api-key TEXT` | str | API key for the embedding server (any string for local servers) |
+| `--rag-top-k INT` | int | Number of papers retrieved per RAG query (default: 10) |
+| `--rag-auto-index / --no-rag-auto-index` | bool | Auto-index new papers after each search/get run |
 
 **`--filename-pattern` placeholders:**
 
