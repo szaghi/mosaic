@@ -48,6 +48,21 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
+## Optional features
+
+The core install covers all 21 search sources and the full CLI. The table below lists every opt-in feature and the extra dependency it requires.
+
+| Feature | Extra | What it enables |
+|---------|-------|-----------------|
+| **Web UI** | `[ui]` | `mosaic ui` — browser-based interface |
+| **Local RAG** | `[rag]` | `mosaic index` / `mosaic ask` / `mosaic chat` — local LLM Q&A over your library |
+| **Browser sessions** | `[browser]` | `mosaic auth login` — download PDFs from sites requiring login |
+| **NotebookLM** | `[notebooklm]` | `mosaic notebook` — create Google NotebookLM notebooks from searches |
+
+Each feature has its own subsection below.
+
+---
+
 ## Optional: Web UI
 
 MOSAIC includes a browser-based graphical interface. Install the `ui` extra:
@@ -124,13 +139,45 @@ mosaic auth login elsevier --url https://www.sciencedirect.com/user/login
 
 See [Authenticated Access](./authenticated-access) for the full guide.
 
+## Optional: local RAG {#optional-rag}
+
+To use `mosaic index`, `mosaic ask`, and `mosaic chat` you need [sqlite-vec](https://github.com/asg017/sqlite-vec), a lightweight SQLite vector extension.
+
+```bash
+pipx inject mosaic-search sqlite-vec          # pipx
+uv tool inject mosaic-search sqlite-vec       # uv
+pip install 'mosaic-search[rag]'              # pip / venv
+```
+
+You also need an embedding model and a generation model. The easiest local setup uses [Ollama](https://ollama.com):
+
+```bash
+# Pull an embedding model
+ollama pull snowflake-arctic-embed2
+
+# Pull a generation model
+ollama pull llama3.2
+
+# Configure MOSAIC
+mosaic config \
+  --embedding-model snowflake-arctic-embed2 \
+  --embedding-base-url http://localhost:11434/v1 \
+  --embedding-api-key ollama \
+  --llm-provider openai \
+  --llm-base-url http://localhost:11434/v1 \
+  --llm-api-key ollama \
+  --llm-model llama3.2
+```
+
+Cloud OpenAI works too — see the [RAG guide](./rag) for all setup options, model recommendations, and usage examples.
+
 ## Verify
 
 ```bash
 mosaic --help
 ```
 
-You should see the available commands: `search`, `get`, `config`, and `notebook`.
+You should see the full list of commands: `search`, `get`, `index`, `ask`, `chat`, `config`, `cache`, `similar`, `notebook`, and more.
 
 ## Shell completion
 

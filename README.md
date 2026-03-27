@@ -10,8 +10,8 @@
 
 ### Multi-sOurce Scientific Article Indexer and Collector
 
-> Search, discover, and download scientific papers from multiple open databases — with a single command.
-> Send results directly to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
+> Search, discover, and download scientific papers from 21 sources — with a single command.
+> Ask questions, find gaps, and compare methods with fully local AI. Or send results to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
 
 [![Version](https://img.shields.io/pypi/v/mosaic-search?label=version)](https://pypi.org/project/mosaic-search/)
 [![Tests](https://github.com/szaghi/mosaic/actions/workflows/tests.yml/badge.svg)](https://github.com/szaghi/mosaic/actions/workflows/tests.yml)
@@ -33,7 +33,7 @@
 ## What MOSAIC does
 
 ```bash
-# Search dozens sources at once, deduplicate, download OA PDFs
+# Search 21 sources at once, deduplicate, download OA PDFs
 mosaic search "attention is all you need" --oa-only --download
 
 # Discover related literature from any DOI or arXiv ID — no query needed
@@ -41,6 +41,14 @@ mosaic similar 10.48550/arXiv.1706.03762 --sort citations
 
 # Bulk-download your entire Zotero / JabRef library
 mosaic get --from refs.bib --oa-only
+
+# Ask your paper library questions with local AI — no data leaves your machine
+mosaic index
+mosaic ask "What are the main approaches to high-order Maxwell solvers?" --show-sources
+mosaic chat   # interactive multi-turn session
+
+# Re-rank results by relevance to a query — BM25, instant, no model needed
+mosaic search "graph neural networks" --cached --sort relevance
 
 # Turn results into an AI-powered notebook: podcast, slides, quiz, mind map…
 mosaic notebook create "Transformers" --query "transformer architecture" --oa-only --podcast
@@ -51,7 +59,7 @@ mosaic notebook create "Transformers" --query "transformer architecture" --oa-on
 ## Authors
 
 **[Stefano Zaghi](https://github.com/szaghi)** · stefano.zaghi@gmail.com
-> *Creator & Maintainer*
+> *Chief Yak Shaver & Accidental Package Maintainer* — Fortran programmer who needed one paper, opened 21 browser tabs, and six months later found himself maintaining a Python library
 
 **[Andrea Giulianini](https://github.com/AndreaGiulianini)**
 >*Grand Pixel Overlord & Architect of the Sacred Button* — world-class web UI designer, responsible for making MOSAIC actually look good
@@ -66,6 +74,58 @@ mosaic notebook create "Transformers" --query "transformer architecture" --oa-on
 </div>
 
 Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://szaghi.github.io/mosaic/guide/web-ui)).
+
+## AI & Analysis
+
+### Local RAG — mosaic index / ask / chat
+
+Index your paper library once and ask questions in natural language. Get structured, cited answers synthesised from your own corpus. Four analysis modes: **synthesis** (state of the art), **gaps** (open problems), **compare** (side-by-side methods), **extract** (structured per-paper data). Runs entirely on your machine via Ollama or any OpenAI-compatible server — no data leaves your machine unless you configure a cloud provider.
+
+```bash
+# 1. Index all cached papers (incremental — already-indexed papers are skipped)
+mosaic index
+
+# 2. Single-shot analysis
+mosaic ask "What FDTD schemes achieve high-order accuracy in time?" --show-sources
+mosaic ask "What open problems remain in discontinuous Galerkin methods?" --mode gaps
+mosaic ask "Compare DDPM, DDIM, and score SDE approaches" --mode compare --output report.md
+
+# 3. Interactive multi-turn session
+mosaic chat
+```
+
+Requires `sqlite-vec` and an embedding model. See the [RAG guide](https://szaghi.github.io/mosaic/guide/rag) for Ollama setup, model selection, and all CLI options.
+
+---
+
+### Relevance ranking — `--sort relevance`
+
+Re-rank any result set by semantic similarity to the query. The default scorer is BM25 — no model, no network, instant. Configure an LLM for higher-quality scores.
+
+```bash
+# Re-rank live results from any source
+mosaic search "transformer architecture" --sort relevance
+
+# Load a bibliography once, re-rank locally forever — no network needed
+mosaic get --from refs.bib
+mosaic search "attention mechanism" --cached --sort relevance
+```
+
+See the [Relevance ranking guide](https://szaghi.github.io/mosaic/guide/relevance-ranking).
+
+---
+
+### NotebookLM — `mosaic notebook`
+
+Turn any search into a Google NotebookLM notebook with a single command. Queue podcast, video overview, slides, quiz, flashcards, FAQ, timeline, briefing doc, and mind map all at once.
+
+```bash
+mosaic notebook create "Transformers" --query "attention mechanism" --oa-only --podcast --briefing
+```
+
+Requires the `[notebooklm]` extra and a one-time Google sign-in. See the [NotebookLM guide](https://szaghi.github.io/mosaic/guide/notebooklm).
+
+---
 
 ## Key features
 
@@ -82,16 +142,14 @@ Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://sza
 <td><b>📤 Export anywhere</b><br><sub>Markdown · CSV · JSON · BibTeX · Zotero (local &amp; web API). <a href="https://szaghi.github.io/mosaic/guide/usage#save-results-to-a-file">Usage guide</a></sub></td>
 </tr>
 <tr>
+<td><b>🧠 Local RAG</b><br><sub>Ask questions, find gaps, compare methods — fully local with <code>sqlite-vec</code> + any Ollama model. <code>mosaic index</code> → <code>mosaic ask</code> → <code>mosaic chat</code>. No data leaves your machine. <a href="https://szaghi.github.io/mosaic/guide/rag">RAG guide</a></sub></td>
+<td><b>📊 Relevance ranking</b><br><sub>Re-rank results by semantic similarity with <code>--sort relevance</code>. BM25 by default — instant, no model needed. <a href="https://szaghi.github.io/mosaic/guide/relevance-ranking">Relevance ranking guide</a></sub></td>
 <td><b>🤖 NotebookLM integration</b><br><sub>Podcast · video · slides · quiz · mind map · flashcards · briefing — queued in one command with <code>mosaic notebook create</code>. <a href="https://szaghi.github.io/mosaic/guide/notebooklm">NotebookLM guide</a></sub></td>
-<td><b>⚡ Offline-first cache</b><br><sub>SQLite — repeated queries are instant, no re-fetching. <code>mosaic search "query" --cached</code> for instant offline search. Combine with <code>--sort relevance</code> to re-rank a local bibliography against any query — no network needed. <a href="https://szaghi.github.io/mosaic/guide/usage#offline--cached-search">Usage guide</a></sub></td>
+</tr>
+<tr>
+<td><b>⚡ Offline-first cache</b><br><sub>SQLite — repeated queries are instant, no re-fetching. <code>mosaic search "query" --cached</code> for instant offline search. <a href="https://szaghi.github.io/mosaic/guide/usage#offline--cached-search">Usage guide</a></sub></td>
 <td><b>🧩 Custom sources</b><br><sub>Wire any JSON REST API as a new source with a few lines of TOML — no Python needed. <a href="https://szaghi.github.io/mosaic/guide/custom-sources">Custom sources guide</a></sub></td>
-</tr>
-<tr>
-<td><b>🗒️ Obsidian integration</b><br><sub>Write paper notes directly into an Obsidian vault — YAML frontmatter, <code>&gt;[!abstract]</code> callout, metadata table, and <code>[[wikilinks]]</code> to related papers. Existing notes are never overwritten. <a href="https://szaghi.github.io/mosaic/guide/obsidian">Obsidian integration guide</a></sub></td>
-<td colspan="2"><b>🆓 FOSS licensing</b><br><sub>Available under your choice of <a href="licensing/LICENSE.gpl3.md">GPL v3</a>, <a href="licensing/LICENSE.bsd-2.md">BSD-2</a>, <a href="licensing/LICENSE.bsd-3.md">BSD-3</a>, or <a href="licensing/LICENSE.mit.md">MIT</a> — use whichever license best fits your project</sub></td>
-</tr>
-<tr>
-<td colspan="3"><b>🧠 Local RAG &amp; literature analysis</b><br><sub>Ask questions, find gaps, compare methods, and extract structured data — fully local with <code>sqlite-vec</code> + any Ollama model. <code>mosaic index</code> → <code>mosaic ask</code> → <code>mosaic chat</code>. No data leaves your machine. <a href="https://szaghi.github.io/mosaic/guide/rag">RAG guide</a></sub></td>
+<td><b>🗒️ Obsidian integration</b><br><sub>Write paper notes directly into an Obsidian vault — YAML frontmatter, <code>&gt;[!abstract]</code> callout, metadata table, and <code>[[wikilinks]]</code> to related papers. <a href="https://szaghi.github.io/mosaic/guide/obsidian">Obsidian integration guide</a></sub></td>
 </tr>
 <tr>
 <td colspan="3"><b>📚 Zotero integration</b><br><sub>Push results directly into your Zotero library — local API (Zotero running on your machine) or web API (<code>api.zotero.org</code>). Organise into collections, link downloaded PDFs as attachments, and sync across devices — all with a single <code>--zotero</code> flag. <a href="https://szaghi.github.io/mosaic/guide/zotero">Zotero integration guide</a></sub></td>
@@ -130,26 +188,28 @@ Launch with `mosaic ui` (requires `[ui]` extra — see [Web UI docs](https://sza
 
 ## Installation
 
-```bash
-# recommended — isolated install, globally available
-pipx install mosaic-search        # or: uv tool install mosaic-search
-```
+Requires **Python 3.11+**.
 
 ```bash
-# pip — must be inside a virtualenv (modern systems enforce PEP 668)
-python -m venv ~/.venvs/mosaic && source ~/.venvs/mosaic/bin/activate
-pip install mosaic-search
+pipx install mosaic-search        # recommended — isolated, globally available
+uv tool install mosaic-search     # fastest alternative
+pip install mosaic-search         # inside a virtualenv
 ```
 
-```bash
-# from source
-git clone https://github.com/szaghi/mosaic
-cd mosaic
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-```
+### Optional features
 
-> Requires Python 3.11+
+The core install covers all 21 search sources and the full CLI. Extra dependencies are only needed for specific opt-in features:
+
+| Feature | Extra | Install |
+|---------|-------|---------|
+| **Web UI** (`mosaic ui`) | `[ui]` | `pipx inject mosaic-search "flask>=3.0" "waitress>=3.0"` |
+| **Local RAG** (`mosaic index/ask/chat`) | `[rag]` | `pipx inject mosaic-search sqlite-vec` |
+| **Browser sessions** (`mosaic auth login`) | `[browser]` | `pipx inject mosaic-search "playwright>=1.40"` + `playwright install chromium` |
+| **NotebookLM** (`mosaic notebook`) | `[notebooklm]` | `pipx inject --include-apps mosaic-search "notebooklm-py[browser]"` + `playwright install chromium` |
+
+For `uv`: replace `pipx inject` with `uv tool inject`. For `pip`/venv: `pip install 'mosaic-search[extra]'`.
+
+Full setup instructions for each feature → [Installation guide](https://szaghi.github.io/mosaic/guide/installation).
 
 ## Quick Start
 

@@ -14,6 +14,9 @@ hero:
       text: Get Started
       link: /guide/installation
     - theme: alt
+      text: Local RAG Guide
+      link: /guide/rag
+    - theme: alt
       text: CLI Reference
       link: /guide/cli-reference
     - theme: alt
@@ -39,6 +42,15 @@ features:
   - icon: 🌐
     title: Web Interface
     details: Launch a browser-based UI with `mosaic ui`. Search, filter, download, and export from a responsive dashboard with dark mode, per-source progress, and keyboard shortcuts.
+  - icon: 🧠
+    title: Local RAG
+    details: Index your paper library and ask questions in natural language — synthesis, gap analysis, method comparison, structured extraction. Runs fully locally via Ollama or any OpenAI-compatible server. No data leaves your machine.
+  - icon: 📊
+    title: Relevance Ranking
+    details: Re-rank any result set by semantic similarity to your query with --sort relevance. BM25 by default (instant, no model). Optionally delegate to your configured LLM for higher-quality scores.
+  - icon: 🤖
+    title: NotebookLM Integration
+    details: Turn any search into a Google NotebookLM notebook — podcast, video overview, slides, quiz, flashcards, mind map, and briefing doc queued in one command with mosaic notebook create.
   - icon: 🔓
     title: Open & Extensible
     details: Each source is a small self-contained class. Adding a new database takes fewer than 50 lines of Python.
@@ -58,6 +70,57 @@ mosaic config --unpaywall-email you@example.com
 mosaic search "attention is all you need" --oa-only --download
 ```
 
+## AI features
+
+### Local RAG — mosaic index / ask / chat
+
+Index your cached papers once and interrogate your library in natural language. Four structured analysis modes produce cited, grounded answers:
+
+| Mode | What it produces |
+|------|-----------------|
+| `synthesis` | Comprehensive state-of-the-art summary |
+| `gaps` | Open problems, contradictions, methodological limitations |
+| `compare` | Side-by-side comparison of methods, datasets, metrics, results |
+| `extract` | Per-paper structured extraction: Task · Method · Dataset · Metric · Result |
+
+```bash
+pipx inject mosaic-search sqlite-vec          # install vector extension once
+
+mosaic index                                  # embed all cached papers
+mosaic ask "What are the main approaches to graph neural networks?" --show-sources
+mosaic ask "What open problems remain in protein structure prediction?" --mode gaps
+mosaic chat                                   # interactive multi-turn session
+```
+
+Runs entirely on your machine via [Ollama](https://ollama.com) or any OpenAI-compatible server. → [RAG guide](./guide/rag)
+
+---
+
+### Relevance ranking — `--sort relevance`
+
+Re-rank any result set by semantic similarity to the query. BM25 by default (no model, no network, instant). Configure your LLM for higher-quality scores.
+
+```bash
+mosaic search "diffusion models" --sort relevance          # live, ranked
+mosaic search "diffusion models" --cached --sort relevance # offline, from local cache
+```
+
+→ [Relevance ranking guide](./guide/relevance-ranking)
+
+---
+
+### NotebookLM — `mosaic notebook`
+
+Turn any search into a Google NotebookLM notebook in one command. Podcast, video overview, slides, quiz, flashcards, mind map, briefing doc — all queued automatically.
+
+```bash
+mosaic notebook create "Transformers" --query "attention mechanism" --oa-only --podcast --briefing
+```
+
+→ [NotebookLM guide](./guide/notebooklm)
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -76,7 +139,7 @@ flowchart LR
 ## Authors
 
 **[Stefano Zaghi](https://github.com/szaghi)** · stefano.zaghi@gmail.com
-> *Creator & Maintainer*
+> *Chief Yak Shaver & Accidental Package Maintainer* — Fortran programmer who needed one paper, opened 21 browser tabs, and six months later found himself maintaining a Python library
 
 **[Andrea Giulianini](https://github.com/AndreaGiulianini)**
 > *Grand Pixel Overlord & Architect of the Sacred Button* — world-class web UI designer, responsible for making MOSAIC actually look good
