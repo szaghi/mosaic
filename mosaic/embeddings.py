@@ -34,7 +34,7 @@ def embed_texts(texts: list[str], emb_cfg: dict) -> list[list[float]]:
             "Run: mosaic config --embedding-model <model-name>"
         )
 
-    url = f"{base_url}/embeddings" if base_url else "https://api.openai.com/v1/embeddings"
+    url = f"{base_url}/v1/embeddings" if base_url else "https://api.openai.com/v1/embeddings"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     all_embeddings: list[list[float]] = []
