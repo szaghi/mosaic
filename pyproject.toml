@@ -56,7 +56,7 @@ where = ["."]
 include = ["mosaic*"]
 
 [tool.setuptools.package-data]
-"mosaic" = ["ui/templates/**/*.html", "ui/static/**/*"]
+"mosaic" = ["ui/templates/**/*.html", "ui/static/**/*", "data/SKILL.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

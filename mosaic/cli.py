@@ -36,9 +36,11 @@ notebook_app = typer.Typer(
 )
 auth_app = typer.Typer(help="Manage browser sessions for authenticated PDF access.")
 cache_app = typer.Typer(help="Inspect and manage the local SQLite cache.")
+skill_app = typer.Typer(help="Manage the bundled MOSAIC Claude Code skill.")
 app.add_typer(notebook_app, name="notebook")
 app.add_typer(auth_app, name="auth")
 app.add_typer(cache_app, name="cache")
+app.add_typer(skill_app, name="skill")
 
 
 _verbose: bool = False
@@ -178,6 +180,13 @@ def search(
             help="Prefer rich cached records over freshly fetched data for known papers",
         ),
     ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Emit structured JSON to stdout instead of a table (useful for scripting and AI agents)",
+        ),
+    ] = False,
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -194,10 +203,14 @@ def search(
         if year_warning:
             rprint(f"[red]{year_warning}[/red]")
             raise typer.Exit(1)
-        rprint(f"[dim]Searching local cache for '{query}'…[/dim]")
+        if not json_output:
+            rprint(f"[dim]Searching local cache for '{query}'…[/dim]")
         papers = cache.search_local(query)
         if filters:
             papers = [p for p in papers if filters.match(p)]
+        if json_output:
+            _emit_json(papers, query=query)
+            return
         _post_process(
             papers,
             cfg,
@@ -245,10 +258,7 @@ def search(
 
     errors: list[str] = []
     search_stats: dict = {}
-    with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
-    ) as prog:
-        prog.add_task(f"Searching {len(sources)} source(s) for [bold]{query}[/bold]…")
+    if json_output:
         papers = search_all(
             sources,
             query,
@@ -257,13 +267,40 @@ def search(
             errors=errors,
             stats=search_stats,
         )
+    else:
+        with Progress(
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
+        ) as prog:
+            prog.add_task(f"Searching {len(sources)} source(s) for [bold]{query}[/bold]…")
+            papers = search_all(
+                sources,
+                query,
+                max_per_source=max_results,
+                filters=filters,
+                errors=errors,
+                stats=search_stats,
+            )
 
-    for err in errors:
-        warn(f"[dark_orange]Warning:[/dark_orange] {err}")
+    if not json_output:
+        for err in errors:
+            warn(f"[dark_orange]Warning:[/dark_orange] {err}")
 
     if prefer_cache:
         rich = cache.rich_uids()
         papers = [cache.get_by_uid(p.uid) or p if p.uid in rich else p for p in papers]
+
+    if json_output:
+        papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by if sort_by != "relevance" else "")
+        if sort_by == "relevance":
+            papers = sort_by_relevance(query, papers, cfg)
+        for p in papers:
+            cache.save(p)
+        if output:
+            from mosaic.exporter import export
+            for path in list(output):
+                export(papers, path)
+        _emit_json(papers, query=query, errors=errors)
+        return
 
     if stats:
         _print_search_stats(search_stats, filters)
@@ -342,6 +379,13 @@ def similar(
         str,
         typer.Option("--obsidian-folder", help="Override Obsidian vault subfolder for this run"),
     ] = "",
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Emit structured JSON to stdout instead of a table (useful for scripting and AI agents)",
+        ),
+    ] = False,
 ):
     """Find papers similar to a given paper by DOI or arXiv ID."""
     from mosaic.similar import find_similar
@@ -354,10 +398,7 @@ def similar(
     oa_email = cfg.get("unpaywall", {}).get("email", "")
     ss_api_key = cfg.get("sources", {}).get("semantic_scholar", {}).get("api_key", "")
 
-    with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
-    ) as prog:
-        prog.add_task(f"Finding papers similar to [bold]{identifier}[/bold]…")
+    if json_output:
         try:
             seed_title, papers = find_similar(
                 identifier,
@@ -368,11 +409,43 @@ def similar(
         except Exception as e:
             rprint(f"[red]Error looking up paper: {e}[/red]")
             raise typer.Exit(1) from None
+    else:
+        with Progress(
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
+        ) as prog:
+            prog.add_task(f"Finding papers similar to [bold]{identifier}[/bold]…")
+            try:
+                seed_title, papers = find_similar(
+                    identifier,
+                    max_results=max_results,
+                    oa_email=oa_email,
+                    ss_api_key=ss_api_key,
+                )
+            except Exception as e:
+                rprint(f"[red]Error looking up paper: {e}[/red]")
+                raise typer.Exit(1) from None
 
     if seed_title is None:
+        if json_output:
+            import json as _json
+            print(_json.dumps({"status": "error", "query": identifier, "errors": ["Paper not found"]}, indent=2))
+            raise typer.Exit(1)
         rprint(f"[red]Paper not found:[/red] {identifier}")
         rprint("[dim]Check that the DOI or arXiv ID is correct.[/dim]")
         raise typer.Exit(1)
+
+    if json_output:
+        papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by if sort_by != "relevance" else "")
+        if sort_by == "relevance":
+            papers = sort_by_relevance(seed_title or identifier, papers, cfg)
+        for p in papers:
+            cache.save(p)
+        if output:
+            from mosaic.exporter import export
+            for path in list(output):
+                export(papers, path)
+        _emit_json(papers, query=identifier, seed=seed_title)
+        return
 
     rprint(f"[bold]Similar to:[/bold] {seed_title}\n")
 
@@ -1058,6 +1131,83 @@ def config(  # noqa: PLR0912, PLR0915
 
     if show or not _any_changed:
         console.print_json(data=cfg)
+
+
+# ---------------------------------------------------------------------------
+# Skill subcommand
+# ---------------------------------------------------------------------------
+
+@skill_app.command("install")
+def skill_install(
+    global_: Annotated[
+        bool,
+        typer.Option("--global", help="Install to ~/.claude/skills/ (available from all projects)"),
+    ] = False,
+) -> None:
+    """Install the bundled MOSAIC Claude Code skill.
+
+    By default installs to ./.claude/skills/mosaic/ in the current directory,
+    making /mosaic available as a Claude Code slash command for that project.
+    Use --global to install to ~/.claude/skills/mosaic/ for all projects.
+    """
+    import importlib.resources as _res
+
+    try:
+        skill_text = (_res.files("mosaic.data") / "SKILL.md").read_text(encoding="utf-8")
+    except Exception as e:
+        rprint(f"[red]Could not read bundled skill: {e}[/red]")
+        raise typer.Exit(1)
+
+    target = (Path.home() if global_ else Path(".")) / ".claude" / "skills" / "mosaic" / "SKILL.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(skill_text, encoding="utf-8")
+    rprint(f"[green]Skill installed to[/green] {target.resolve()}")
+    rprint("[dim]Open a new Claude Code session to load the skill, then use /mosaic.[/dim]")
+
+
+@skill_app.command("show")
+def skill_show() -> None:
+    """Print the bundled MOSAIC Claude Code skill content to stdout."""
+    import importlib.resources as _res
+
+    try:
+        skill_text = (_res.files("mosaic.data") / "SKILL.md").read_text(encoding="utf-8")
+        print(skill_text)
+    except Exception as e:
+        rprint(f"[red]Could not read bundled skill: {e}[/red]")
+        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
+# JSON helpers
+# ---------------------------------------------------------------------------
+
+def _emit_json(
+    papers: list,
+    *,
+    query: str = "",
+    seed: str | None = None,
+    errors: list[str] | None = None,
+) -> None:
+    """Serialise *papers* as a JSON object and print to stdout."""
+    import dataclasses
+    import json as _json
+
+    def _paper_dict(p) -> dict:
+        d = dataclasses.asdict(p)
+        d["uid"] = p.uid
+        return d
+
+    result: dict = {
+        "status": "ok",
+        "query": query,
+        "count": len(papers),
+        "papers": [_paper_dict(p) for p in papers],
+        "errors": errors or [],
+    }
+    if seed is not None:
+        result["seed"] = seed
+    print(_json.dumps(result, indent=2, default=str))
 
 
 def _bulk_download(

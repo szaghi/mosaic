@@ -52,6 +52,13 @@ mosaic search "graph neural networks" --cached --sort relevance
 
 # Turn results into an AI-powered notebook: podcast, slides, quiz, mind map…
 mosaic notebook create "Transformers" --query "transformer architecture" --oa-only --podcast
+
+# Structured JSON output — pipe to jq, feed AI agents, use in CI pipelines
+mosaic search "diffusion models" --max 50 --oa-only --json | jq '.papers[].doi'
+mosaic similar 10.48550/arXiv.1706.03762 --json | jq '.count'
+
+# Install the bundled Claude Code skill — then ask Claude to build your bibliography
+mosaic skill install   # → /mosaic is available in Claude Code
 ```
 
 ![MOSAIC quick search demo](docs/public/gifs/01_quick_search.gif)
@@ -127,6 +134,49 @@ Requires the `[notebooklm]` extra and a one-time Google sign-in. See the [Notebo
 
 ---
 
+### Claude Code Skill & AI agent mode — `mosaic skill install`
+
+MOSAIC ships a bundled [Claude Code](https://claude.ai/claude-code) skill. Install it once and the `/mosaic` slash command gives any Claude Code session expert knowledge of every command, source, filter, export format, and scripting pattern — so you can describe your bibliography goal in plain English and let the AI build and run the right commands for you.
+
+```bash
+# Install into the current project's .claude/skills/ directory
+mosaic skill install
+
+# Or globally for all your projects
+mosaic skill install --global
+
+# Inspect the bundled skill content
+mosaic skill show
+```
+
+All `search` and `similar` commands support `--json` — a clean `{status, query, count, papers[], errors[]}` envelope to stdout, designed for piping, scripting, and CI:
+
+```bash
+# Pipe to jq
+mosaic search "FDTD high-order" --max 30 --json | jq -r '.papers[] | "\(.year)  \(.doi)"'
+
+# Combine file export with stdout JSON in one run
+mosaic search "neural ODEs" --json --output refs.bib
+
+# Full Python agent pipeline
+python3 - <<'EOF'
+import json, subprocess
+
+def mosaic(args):
+    r = subprocess.run(["mosaic"] + args, capture_output=True, text=True)
+    return json.loads(r.stdout)
+
+papers = mosaic(["search", "transformer attention", "--max", "20", "--oa-only", "--json"])["papers"]
+top = max(papers, key=lambda p: p["citation_count"] or 0)
+related = mosaic(["similar", top["doi"], "--max", "10", "--json"])
+print(f"Seed: {top['title']}\nFound {related['count']} related papers")
+EOF
+```
+
+See the [Agent Workflows guide](https://szaghi.github.io/mosaic/guide/agent-workflows).
+
+---
+
 ## Key features
 
 <div>
@@ -153,6 +203,9 @@ Requires the `[notebooklm]` extra and a one-time Google sign-in. See the [Notebo
 </tr>
 <tr>
 <td colspan="3"><b>📚 Zotero integration</b><br><sub>Push results directly into your Zotero library — local API (Zotero running on your machine) or web API (<code>api.zotero.org</code>). Organise into collections, link downloaded PDFs as attachments, and sync across devices — all with a single <code>--zotero</code> flag. <a href="https://szaghi.github.io/mosaic/guide/zotero">Zotero integration guide</a></sub></td>
+</tr>
+<tr>
+<td colspan="3"><b>🦾 Claude Code Skill &amp; AI agent mode</b><br><sub>Install the bundled Claude Code skill with <code>mosaic skill install</code> — gives Claude Code expert knowledge of every command. <code>--json</code> on <code>search</code>/<code>similar</code> emits a structured JSON envelope to stdout for piping, scripting, and CI. <a href="https://szaghi.github.io/mosaic/guide/agent-workflows">Agent workflows guide</a></sub></td>
 </tr>
 </table>
 </div>

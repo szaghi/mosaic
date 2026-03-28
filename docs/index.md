@@ -14,11 +14,11 @@ hero:
       text: Get Started
       link: /guide/installation
     - theme: alt
+      text: Agent Workflows
+      link: /guide/agent-workflows
+    - theme: alt
       text: Local RAG Guide
       link: /guide/rag
-    - theme: alt
-      text: CLI Reference
-      link: /guide/cli-reference
     - theme: alt
       text: View on GitHub
       link: https://github.com/szaghi/mosaic
@@ -51,6 +51,9 @@ features:
   - icon: 🤖
     title: NotebookLM Integration
     details: Turn any search into a Google NotebookLM notebook — podcast, video overview, slides, quiz, flashcards, mind map, and briefing doc queued in one command with mosaic notebook create.
+  - icon: 🦾
+    title: Claude Code Skill & AI Agent Mode
+    details: Install the bundled Claude Code skill with `mosaic skill install` — gives Claude Code full knowledge of every command, source, and option. The `--json` flag on search and similar emits a structured JSON envelope to stdout for piping, scripting, and CI pipelines.
   - icon: 🔓
     title: Open & Extensible
     details: Each source is a small self-contained class. Adding a new database takes fewer than 50 lines of Python.
@@ -118,6 +121,37 @@ mosaic notebook create "Transformers" --query "attention mechanism" --oa-only --
 ```
 
 → [NotebookLM guide](./guide/notebooklm)
+
+---
+
+### Claude Code Skill & AI agent mode — `mosaic skill install`
+
+MOSAIC ships a bundled [Claude Code](https://claude.ai/claude-code) skill. Install it once and the
+`/mosaic` slash command gives Claude Code expert knowledge of every command, source shorthand,
+filter, export format, and scripting pattern — so you can describe your bibliography goal in plain
+English and let Claude Code build and run the right commands for you.
+
+```bash
+# Install into the current project's .claude/skills/ directory
+mosaic skill install
+
+# Or globally, for all your projects
+mosaic skill install --global
+```
+
+All `search` and `similar` commands support `--json` for structured stdout — a clean
+`{status, query, count, papers[], errors[]}` envelope designed for piping, agent scripts, and CI:
+
+```bash
+# Pipe directly to jq
+mosaic search "attention mechanism" --max 30 --oa-only --json \
+  | jq -r '.papers[] | "\(.year)  \(.doi)  \(.title)"'
+
+# Combine file export and stdout JSON in one run
+mosaic search "FDTD methods" --json --output refs.bib
+```
+
+→ [Agent Workflows guide](./guide/agent-workflows)
 
 ---
 

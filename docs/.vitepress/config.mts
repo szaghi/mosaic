@@ -24,6 +24,7 @@ export default withMermaid({
       {
         text: 'AI & Analysis',
         items: [
+          { text: 'Agent Workflows & Claude Code Skill', link: '/guide/agent-workflows' },
           { text: 'Local RAG',           link: '/guide/rag' },
           { text: 'Relevance Ranking',   link: '/guide/relevance-ranking' },
           { text: 'NotebookLM',          link: '/guide/notebooklm' },
@@ -71,6 +72,7 @@ export default withMermaid({
         {
           text: 'AI & Analysis',
           items: [
+            { text: 'Agent Workflows & Claude Code Skill', link: '/guide/agent-workflows' },
             { text: 'Local RAG',         link: '/guide/rag' },
             { text: 'Relevance Ranking', link: '/guide/relevance-ranking' },
             { text: 'NotebookLM',        link: '/guide/notebooklm' },
