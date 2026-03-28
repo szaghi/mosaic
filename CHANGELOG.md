@@ -4,6 +4,33 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.4.0] — 2026-03-28
+### Added
+- **exporter**: Add RIS export format (.ris)
+
+- **ranking**: Add --sort relevance with BM25 and local/cloud LLM scoring
+
+- **config**: Expose all config keys as CLI flags on mosaic config
+
+- **rag**: Add local RAG pipeline with mosaic index/ask/chat
+
+- **ui**: Bring web UI to feature parity with CLI (issue #37)
+
+- **cli**: Add --json output, Claude Code skill, and agent workflow docs
+
+
+### Documentation
+- **gifs**: Add 5 new tutorial GIFs and embed them in guide pages
+
+- Surface AI features in README, VitePress hero, and nav
+
+- **ui**: Add standalone app download guide and video tutorial
+
+
+### Fixed
+- **rag**: Append /v1/embeddings to base_url for local servers
+
+
 ## [1.3.16] — 2026-03-21
 ### Added
 - **cache**: Add smart upsert enrichment, cache management CLI, and --prefer-cache
