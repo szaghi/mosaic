@@ -4,6 +4,20 @@ title: Installation
 
 # Installation
 
+## Standalone App — no Python required
+
+The fastest way to get started is to download a pre-built standalone app from the [GitHub Releases page](https://github.com/szaghi/mosaic/releases). It bundles everything (Python runtime, Flask, all dependencies) into a single archive — just unzip and run.
+
+| Platform | Asset | Requirements |
+|----------|-------|--------------|
+| Windows | `MOSAIC-Windows.zip` | Windows 10/11 (x86-64) |
+| macOS (Apple Silicon) | `MOSAIC-macOS-arm64.zip` | macOS 12+ |
+| Linux | `MOSAIC-Linux.tar.gz` | x86-64, glibc 2.31+ |
+
+See the [Web UI guide](./web-ui#standalone-desktop-app-windows-macos-linux) for download instructions and a video walkthrough.
+
+---
+
 ## Requirements
 
 - Python 3.11 or newer

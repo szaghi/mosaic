@@ -188,6 +188,12 @@ Requires the `[notebooklm]` extra and a one-time Google sign-in. See the [Notebo
 
 ## Installation
 
+### Standalone app — no Python required
+
+The easiest way to get started on Windows, macOS, or Linux: download the pre-built standalone app from the [GitHub Releases page](https://github.com/szaghi/mosaic/releases). Unzip and run — no Python, no pip, no setup. See the [Web UI guide](https://szaghi.github.io/mosaic/guide/web-ui#standalone-desktop-app-windows-macos-linux) for a step-by-step walkthrough.
+
+### From PyPI
+
 Requires **Python 3.11+**.
 
 ```bash

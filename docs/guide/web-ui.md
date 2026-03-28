@@ -101,15 +101,25 @@ Click the **&#9681;** icon in the navigation bar to cycle between auto, light, a
 
 ## Standalone Desktop App (Windows / macOS / Linux)
 
-Pre-built standalone executables are attached to each [GitHub release](https://github.com/szaghi/mosaic/releases) — no Python installation required.
+Pre-built standalone executables are attached to each [GitHub release](https://github.com/szaghi/mosaic/releases) — **no Python installation required**. This is the easiest way to get started on any platform.
 
-| Platform | Download | Notes |
-|----------|----------|-------|
-| Windows | `MOSAIC-Windows.zip` | No extra runtime required |
-| macOS (Apple Silicon) | `MOSAIC-macOS-arm64.zip` | macOS 12+ |
-| Linux | `MOSAIC-Linux.tar.gz` | x86-64, glibc 2.31+ |
+| Platform | Asset | Requirements |
+|----------|-------|--------------|
+| Windows | `MOSAIC-Windows.zip` | Windows 10/11 (x86-64) |
+| macOS (Apple Silicon) | `MOSAIC-macOS-arm64.zip` | macOS 12+ (Apple Silicon) |
+| Linux | `MOSAIC-Linux.tar.gz` | x86-64, glibc 2.31+ (Ubuntu 20.04+, Debian 11+) |
 
-The app starts a local server and opens your **default browser** automatically. No installation, no extra runtimes needed.
+The app bundles its own Python runtime and Flask server. It starts a local server on port 5555 and opens your **default browser** automatically. No installation step, no extra runtimes needed.
+
+### How to download from GitHub
+
+1. Open the [Releases page](https://github.com/szaghi/mosaic/releases) and click the latest release.
+2. Scroll down to **Assets** at the bottom of the release notes.
+3. Click the archive for your platform (`MOSAIC-Windows.zip`, `MOSAIC-macOS-arm64.zip`, or `MOSAIC-Linux.tar.gz`) to download it.
+
+The video below shows the full download-and-run flow on Windows:
+
+<video src="/mosaic-release-win-download.mp4" controls style="width:100%;border-radius:8px;margin:1rem 0"></video>
 
 ### Extract and run
 
@@ -126,6 +136,8 @@ open MOSAIC.app   # or double-click in Finder
 tar xzf MOSAIC-Linux.tar.gz
 ./MOSAIC/MOSAIC
 ```
+
+> **Windows SmartScreen / macOS Gatekeeper** — because the app is not yet code-signed, your OS may warn you the first time. On Windows click **More info → Run anyway**; on macOS right-click the app and choose **Open**.
 
 ## Architecture Notes
 
