@@ -522,7 +522,8 @@ class Cache:
         with self._lock:
             placeholders = ",".join("?" * len(uids))
             rows = self._conn.execute(
-                f"SELECT * FROM papers WHERE uid IN ({placeholders})", uids
+                f"SELECT * FROM papers WHERE uid IN ({placeholders})",  # noqa: S608
+                uids,
             ).fetchall()
             return [row_to_paper(r) for r in rows]
 
@@ -567,11 +568,11 @@ class Cache:
             placeholders = ",".join("?" * len(candidate_uids))
             candidates = list(candidate_uids)
             outgoing = self._conn.execute(
-                f"SELECT COUNT(*) FROM paper_citations WHERE source_uid=? AND target_uid IN ({placeholders})",
+                f"SELECT COUNT(*) FROM paper_citations WHERE source_uid=? AND target_uid IN ({placeholders})",  # noqa: S608
                 [uid, *candidates],
             ).fetchone()[0]
             incoming = self._conn.execute(
-                f"SELECT COUNT(*) FROM paper_citations WHERE target_uid=? AND source_uid IN ({placeholders})",
+                f"SELECT COUNT(*) FROM paper_citations WHERE target_uid=? AND source_uid IN ({placeholders})",  # noqa: S608
                 [uid, *candidates],
             ).fetchone()[0]
             return outgoing + incoming

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from mosaic.citations.base import BaseCitationProvider
 from mosaic.citations.crossref import CrossRefCitationProvider
-from mosaic.citations.opencitations import OpenCitationsCitationProvider
 from mosaic.citations.openalex import OpenAlexCitationProvider
+from mosaic.citations.opencitations import OpenCitationsCitationProvider
 
 # All known providers in default priority order.
 _DEFAULT_PROVIDERS = ["openalex", "crossref"]

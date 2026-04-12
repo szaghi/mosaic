@@ -1,13 +1,12 @@
 """Tests for mosaic/ranking.py and services.sort_by_relevance."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from mosaic.models import Paper
 from mosaic.ranking import _bm25_score, _parse_float_list, score_papers
 from mosaic.services import sort_by_relevance
-
 
 # ---------------------------------------------------------------------------
 # helpers

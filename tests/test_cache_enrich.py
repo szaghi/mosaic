@@ -1,11 +1,10 @@
 """Phase 3 — smart upsert enrichment rules."""
 
-import pytest
 from mosaic.models import Paper
 
 
 def _p(**kw):
-    defaults = dict(title="Test Paper", doi="10.1/test", authors=["Alice"], year=2020, source="arXiv")
+    defaults = {"title": "Test Paper", "doi": "10.1/test", "authors": ["Alice"], "year": 2020, "source": "arXiv"}
     defaults.update(kw)
     return Paper(**defaults)
 

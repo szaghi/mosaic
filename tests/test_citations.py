@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
-
-from mosaic.citations.base import BaseCitationProvider
 from mosaic.citations.crossref import CrossRefCitationProvider
-from mosaic.citations.opencitations import OpenCitationsCitationProvider
 from mosaic.citations.openalex import OpenAlexCitationProvider, _item_to_uid
+from mosaic.citations.opencitations import OpenCitationsCitationProvider
 from mosaic.citations.registry import build_citation_providers
 from mosaic.db import Cache
 from mosaic.models import Paper
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -531,9 +527,9 @@ class TestGraphBoostedRetrieval:
         """Paper with more citation links should rise above a paper with fewer.
 
         With edges p3→p1 and p3→p2 and alpha=2.0:
-          score(p1, rank=0) = 1/1 × (1 + 2×1) = 3.0  (cited by p3)
-          score(p3, rank=2) = 1/3 × (1 + 2×2) ≈ 1.67  (cites both p1 and p2)
-          score(p2, rank=1) = 1/2 × (1 + 2×1) = 1.5   (cited by p3)
+          score(p1, rank=0) = 1/1 * (1 + 2*1) = 3.0  (cited by p3)
+          score(p3, rank=2) = 1/3 * (1 + 2*2) ≈ 1.67  (cites both p1 and p2)
+          score(p2, rank=1) = 1/2 * (1 + 2*1) = 1.5   (cited by p3)
         Expected order: p1 > p3 > p2 — p3 overtakes p2 despite starting lower.
         """
         from mosaic.rag import _citation_boost
@@ -607,7 +603,7 @@ class TestGraphBoostedRetrieval:
         fake_emb = [0.1] * 3
 
         with _patch("mosaic.embeddings.embed_texts", return_value=[fake_emb]):
-            with _patch.object(cache, "vector_search", return_value=[p.uid]) as mock_vs:
+            with _patch.object(cache, "vector_search", return_value=[p.uid]):
                 with _patch("mosaic.rag._citation_boost", return_value=[p.uid]) as mock_boost:
                     retrieve("hello", cfg, cache)
 

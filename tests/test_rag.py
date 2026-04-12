@@ -9,7 +9,6 @@ import pytest
 from mosaic.models import Paper
 from mosaic.rag import _build_context
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -43,7 +43,7 @@ def _bm25_score(query: str, papers: list[Paper]) -> list[Paper]:
     bm25 = BM25Plus(tokenised)
     scores = bm25.get_scores(query.lower().split())
     max_s = float(scores.max()) if scores.max() > 0 else 1.0
-    for paper, s in zip(papers, scores):
+    for paper, s in zip(papers, scores, strict=True):
         paper.relevance_score = round(max(float(s) / max_s, 0.0), 4)
     return papers
 
@@ -87,7 +87,7 @@ def _llm_score(query: str, papers: list[Paper], llm_cfg: dict) -> list[Paper]:
             raw_scores = _call_llm(
                 provider, api_key, model, prompt, expected=len(batch), base_url=base_url
             )
-            for paper, s in zip(batch, raw_scores):
+            for paper, s in zip(batch, raw_scores, strict=True):
                 paper.relevance_score = round(float(s), 4)
             progress.advance(task, len(batch))
 

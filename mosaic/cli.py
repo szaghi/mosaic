@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, List, Optional
+from typing import Annotated
 
 import typer
-from rich import box, print as rprint
+from rich import box
+from rich import print as rprint
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
@@ -16,9 +17,9 @@ import mosaic.config as cfg_mod
 from mosaic.config import apply_api_keys
 from mosaic.db import Cache
 from mosaic.downloader import download as dl_paper
+from mosaic.errors import set_verbose_logging
 from mosaic.search import search_all
 from mosaic.services import build_filters, filter_papers, sort_by_relevance
-from mosaic.errors import set_verbose_logging
 from mosaic.source_registry import SRC_MAP, build_sources
 
 
@@ -567,7 +568,7 @@ def get(
 def index(
     reindex: Annotated[bool, typer.Option("--reindex", help="Re-embed all papers, even already-indexed ones")] = False,
     query: Annotated[str, typer.Option("--query", "-q", help="Embed only papers matching this query")] = "",
-    from_file: Annotated[Optional[Path], typer.Option("--from", help="Embed only papers from a .bib or .csv file")] = None,
+    from_file: Annotated[Path | None, typer.Option("--from", help="Embed only papers from a .bib or .csv file")] = None,
     batch_size: Annotated[int, typer.Option("--batch-size", help="Texts per embedding API call")] = 96,
     enrich_citations: Annotated[
         bool,
@@ -612,7 +613,7 @@ def index(
         rprint(f"[green]Indexed {newly} new paper(s).[/green] {skipped} already indexed.")
     except ValueError as e:
         rprint(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # ── Citation enrichment ───────────────────────────────────────────────────
     if enrich_citations or cfg.get("rag", {}).get("citations", {}).get("enabled", False):
@@ -633,22 +634,23 @@ def ask(
     question: Annotated[str, typer.Argument(help="Question or topic to analyse")],
     mode: Annotated[str, typer.Option("--mode", help="synthesis (default), gaps, compare, extract")] = "synthesis",
     query: Annotated[str, typer.Option("--query", "-q", help="Pre-filter: restrict to papers matching this FTS query")] = "",
-    from_file: Annotated[Optional[Path], typer.Option("--from", help="Pre-filter: restrict to papers from a .bib or .csv file")] = None,
-    year: Annotated[Optional[str], typer.Option("--year", "-y", help="Year or range filter (e.g. 2020-2024)")] = None,
-    n: Annotated[Optional[int], typer.Option("-n", "--top", help="Override rag.top_k for this query")] = None,
-    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Write answer to file (.md or .json)")] = None,
+    from_file: Annotated[Path | None, typer.Option("--from", help="Pre-filter: restrict to papers from a .bib or .csv file")] = None,
+    year: Annotated[str | None, typer.Option("--year", "-y", help="Year or range filter (e.g. 2020-2024)")] = None,
+    n: Annotated[int | None, typer.Option("-n", "--top", help="Override rag.top_k for this query")] = None,
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Write answer to file (.md or .json)")] = None,
     show_sources: Annotated[bool, typer.Option("--show-sources", help="Print retrieved papers before the answer")] = False,
 ):
     """Ask a question about your cached papers using RAG."""
-    from mosaic.rag import ask as rag_ask
     from rich.markdown import Markdown
     from rich.rule import Rule
+
+    from mosaic.rag import ask as rag_ask
 
     cfg = cfg_mod.load()
     cache = Cache(cfg["db_path"])
 
     # Build pre_filter from --query or --from
-    pre_filter: Optional[list[str]] = None
+    pre_filter: list[str] | None = None
     if from_file:
         from mosaic.bulk import read_dois
         dois = read_dois(from_file)
@@ -686,7 +688,7 @@ def ask(
         answer, papers = rag_ask(question, cfg, cache, mode=mode, k=n, pre_filter=pre_filter)
     except ValueError as e:
         rprint(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if show_sources:
         rprint(f"\n[bold]Sources retrieved ({len(papers)}):[/bold]")
@@ -731,19 +733,20 @@ def ask(
 @app.command()
 def chat(
     query: Annotated[str, typer.Option("--query", "-q", help="Narrow retrieval pool to papers matching this query")] = "",
-    from_file: Annotated[Optional[Path], typer.Option("--from", help="Narrow retrieval pool to papers from a .bib or .csv file")] = None,
+    from_file: Annotated[Path | None, typer.Option("--from", help="Narrow retrieval pool to papers from a .bib or .csv file")] = None,
     mode: Annotated[str, typer.Option("--mode", help="Default prompt mode: synthesis, gaps, compare, extract")] = "synthesis",
 ):
     """Interactive RAG chat session over your cached papers."""
-    from mosaic.rag import _PROMPTS, _build_context, retrieve
     from rich.markdown import Markdown
     from rich.rule import Rule
+
+    from mosaic.rag import _PROMPTS, _build_context, retrieve
 
     cfg = cfg_mod.load()
     cache = Cache(cfg["db_path"])
 
     # Build pre_filter
-    pre_filter: Optional[list[str]] = None
+    pre_filter: list[str] | None = None
     if from_file:
         from mosaic.bulk import read_dois
         dois = read_dois(from_file)
@@ -778,7 +781,7 @@ def chat(
             if cmd == "/quit":
                 rprint("[dim]Goodbye.[/dim]")
                 break
-            elif cmd == "/clear":
+            if cmd == "/clear":
                 history.clear()
                 rprint("[dim]Conversation history cleared.[/dim]")
             elif cmd == "/mode":
@@ -882,7 +885,7 @@ def chat(
 
 
 @app.command()
-def config(  # noqa: PLR0912, PLR0915
+def config(
     show: Annotated[bool, typer.Option("--show", help="Print current config")] = False,
     # --- API keys ---
     elsevier_key: Annotated[str, typer.Option(help="Set Elsevier / ScienceDirect API key")] = "",
@@ -907,19 +910,19 @@ def config(  # noqa: PLR0912, PLR0915
         ),
     ] = "",
     rate_limit_delay: Annotated[
-        Optional[float],
+        float | None,
         typer.Option(help="Set default delay between API calls in seconds"),
     ] = None,
     # --- source enable/disable ---
     enable_source: Annotated[
-        Optional[List[str]],
+        list[str] | None,
         typer.Option(
             "--enable-source",
             help="Enable a source by name (repeatable). Known names: arxiv, semantic_scholar, sciencedirect, doaj, europepmc, openalex, base, springer_api, core, nasa_ads, ieee, zenodo, crossref, dblp, hal, pubmed, pmc, biorxiv, pedro, scopus",
         ),
     ] = None,
     disable_source: Annotated[
-        Optional[List[str]],
+        list[str] | None,
         typer.Option(
             "--disable-source",
             help="Disable a source by name (repeatable). Same names as --enable-source",
@@ -933,14 +936,14 @@ def config(  # noqa: PLR0912, PLR0915
         typer.Option(help="Set Obsidian note filename pattern (placeholders: {year}, {author}, {title})"),
     ] = "",
     obsidian_tag: Annotated[
-        Optional[List[str]],
+        list[str] | None,
         typer.Option(
             "--obsidian-tag",
             help="Set Obsidian tags (repeatable, replaces existing list). E.g. --obsidian-tag paper --obsidian-tag science",
         ),
     ] = None,
     obsidian_wikilinks: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option(
             "--obsidian-wikilinks/--no-obsidian-wikilinks",
             help="Use Obsidian [[wikilinks]] in generated notes",
@@ -948,21 +951,21 @@ def config(  # noqa: PLR0912, PLR0915
     ] = None,
     # --- pedro ---
     pedro_fair_use: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option(
             "--pedro-fair-use/--no-pedro-fair-use",
             help="Acknowledge PEDro fair-use policy to enable the source",
         ),
     ] = None,
     pedro_fetch_details: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option(
             "--pedro-fetch-details/--no-pedro-fetch-details",
             help="Fetch each PEDro record page to get authors, year, DOI and abstract (slower)",
         ),
     ] = None,
     pedro_rate_limit_delay: Annotated[
-        Optional[float],
+        float | None,
         typer.Option(help="Set PEDro-specific rate-limit delay in seconds (default: 3.0)"),
     ] = None,
     # --- llm ---
@@ -989,10 +992,10 @@ def config(  # noqa: PLR0912, PLR0915
         str, typer.Option("--embedding-api-key", help="API key for the embedding server (any string for local servers)")
     ] = "",
     rag_top_k: Annotated[
-        Optional[int], typer.Option("--rag-top-k", help="Number of papers retrieved per RAG query (default: 10)")
+        int | None, typer.Option("--rag-top-k", help="Number of papers retrieved per RAG query (default: 10)")
     ] = None,
     rag_auto_index: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option("--rag-auto-index/--no-rag-auto-index", help="Auto-index new papers after each search/get run")
     ] = None,
 ):
@@ -1176,7 +1179,7 @@ def skill_install(
         skill_text = (_res.files("mosaic.data") / "SKILL.md").read_text(encoding="utf-8")
     except Exception as e:
         rprint(f"[red]Could not read bundled skill: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     target = (Path.home() if global_ else Path(".")) / ".claude" / "skills" / "mosaic" / "SKILL.md"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -1195,7 +1198,7 @@ def skill_show() -> None:
         print(skill_text)
     except Exception as e:
         rprint(f"[red]Could not read bundled skill: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 # ---------------------------------------------------------------------------

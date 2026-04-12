@@ -1,8 +1,6 @@
 """Phase 4 & 5 — cache management methods and richness predicate."""
 
-from pathlib import Path
 
-import pytest
 from mosaic.models import Paper
 
 

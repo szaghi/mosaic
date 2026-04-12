@@ -89,9 +89,10 @@ def index_papers(
     Returns ``(newly_indexed, skipped_already_indexed)``.
     Papers with neither title nor abstract are silently skipped.
     """
+    from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
+
     from mosaic.config import get_embedding_cfg
     from mosaic.embeddings import embed_texts
-    from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
 
     emb_cfg = get_embedding_cfg(cfg)
     model = emb_cfg.get("model", "")
@@ -148,7 +149,7 @@ def index_papers(
             batch_texts = texts[i : i + batch_size]
             embeddings = embed_texts(batch_texts, emb_cfg)
             dim = len(embeddings[0])
-            rows = [(p.uid, emb) for p, emb in zip(batch_papers, embeddings)]
+            rows = [(p.uid, emb) for p, emb in zip(batch_papers, embeddings, strict=True)]
             cache.upsert_embeddings_batch(rows, dim)
             newly_indexed += len(batch_papers)
             if prog and task is not None:
@@ -177,7 +178,7 @@ def retrieve(
 
     When ``cfg["rag"]["citations"]["enabled"]`` is True, applies citation
     graph boosting: papers that share citation edges with other top results
-    are promoted using a reciprocal-rank × citation-factor score.
+    are promoted using a reciprocal-rank * citation-factor score.
 
     *pre_filter*: optional list of UIDs to restrict the search to a subset.
     """
@@ -344,7 +345,7 @@ def _call_llm(prompt: str, cfg: dict) -> str:
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
 
-    elif provider == "anthropic":
+    if provider == "anthropic":
         url = "https://api.anthropic.com/v1/messages"
         headers = {
             "x-api-key": api_key,
@@ -360,5 +361,4 @@ def _call_llm(prompt: str, cfg: dict) -> str:
         resp.raise_for_status()
         return resp.json()["content"][0]["text"]
 
-    else:
-        raise ValueError(f"Unknown LLM provider: {provider!r}")
+    raise ValueError(f"Unknown LLM provider: {provider!r}")
