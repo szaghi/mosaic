@@ -4,6 +4,15 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.5.0] — 2026-04-12
+### Added
+- **citations-rag**: Implement comprehensive citation processing pipeline ⚠ BREAKING CHANGE
+
+
+### Fixed
+- **db**: Wipe vector index and citation graph on cache.clear()
+
+
 ## [1.4.0] — 2026-03-28
 ### Added
 - **exporter**: Add RIS export format (.ris)
