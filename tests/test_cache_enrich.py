@@ -4,7 +4,13 @@ from mosaic.models import Paper
 
 
 def _p(**kw):
-    defaults = {"title": "Test Paper", "doi": "10.1/test", "authors": ["Alice"], "year": 2020, "source": "arXiv"}
+    defaults = {
+        "title": "Test Paper",
+        "doi": "10.1/test",
+        "authors": ["Alice"],
+        "year": 2020,
+        "source": "arXiv",
+    }
     defaults.update(kw)
     return Paper(**defaults)
 
@@ -131,10 +137,16 @@ class TestMetadataFillIfEmpty:
     def test_fills_arxiv_doi_if_empty(self, tmp_cache):
         # arxiv DOIs normalise to arxiv: UID — so both records share the same UID
         # and the doi column can be filled in from the second record.
-        p1 = Paper(title="ArXiv Paper", authors=["Alice"], year=2020,
-                   arxiv_id="1234.56789", source="arXiv")
-        p2 = Paper(title="ArXiv Paper", authors=["Alice"], year=2020,
-                   doi="10.48550/arxiv.1234.56789", source="OpenAlex")
+        p1 = Paper(
+            title="ArXiv Paper", authors=["Alice"], year=2020, arxiv_id="1234.56789", source="arXiv"
+        )
+        p2 = Paper(
+            title="ArXiv Paper",
+            authors=["Alice"],
+            year=2020,
+            doi="10.48550/arxiv.1234.56789",
+            source="OpenAlex",
+        )
         assert p1.uid == p2.uid  # both resolve to arxiv:1234.56789
         tmp_cache.save(p1)
         tmp_cache.save(p2)
@@ -152,8 +164,9 @@ class TestYearAndTitlePreserved:
     def test_title_not_overwritten(self, tmp_cache):
         tmp_cache.save(_p(title="Original Title"))
         # Same DOI → same UID; different title
-        p2 = Paper(title="Different Title", doi="10.1/test", authors=["Alice"],
-                   year=2020, source="arXiv")
+        p2 = Paper(
+            title="Different Title", doi="10.1/test", authors=["Alice"], year=2020, source="arXiv"
+        )
         tmp_cache.save(p2)
         p = tmp_cache.get_by_uid(_p().uid)
         assert p.title == "Original Title"

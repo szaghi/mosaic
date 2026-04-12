@@ -12,6 +12,7 @@ from mosaic.services import sort_by_relevance
 # helpers
 # ---------------------------------------------------------------------------
 
+
 def _paper(title: str, abstract: str = "", year: int = 2020) -> Paper:
     return Paper(title=title, abstract=abstract, year=year, source="test")
 
@@ -20,10 +21,13 @@ def _paper(title: str, abstract: str = "", year: int = 2020) -> Paper:
 # _bm25_score
 # ---------------------------------------------------------------------------
 
+
 class TestBm25Score:
     def test_relevant_paper_scores_higher(self):
         """A paper whose abstract matches the query should outrank one that does not."""
-        p_relevant = _paper("Neural Networks", abstract="deep learning transformer attention mechanism")
+        p_relevant = _paper(
+            "Neural Networks", abstract="deep learning transformer attention mechanism"
+        )
         p_unrelated = _paper("Cooking Pasta", abstract="boil water add pasta stir")
         papers = [p_relevant, p_unrelated]
         _bm25_score("transformer attention", papers)
@@ -64,6 +68,7 @@ class TestBm25Score:
 # _parse_float_list
 # ---------------------------------------------------------------------------
 
+
 class TestParseFloatList:
     def test_plain_list(self):
         result = _parse_float_list("[0.9, 0.3, 0.7]", 3)
@@ -95,6 +100,7 @@ class TestParseFloatList:
 # score_papers
 # ---------------------------------------------------------------------------
 
+
 class TestScorePapers:
     def test_empty_query_returns_unchanged(self):
         papers = [_paper("Test")]
@@ -122,6 +128,7 @@ class TestScorePapers:
 # ---------------------------------------------------------------------------
 # sort_by_relevance (services integration)
 # ---------------------------------------------------------------------------
+
 
 class TestSortByRelevance:
     def test_orders_by_relevance_descending(self):

@@ -59,17 +59,17 @@ _DEFAULTS: dict = {
     "custom_sources": [],
     "llm": {"provider": "", "api_key": "", "model": "", "base_url": ""},
     "rag": {
-        "embedding_provider": "",   # "openai" or leave empty (inherits llm.provider)
-        "embedding_model":    "",   # e.g. "snowflake-arctic-embed2", "text-embedding-3-small"
-        "embedding_base_url": "",   # e.g. "http://localhost:11434/v1" for Ollama
-        "embedding_api_key":  "",   # leave empty to inherit llm.api_key
-        "top_k":              10,   # papers retrieved per query
-        "chunk_size":         512,  # max characters per text chunk (reserved for future full-PDF mode)
-        "auto_index":         False, # silently index new papers after each search/get
+        "embedding_provider": "",  # "openai" or leave empty (inherits llm.provider)
+        "embedding_model": "",  # e.g. "snowflake-arctic-embed2", "text-embedding-3-small"
+        "embedding_base_url": "",  # e.g. "http://localhost:11434/v1" for Ollama
+        "embedding_api_key": "",  # leave empty to inherit llm.api_key
+        "top_k": 10,  # papers retrieved per query
+        "chunk_size": 512,  # max characters per text chunk (reserved for future full-PDF mode)
+        "auto_index": False,  # silently index new papers after each search/get
         "citations": {
-            "enabled":          False,  # apply citation graph boosting in retrieve()
-            "boost_alpha":      0.3,    # re-scoring weight; 0 = pure cosine, >0 = citation boost
-            "providers":        ["openalex", "crossref"],  # priority order
+            "enabled": False,  # apply citation graph boosting in retrieve()
+            "boost_alpha": 0.3,  # re-scoring weight; 0 = pure cosine, >0 = citation boost
+            "providers": ["openalex", "crossref"],  # priority order
             "expand_neighbors": False,  # widen recall by adding 1-hop citation neighbors
         },
     },
@@ -229,10 +229,10 @@ def get_embedding_cfg(cfg: dict) -> dict:
     rag = cfg.get("rag", {})
     llm = cfg.get("llm", {})
     return {
-        "provider":  rag.get("embedding_provider") or llm.get("provider", ""),
-        "model":     rag.get("embedding_model", ""),
-        "base_url":  rag.get("embedding_base_url") or llm.get("base_url", ""),
-        "api_key":   rag.get("embedding_api_key") or llm.get("api_key", ""),
+        "provider": rag.get("embedding_provider") or llm.get("provider", ""),
+        "model": rag.get("embedding_model", ""),
+        "base_url": rag.get("embedding_base_url") or llm.get("base_url", ""),
+        "api_key": rag.get("embedding_api_key") or llm.get("api_key", ""),
     }
 
 

@@ -13,6 +13,7 @@ from mosaic.rag import _build_context
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _paper(title: str, abstract: str = "", year: int = 2020, uid_suffix: str = "") -> Paper:
     """Build a minimal Paper with a stable DOI-based UID."""
     doi = f"10.9999/test.{title.lower().replace(' ', '')}{uid_suffix}"
@@ -33,6 +34,7 @@ def _make_embedding_response(embeddings: list[list[float]]) -> MagicMock:
 # test_embed_texts_batching
 # ---------------------------------------------------------------------------
 
+
 class TestEmbedTextsBatching:
     def test_single_batch(self):
         """Small input that fits in one batch should make exactly one HTTP call."""
@@ -40,7 +42,9 @@ class TestEmbedTextsBatching:
 
         fake_emb = [[0.1, 0.2, 0.3]]
         with patch("httpx.post", return_value=_make_embedding_response(fake_emb)) as mock_post:
-            result = embed_texts(["hello world"], {"model": "test-model", "api_key": "key", "base_url": ""})
+            result = embed_texts(
+                ["hello world"], {"model": "test-model", "api_key": "key", "base_url": ""}
+            )
 
         assert mock_post.call_count == 1
         assert result == fake_emb
@@ -112,6 +116,7 @@ class TestEmbedTextsBatching:
 # test_build_context
 # ---------------------------------------------------------------------------
 
+
 class TestBuildContext:
     def test_basic_format(self):
         """Context should number papers, include title, authors, and year."""
@@ -165,6 +170,7 @@ class TestBuildContext:
 # ---------------------------------------------------------------------------
 # test_index_papers_model_change_raises
 # ---------------------------------------------------------------------------
+
 
 class TestIndexPapersModelChange:
     def test_model_change_without_reindex_raises(self, tmp_cache):
@@ -237,6 +243,7 @@ class TestIndexPapersModelChange:
 # test_retrieve_returns_papers_in_order
 # ---------------------------------------------------------------------------
 
+
 class TestRetrieveOrder:
     def test_papers_returned_in_similarity_order(self, tmp_cache):
         """retrieve() should return papers in the same order as vector_search() results."""
@@ -293,9 +300,7 @@ class TestRetrieveOrder:
         # vector_search returns both, but pre_filter only allows p1
         with patch("mosaic.embeddings.embed_texts", return_value=[query_vec]):
             with patch.object(tmp_cache, "vector_search", return_value=[p1.uid, p2.uid]):
-                papers = retrieve(
-                    "some query", cfg, tmp_cache, pre_filter=[p1.uid]
-                )
+                papers = retrieve("some query", cfg, tmp_cache, pre_filter=[p1.uid])
 
         assert len(papers) == 1
         assert papers[0].uid == p1.uid
@@ -324,6 +329,7 @@ class TestRetrieveOrder:
 # ---------------------------------------------------------------------------
 # test_get_embedding_cfg (config helper)
 # ---------------------------------------------------------------------------
+
 
 class TestGetEmbeddingCfg:
     def test_rag_overrides_llm(self):

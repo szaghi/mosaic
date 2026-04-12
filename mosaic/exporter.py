@@ -24,7 +24,9 @@ def export(papers: list[Paper], path: Path) -> None:
     }
     fn = dispatch.get(ext)
     if fn is None:
-        raise ValueError(f"Unsupported format '{ext}'. Use: .md, .markdown, .csv, .json, .bib, .ris")
+        raise ValueError(
+            f"Unsupported format '{ext}'. Use: .md, .markdown, .csv, .json, .bib, .ris"
+        )
     fn(papers, path)
 
 

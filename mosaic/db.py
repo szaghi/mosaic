@@ -27,6 +27,7 @@ def _load_sqlite_vec(con: sqlite3.Connection) -> bool:
     """Try to load the sqlite-vec extension.  Returns True on success."""
     try:
         import sqlite_vec
+
         con.enable_load_extension(True)
         sqlite_vec.load(con)
         con.enable_load_extension(False)
@@ -316,21 +317,21 @@ class Cache:
     def stats(self) -> dict:
         """Return a summary dict of cache contents."""
         with self._lock:
-            papers         = self.con.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-            downloaded     = self.con.execute(
+            papers = self.con.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
+            downloaded = self.con.execute(
                 "SELECT COUNT(*) FROM downloads WHERE status='ok'"
             ).fetchone()[0]
-            searches       = self.con.execute("SELECT COUNT(*) FROM searches").fetchone()[0]
-            with_abstract  = self.con.execute(
+            searches = self.con.execute("SELECT COUNT(*) FROM searches").fetchone()[0]
+            with_abstract = self.con.execute(
                 "SELECT COUNT(*) FROM papers WHERE abstract IS NOT NULL"
             ).fetchone()[0]
-            with_pdf_url   = self.con.execute(
+            with_pdf_url = self.con.execute(
                 "SELECT COUNT(*) FROM papers WHERE pdf_url IS NOT NULL"
             ).fetchone()[0]
-            open_access    = self.con.execute(
+            open_access = self.con.execute(
                 "SELECT COUNT(*) FROM papers WHERE is_open_access=1"
             ).fetchone()[0]
-            exports_total  = self.con.execute("SELECT COUNT(*) FROM exports").fetchone()[0]
+            exports_total = self.con.execute("SELECT COUNT(*) FROM exports").fetchone()[0]
 
         try:
             db_bytes = os.path.getsize(self._db_path)
@@ -348,9 +349,7 @@ class Cache:
             "db_bytes": db_bytes,
         }
 
-    def list_papers(
-        self, limit: int = 50, offset: int = 0, query: str = ""
-    ) -> list[Paper]:
+    def list_papers(self, limit: int = 50, offset: int = 0, query: str = "") -> list[Paper]:
         """Return cached papers, newest-first, with optional substring filter."""
         with self._lock:
             if query:
@@ -386,8 +385,11 @@ class Cache:
                 "SELECT uid, local_path FROM downloads WHERE status='ok'"
             ).fetchall()
         return [
-            {"uid": row["uid"], "local_path": row["local_path"],
-             "exists": bool(row["local_path"] and Path(row["local_path"]).exists())}
+            {
+                "uid": row["uid"],
+                "local_path": row["local_path"],
+                "exists": bool(row["local_path"] and Path(row["local_path"]).exists()),
+            }
             for row in rows
         ]
 
@@ -434,10 +436,13 @@ class Cache:
     def was_exported(self, uid: str, fmt: str, destination: str = "") -> bool:
         """True if *uid* was previously exported in *fmt* to *destination*."""
         with self._lock:
-            return self.con.execute(
-                "SELECT 1 FROM exports WHERE uid=? AND format=? AND destination=?",
-                (uid, fmt, destination),
-            ).fetchone() is not None
+            return (
+                self.con.execute(
+                    "SELECT 1 FROM exports WHERE uid=? AND format=? AND destination=?",
+                    (uid, fmt, destination),
+                ).fetchone()
+                is not None
+            )
 
     # ── RAG / vector index ────────────────────────────────────────────────────
 
@@ -469,7 +474,7 @@ class Cache:
             self._ensure_vec_table(dim)
             self._conn.execute(
                 "INSERT OR REPLACE INTO vec_papers(uid, embedding) VALUES (?, ?)",
-                (uid, json.dumps(embedding))
+                (uid, json.dumps(embedding)),
             )
             self._conn.commit()
 
@@ -479,7 +484,7 @@ class Cache:
             self._ensure_vec_table(dim)
             self._conn.executemany(
                 "INSERT OR REPLACE INTO vec_papers(uid, embedding) VALUES (?, ?)",
-                [(uid, json.dumps(emb)) for uid, emb in rows]
+                [(uid, json.dumps(emb)) for uid, emb in rows],
             )
             self._conn.commit()
 
@@ -610,7 +615,5 @@ class Cache:
             Set of source UIDs with at least one stored citation edge.
         """
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT DISTINCT source_uid FROM paper_citations"
-            ).fetchall()
+            rows = self._conn.execute("SELECT DISTINCT source_uid FROM paper_citations").fetchall()
             return {r[0] for r in rows}

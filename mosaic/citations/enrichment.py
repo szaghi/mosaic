@@ -56,9 +56,9 @@ def enrich_citations(
     local_uids: set[str] = {p.uid for p in cache.get_all_papers()}
 
     candidates = [
-        p for p in papers
-        if p.uid not in already_enriched
-        and any(prov.can_handle(p) for prov in providers)
+        p
+        for p in papers
+        if p.uid not in already_enriched and any(prov.can_handle(p) for prov in providers)
     ]
 
     skipped = len(papers) - len(candidates)

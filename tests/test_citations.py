@@ -15,7 +15,10 @@ from mosaic.models import Paper
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-def _paper(doi: str | None = None, arxiv_id: str | None = None, openalex_id: str | None = None) -> Paper:
+
+def _paper(
+    doi: str | None = None, arxiv_id: str | None = None, openalex_id: str | None = None
+) -> Paper:
     return Paper(
         title="Test Paper",
         doi=doi,
@@ -36,6 +39,7 @@ def _mock_resp(json_data: dict | list, status_code: int = 200) -> MagicMock:
 # ---------------------------------------------------------------------------
 # _item_to_uid helper
 # ---------------------------------------------------------------------------
+
 
 class TestItemToUid:
     def test_regular_doi(self):
@@ -62,6 +66,7 @@ class TestItemToUid:
 # OpenAlexCitationProvider
 # ---------------------------------------------------------------------------
 
+
 class TestOpenAlexProvider:
     def test_can_handle_with_doi(self):
         p = _paper(doi="10.1234/foo")
@@ -82,32 +87,38 @@ class TestOpenAlexProvider:
     def test_fetch_references_by_doi(self):
         paper = _paper(doi="10.1234/foo")
         # First call: fetch referenced_works for the paper
-        work_resp = _mock_resp({
-            "id": "https://openalex.org/W111",
-            "referenced_works": [
-                "https://openalex.org/W222",
-                "https://openalex.org/W333",
-            ],
-        })
+        work_resp = _mock_resp(
+            {
+                "id": "https://openalex.org/W111",
+                "referenced_works": [
+                    "https://openalex.org/W222",
+                    "https://openalex.org/W333",
+                ],
+            }
+        )
         # Second call: batch resolve W-IDs → DOIs
-        batch_resp = _mock_resp({
-            "results": [
-                {"doi": "https://doi.org/10.9999/a", "ids": {}},
-                {"doi": "https://doi.org/10.9999/b", "ids": {}},
-            ]
-        })
+        batch_resp = _mock_resp(
+            {
+                "results": [
+                    {"doi": "https://doi.org/10.9999/a", "ids": {}},
+                    {"doi": "https://doi.org/10.9999/b", "ids": {}},
+                ]
+            }
+        )
         with patch("httpx.get", side_effect=[work_resp, batch_resp]):
             uids = OpenAlexCitationProvider().fetch_references(paper)
         assert uids == ["doi:10.9999/a", "doi:10.9999/b"]
 
     def test_fetch_references_by_arxiv(self):
         paper = _paper(arxiv_id="2106.01234")
-        work_resp = _mock_resp({
-            "referenced_works": ["https://openalex.org/W999"],
-        })
-        batch_resp = _mock_resp({
-            "results": [{"doi": "https://doi.org/10.48550/arxiv.1901.00001", "ids": {}}]
-        })
+        work_resp = _mock_resp(
+            {
+                "referenced_works": ["https://openalex.org/W999"],
+            }
+        )
+        batch_resp = _mock_resp(
+            {"results": [{"doi": "https://doi.org/10.48550/arxiv.1901.00001", "ids": {}}]}
+        )
         with patch("httpx.get", side_effect=[work_resp, batch_resp]):
             uids = OpenAlexCitationProvider().fetch_references(paper)
         assert uids == ["arxiv:1901.00001"]
@@ -183,6 +194,7 @@ class TestOpenAlexProvider:
 # CrossRefCitationProvider
 # ---------------------------------------------------------------------------
 
+
 class TestCrossRefProvider:
     def test_can_handle_with_doi(self):
         p = _paper(doi="10.1234/foo")
@@ -194,15 +206,17 @@ class TestCrossRefProvider:
 
     def test_fetch_references_basic(self):
         paper = _paper(doi="10.1234/foo")
-        resp = _mock_resp({
-            "message": {
-                "reference": [
-                    {"DOI": "10.9999/ref1"},
-                    {"DOI": "10.9999/ref2"},
-                    {"unstructured": "Some citation without DOI"},
-                ]
+        resp = _mock_resp(
+            {
+                "message": {
+                    "reference": [
+                        {"DOI": "10.9999/ref1"},
+                        {"DOI": "10.9999/ref2"},
+                        {"unstructured": "Some citation without DOI"},
+                    ]
+                }
             }
-        })
+        )
         with patch("httpx.get", return_value=resp):
             uids = CrossRefCitationProvider().fetch_references(paper)
         assert uids == ["doi:10.9999/ref1", "doi:10.9999/ref2"]
@@ -248,6 +262,7 @@ class TestCrossRefProvider:
 # OpenCitationsCitationProvider
 # ---------------------------------------------------------------------------
 
+
 class TestOpenCitationsProvider:
     def test_can_handle_with_doi(self):
         p = _paper(doi="10.1234/foo")
@@ -259,10 +274,12 @@ class TestOpenCitationsProvider:
 
     def test_fetch_references_basic(self):
         paper = _paper(doi="10.1234/foo")
-        resp = _mock_resp([
-            {"cited": "doi:10.9999/a"},
-            {"cited": "doi:10.9999/b"},
-        ])
+        resp = _mock_resp(
+            [
+                {"cited": "doi:10.9999/a"},
+                {"cited": "doi:10.9999/b"},
+            ]
+        )
         with patch("httpx.get", return_value=resp):
             uids = OpenCitationsCitationProvider().fetch_references(paper)
         assert uids == ["doi:10.9999/a", "doi:10.9999/b"]
@@ -292,6 +309,7 @@ class TestOpenCitationsProvider:
 # ---------------------------------------------------------------------------
 # Provider registry
 # ---------------------------------------------------------------------------
+
 
 class TestRegistry:
     def test_default_providers_returned(self):
@@ -346,6 +364,7 @@ class TestRegistry:
 # ---------------------------------------------------------------------------
 # Enrichment orchestrator
 # ---------------------------------------------------------------------------
+
 
 class TestEnrichmentOrchestrator:
     def _make_cache(self, tmp_path, papers: list[Paper]) -> Cache:
@@ -458,6 +477,7 @@ class TestEnrichmentOrchestrator:
 # DB cache citation methods
 # ---------------------------------------------------------------------------
 
+
 class TestCacheMethodsCitations:
     def test_upsert_and_get_links(self, tmp_cache_with_citations):
         cache, p1, p2 = tmp_cache_with_citations
@@ -507,6 +527,7 @@ class TestCacheMethodsCitations:
 # Graph-boosted retrieval in rag.py
 # ---------------------------------------------------------------------------
 
+
 class TestGraphBoostedRetrieval:
     """Tests for _citation_boost and _expand_neighbors helpers."""
 
@@ -541,10 +562,12 @@ class TestGraphBoostedRetrieval:
         for p in [p1, p2, p3]:
             cache.save(p)
         # p3 cites both p1 and p2
-        cache.upsert_citation_edges([
-            (p3.uid, p1.uid, "openalex"),
-            (p3.uid, p2.uid, "openalex"),
-        ])
+        cache.upsert_citation_edges(
+            [
+                (p3.uid, p1.uid, "openalex"),
+                (p3.uid, p2.uid, "openalex"),
+            ]
+        )
         uids = [p1.uid, p2.uid, p3.uid]
         result = _citation_boost(uids, cache, alpha=2.0, top_k=10)
         assert result.index(p3.uid) < result.index(p2.uid)

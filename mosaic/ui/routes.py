@@ -177,20 +177,30 @@ def search_submit():
         if filters:
             papers = [p for p in papers if filters.match(p)]
         from mosaic.services import filter_papers as _fp
-        papers = _fp(papers, oa_only=request.form.get("oa_only") == "on",
-                     pdf_only=request.form.get("pdf_only") == "on",
-                     sort_by=sort_by if sort_by != "relevance" else "")
+
+        papers = _fp(
+            papers,
+            oa_only=request.form.get("oa_only") == "on",
+            pdf_only=request.form.get("pdf_only") == "on",
+            sort_by=sort_by if sort_by != "relevance" else "",
+        )
         if sort_by == "relevance":
             from mosaic.services import sort_by_relevance as _sbr
+
             papers = _sbr(query, papers, cfg)
         cache.save_search(query=query, filters_json=json.dumps({}), result_count=len(papers))
         import uuid
+
         job_id = str(uuid.uuid4())
         current_app.config[f"export_{job_id}"] = papers
         errors = [year_warning] if year_warning else []
         return render_template(
             "partials/results.html",
-            papers=papers, errors=errors, stats={}, job_id=job_id, version=_version(),
+            papers=papers,
+            errors=errors,
+            stats={},
+            job_id=job_id,
+            version=_version(),
         )
 
     # Build sources filtered by user selection
@@ -296,6 +306,7 @@ def search_status(job_id):
     )
     if sort_by == "relevance":
         from mosaic.services import sort_by_relevance as _sbr
+
         papers = _sbr(meta.get("query", ""), papers, _cfg())
 
     # Save to cache and record search history
@@ -515,6 +526,7 @@ def similar_status(job_id):
     )
     if sort_by == "relevance" and result.get("seed_title"):
         from mosaic.services import sort_by_relevance as _sbr
+
         papers = _sbr(result["seed_title"], papers, _cfg())
 
     cache = _cache()
@@ -1135,7 +1147,9 @@ def rag_landing():
     info = _rag_index_status(cache)
     cfg = _cfg()
     llm_configured = bool(cfg.get("llm", {}).get("provider") and cfg.get("llm", {}).get("api_key"))
-    return render_template("rag_landing.html", version=_version(), llm_configured=llm_configured, **info)
+    return render_template(
+        "rag_landing.html", version=_version(), llm_configured=llm_configured, **info
+    )
 
 
 @bp.route("/rag/index")
@@ -1205,7 +1219,9 @@ def _run_rag_ask(query, cfg, db_path, mode, top_k, subset_query, year):
     pre_filter = None
     if subset_query or year:
         filters, _ = build_filters(year=year)
-        candidates = cache.search_local(subset_query) if subset_query else cache.list_papers(limit=100_000)
+        candidates = (
+            cache.search_local(subset_query) if subset_query else cache.list_papers(limit=100_000)
+        )
         if filters:
             candidates = [p for p in candidates if filters.match(p)]
         pre_filter = [p.uid for p in candidates]
@@ -1228,7 +1244,9 @@ def rag_ask_submit():
     year = request.form.get("year", "").strip()
     show_sources = request.form.get("show_sources") == "on"
 
-    job_id = _jobs().submit(_run_rag_ask, query, cfg, cfg["db_path"], mode, top_k, subset_query, year)
+    job_id = _jobs().submit(
+        _run_rag_ask, query, cfg, cfg["db_path"], mode, top_k, subset_query, year
+    )
     current_app.config[f"job_meta_{job_id}"] = {"show_sources": show_sources}
     status_url = url_for("ui.rag_ask_status", job_id=job_id)
     return (
@@ -1263,6 +1281,7 @@ def rag_ask_status(job_id):
         html += '<details open><summary><strong>Source papers</strong></summary><ol class="source-list">'
         for p in papers:
             from mosaic.models import Paper as _Paper
+
             pobj = _Paper.from_dict(p)
             title = escape(pobj.title or "Untitled")
             authors = escape(", ".join(pobj.authors[:3]))
@@ -1276,6 +1295,7 @@ def rag_ask_status(job_id):
 @bp.route("/rag/chat")
 def rag_chat_page():
     from flask import session
+
     session.permanent = True
     sid = session.setdefault("chat_id", str(__import__("uuid").uuid4()))
     history = _chat_histories.get(sid, [])
@@ -1286,6 +1306,7 @@ def _run_rag_chat(query, cfg, db_path, mode):
     """Executed in a worker thread."""
     from mosaic.db import Cache
     from mosaic.rag import ask
+
     cache = Cache(db_path)
     answer, _ = ask(query, cfg, cache, mode=mode)
     return {"answer": answer}
@@ -1314,7 +1335,7 @@ def _oob_poll(status_url: str) -> str:
         f'<div id="chat-poll" hx-swap-oob="true">'
         f'<div hx-get="{status_url}" hx-trigger="every 2s"'
         f' hx-target="#chat-thread" hx-swap="innerHTML"></div>'
-        f'</div>'
+        f"</div>"
     )
 
 
@@ -1326,6 +1347,7 @@ def _oob_poll_stop() -> str:
 @bp.route("/rag/chat/send", methods=["POST"])
 def rag_chat_send():
     from flask import session
+
     query = request.form.get("query", "").strip()
     mode = request.form.get("mode", "synthesis")
     sid = session.get("chat_id", "default")
@@ -1347,6 +1369,7 @@ def rag_chat_send():
 @bp.route("/rag/chat/status/<job_id>")
 def rag_chat_status(job_id):
     from flask import session
+
     job = _jobs().get(job_id)
     if job is None:
         sid = session.get("chat_id", "default")
@@ -1375,12 +1398,10 @@ def rag_chat_status(job_id):
 @bp.route("/rag/chat/clear", methods=["POST"])
 def rag_chat_clear():
     from flask import session
+
     sid = session.get("chat_id", "default")
     _chat_histories.pop(sid, None)
-    return (
-        '<p class="stats-line"><em>Conversation cleared.</em></p>'
-        + "\n" + _oob_poll_stop()
-    )
+    return '<p class="stats-line"><em>Conversation cleared.</em></p>' + "\n" + _oob_poll_stop()
 
 
 # ---------------------------------------------------------------------------

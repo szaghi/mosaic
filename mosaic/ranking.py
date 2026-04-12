@@ -33,6 +33,7 @@ def score_papers(query: str, papers: list[Paper], cfg: dict) -> list[Paper]:
 # BM25 scorer
 # ---------------------------------------------------------------------------
 
+
 def _bm25_score(query: str, papers: list[Paper]) -> list[Paper]:
     # BM25Plus uses log((N+1)/freq) for IDF, which is always positive and avoids the
     # zero-IDF issue of BM25Okapi when a term appears in exactly half the corpus.
@@ -51,6 +52,7 @@ def _bm25_score(query: str, papers: list[Paper]) -> list[Paper]:
 # ---------------------------------------------------------------------------
 # LLM scorer (opt-in)
 # ---------------------------------------------------------------------------
+
 
 def _llm_score(query: str, papers: list[Paper], llm_cfg: dict) -> list[Paper]:
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
@@ -75,8 +77,7 @@ def _llm_score(query: str, papers: list[Paper], llm_cfg: dict) -> list[Paper]:
         for i in range(0, len(papers), batch_size):
             batch = papers[i : i + batch_size]
             snippets = "\n".join(
-                f"{j + 1}. {p.title}: {(p.abstract or '')[:300]}"
-                for j, p in enumerate(batch)
+                f"{j + 1}. {p.title}: {(p.abstract or '')[:300]}" for j, p in enumerate(batch)
             )
             prompt = (
                 f"Query: {query!r}\n\n"
@@ -100,7 +101,11 @@ def _call_llm(
     if provider == "openai" or base_url:
         # OpenAI-compatible endpoint — used for cloud OpenAI and any local server
         # (Ollama, LM Studio, llama.cpp, LocalAI, etc.)
-        url = f"{base_url}/chat/completions" if base_url else "https://api.openai.com/v1/chat/completions"
+        url = (
+            f"{base_url}/chat/completions"
+            if base_url
+            else "https://api.openai.com/v1/chat/completions"
+        )
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload: dict = {
             "model": model,

@@ -30,7 +30,6 @@ _PROMPTS: dict[str, str] = {
         Papers:
         {context}
     """),
-
     "gaps": textwrap.dedent("""\
         You are a research analyst identifying gaps in the scientific literature.
         Based solely on the papers provided below, identify open problems,
@@ -43,7 +42,6 @@ _PROMPTS: dict[str, str] = {
         Papers:
         {context}
     """),
-
     "compare": textwrap.dedent("""\
         You are a research analyst comparing scientific papers.
         Based solely on the papers provided below, produce a structured comparison
@@ -56,7 +54,6 @@ _PROMPTS: dict[str, str] = {
         Papers:
         {context}
     """),
-
     "extract": textwrap.dedent("""\
         You are a research assistant extracting structured information from papers.
         For each paper listed below, extract the following fields if present:
@@ -74,6 +71,7 @@ _PROMPTS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def index_papers(
     papers: list[Paper],
@@ -98,8 +96,7 @@ def index_papers(
     model = emb_cfg.get("model", "")
     if not model:
         raise ValueError(
-            "No embedding model configured. "
-            "Run: mosaic config --embedding-model <model-name>"
+            "No embedding model configured. Run: mosaic config --embedding-model <model-name>"
         )
 
     # Detect model change
@@ -116,9 +113,7 @@ def index_papers(
 
     # Filter candidates
     candidates = [
-        p for p in papers
-        if (p.title or p.abstract)
-        and (reindex or p.uid not in already_indexed)
+        p for p in papers if (p.title or p.abstract) and (reindex or p.uid not in already_indexed)
     ]
 
     if not candidates:
@@ -246,6 +241,7 @@ def ask(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _build_context(papers: list[Paper]) -> str:
     lines = []
     for i, p in enumerate(papers, 1):
@@ -254,8 +250,7 @@ def _build_context(papers: list[Paper]) -> str:
             authors += " et al."
         abstract_snippet = (p.abstract or "")[:400]
         lines.append(
-            f"[{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})\n"
-            f"    {abstract_snippet}"
+            f"[{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})\n    {abstract_snippet}"
         )
     return "\n\n".join(lines)
 
@@ -335,7 +330,11 @@ def _call_llm(prompt: str, cfg: dict) -> str:
         model = "gpt-4o-mini" if provider == "openai" else "claude-haiku-4-5-20251001"
 
     if provider == "openai" or base_url:
-        url = f"{base_url}/chat/completions" if base_url else "https://api.openai.com/v1/chat/completions"
+        url = (
+            f"{base_url}/chat/completions"
+            if base_url
+            else "https://api.openai.com/v1/chat/completions"
+        )
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload: dict = {
             "model": model,

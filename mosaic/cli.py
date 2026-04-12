@@ -113,7 +113,8 @@ def search(
     field: Annotated[
         str,
         typer.Option(
-            "--field", "-f",
+            "--field",
+            "-f",
             help='Scope query to "title", "abstract", or "all" (default)',
             autocompletion=lambda: _FIELD_VALUES,
         ),
@@ -291,13 +292,19 @@ def search(
         papers = [cache.get_by_uid(p.uid) or p if p.uid in rich else p for p in papers]
 
     if json_output:
-        papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by if sort_by != "relevance" else "")
+        papers = filter_papers(
+            papers,
+            oa_only=oa_only,
+            pdf_only=pdf_only,
+            sort_by=sort_by if sort_by != "relevance" else "",
+        )
         if sort_by == "relevance":
             papers = sort_by_relevance(query, papers, cfg)
         for p in papers:
             cache.save(p)
         if output:
             from mosaic.exporter import export
+
             for path in list(output):
                 export(papers, path)
         _emit_json(papers, query=query, errors=errors)
@@ -429,20 +436,32 @@ def similar(
     if seed_title is None:
         if json_output:
             import json as _json
-            print(_json.dumps({"status": "error", "query": identifier, "errors": ["Paper not found"]}, indent=2))
+
+            print(
+                _json.dumps(
+                    {"status": "error", "query": identifier, "errors": ["Paper not found"]},
+                    indent=2,
+                )
+            )
             raise typer.Exit(1)
         rprint(f"[red]Paper not found:[/red] {identifier}")
         rprint("[dim]Check that the DOI or arXiv ID is correct.[/dim]")
         raise typer.Exit(1)
 
     if json_output:
-        papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=sort_by if sort_by != "relevance" else "")
+        papers = filter_papers(
+            papers,
+            oa_only=oa_only,
+            pdf_only=pdf_only,
+            sort_by=sort_by if sort_by != "relevance" else "",
+        )
         if sort_by == "relevance":
             papers = sort_by_relevance(seed_title or identifier, papers, cfg)
         for p in papers:
             cache.save(p)
         if output:
             from mosaic.exporter import export
+
             for path in list(output):
                 export(papers, path)
         _emit_json(papers, query=identifier, seed=seed_title)
@@ -566,10 +585,18 @@ def get(
 
 @app.command()
 def index(
-    reindex: Annotated[bool, typer.Option("--reindex", help="Re-embed all papers, even already-indexed ones")] = False,
-    query: Annotated[str, typer.Option("--query", "-q", help="Embed only papers matching this query")] = "",
-    from_file: Annotated[Path | None, typer.Option("--from", help="Embed only papers from a .bib or .csv file")] = None,
-    batch_size: Annotated[int, typer.Option("--batch-size", help="Texts per embedding API call")] = 96,
+    reindex: Annotated[
+        bool, typer.Option("--reindex", help="Re-embed all papers, even already-indexed ones")
+    ] = False,
+    query: Annotated[
+        str, typer.Option("--query", "-q", help="Embed only papers matching this query")
+    ] = "",
+    from_file: Annotated[
+        Path | None, typer.Option("--from", help="Embed only papers from a .bib or .csv file")
+    ] = None,
+    batch_size: Annotated[
+        int, typer.Option("--batch-size", help="Texts per embedding API call")
+    ] = 96,
     enrich_citations: Annotated[
         bool,
         typer.Option(
@@ -587,6 +614,7 @@ def index(
     # Gather candidate papers
     if from_file:
         from mosaic.bulk import read_dois
+
         dois = read_dois(from_file)
         papers_from_file = []
         for doi in dois:
@@ -618,6 +646,7 @@ def index(
     # ── Citation enrichment ───────────────────────────────────────────────────
     if enrich_citations or cfg.get("rag", {}).get("citations", {}).get("enabled", False):
         from mosaic.citations.enrichment import enrich_citations as _enrich
+
         rprint(f"[cyan]Enriching citation graph for {len(papers)} papers…[/cyan]")
         try:
             n_enriched, n_skipped = _enrich(papers, cfg, cache, reindex=reindex)
@@ -632,13 +661,31 @@ def index(
 @app.command()
 def ask(
     question: Annotated[str, typer.Argument(help="Question or topic to analyse")],
-    mode: Annotated[str, typer.Option("--mode", help="synthesis (default), gaps, compare, extract")] = "synthesis",
-    query: Annotated[str, typer.Option("--query", "-q", help="Pre-filter: restrict to papers matching this FTS query")] = "",
-    from_file: Annotated[Path | None, typer.Option("--from", help="Pre-filter: restrict to papers from a .bib or .csv file")] = None,
-    year: Annotated[str | None, typer.Option("--year", "-y", help="Year or range filter (e.g. 2020-2024)")] = None,
-    n: Annotated[int | None, typer.Option("-n", "--top", help="Override rag.top_k for this query")] = None,
-    output: Annotated[Path | None, typer.Option("--output", "-o", help="Write answer to file (.md or .json)")] = None,
-    show_sources: Annotated[bool, typer.Option("--show-sources", help="Print retrieved papers before the answer")] = False,
+    mode: Annotated[
+        str, typer.Option("--mode", help="synthesis (default), gaps, compare, extract")
+    ] = "synthesis",
+    query: Annotated[
+        str,
+        typer.Option(
+            "--query", "-q", help="Pre-filter: restrict to papers matching this FTS query"
+        ),
+    ] = "",
+    from_file: Annotated[
+        Path | None,
+        typer.Option("--from", help="Pre-filter: restrict to papers from a .bib or .csv file"),
+    ] = None,
+    year: Annotated[
+        str | None, typer.Option("--year", "-y", help="Year or range filter (e.g. 2020-2024)")
+    ] = None,
+    n: Annotated[
+        int | None, typer.Option("-n", "--top", help="Override rag.top_k for this query")
+    ] = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Write answer to file (.md or .json)")
+    ] = None,
+    show_sources: Annotated[
+        bool, typer.Option("--show-sources", help="Print retrieved papers before the answer")
+    ] = False,
 ):
     """Ask a question about your cached papers using RAG."""
     from rich.markdown import Markdown
@@ -653,6 +700,7 @@ def ask(
     pre_filter: list[str] | None = None
     if from_file:
         from mosaic.bulk import read_dois
+
         dois = read_dois(from_file)
         papers_from_file = []
         for doi in dois:
@@ -665,6 +713,7 @@ def ask(
     # Apply year filter to pre_filter if provided
     if year and pre_filter is not None:
         from mosaic.services import build_filters, filter_papers
+
         filters, _ = build_filters(year=year)
         all_papers = cache.get_papers_by_uids(pre_filter)
         filtered_papers = filter_papers(all_papers, oa_only=False, pdf_only=False)
@@ -672,6 +721,7 @@ def ask(
         pre_filter = [p.uid for p in filtered_papers]
     elif year:
         from mosaic.services import build_filters
+
         filters, _ = build_filters(year=year)
         all_papers = cache.get_all_papers()
         filtered_papers = [p for p in all_papers if filters and filters.match(p)]
@@ -710,6 +760,7 @@ def ask(
     if output:
         if str(output).endswith(".json"):
             import json as _json
+
             data = {
                 "question": question,
                 "mode": mode,
@@ -732,9 +783,17 @@ def ask(
 
 @app.command()
 def chat(
-    query: Annotated[str, typer.Option("--query", "-q", help="Narrow retrieval pool to papers matching this query")] = "",
-    from_file: Annotated[Path | None, typer.Option("--from", help="Narrow retrieval pool to papers from a .bib or .csv file")] = None,
-    mode: Annotated[str, typer.Option("--mode", help="Default prompt mode: synthesis, gaps, compare, extract")] = "synthesis",
+    query: Annotated[
+        str,
+        typer.Option("--query", "-q", help="Narrow retrieval pool to papers matching this query"),
+    ] = "",
+    from_file: Annotated[
+        Path | None,
+        typer.Option("--from", help="Narrow retrieval pool to papers from a .bib or .csv file"),
+    ] = None,
+    mode: Annotated[
+        str, typer.Option("--mode", help="Default prompt mode: synthesis, gaps, compare, extract")
+    ] = "synthesis",
 ):
     """Interactive RAG chat session over your cached papers."""
     from rich.markdown import Markdown
@@ -749,6 +808,7 @@ def chat(
     pre_filter: list[str] | None = None
     if from_file:
         from mosaic.bulk import read_dois
+
         dois = read_dois(from_file)
         papers_from_file = []
         for doi in dois:
@@ -824,6 +884,7 @@ def chat(
 
         try:
             import httpx as _httpx
+
             llm_cfg = cfg.get("llm", {})
             provider = llm_cfg.get("provider", "").lower()
             api_key = llm_cfg.get("api_key", "")
@@ -930,10 +991,14 @@ def config(
     ] = None,
     # --- obsidian ---
     obsidian_vault: Annotated[str, typer.Option(help="Set Obsidian vault path")] = "",
-    obsidian_subfolder: Annotated[str, typer.Option(help="Set subfolder inside vault for paper notes")] = "",
+    obsidian_subfolder: Annotated[
+        str, typer.Option(help="Set subfolder inside vault for paper notes")
+    ] = "",
     obsidian_filename_pattern: Annotated[
         str,
-        typer.Option(help="Set Obsidian note filename pattern (placeholders: {year}, {author}, {title})"),
+        typer.Option(
+            help="Set Obsidian note filename pattern (placeholders: {year}, {author}, {title})"
+        ),
     ] = "",
     obsidian_tag: Annotated[
         list[str] | None,
@@ -970,33 +1035,59 @@ def config(
     ] = None,
     # --- llm ---
     llm_provider: Annotated[
-        str, typer.Option("--llm-provider", help='LLM provider for relevance ranking: "openai" or "anthropic"')
+        str,
+        typer.Option(
+            "--llm-provider", help='LLM provider for relevance ranking: "openai" or "anthropic"'
+        ),
     ] = "",
     llm_api_key: Annotated[
-        str, typer.Option("--llm-api-key", help="API key for the LLM provider (any string for local servers)")
+        str,
+        typer.Option(
+            "--llm-api-key", help="API key for the LLM provider (any string for local servers)"
+        ),
     ] = "",
     llm_model: Annotated[
         str, typer.Option("--llm-model", help="Model name (leave empty for provider default)")
     ] = "",
     llm_base_url: Annotated[
-        str, typer.Option("--llm-base-url", help="Base URL for a local OpenAI-compatible server (e.g. http://localhost:11434/v1)")
+        str,
+        typer.Option(
+            "--llm-base-url",
+            help="Base URL for a local OpenAI-compatible server (e.g. http://localhost:11434/v1)",
+        ),
     ] = "",
     # --- rag / embeddings ---
     embedding_model: Annotated[
-        str, typer.Option("--embedding-model", help="Embedding model name (e.g. snowflake-arctic-embed2, text-embedding-3-small)")
+        str,
+        typer.Option(
+            "--embedding-model",
+            help="Embedding model name (e.g. snowflake-arctic-embed2, text-embedding-3-small)",
+        ),
     ] = "",
     embedding_base_url: Annotated[
-        str, typer.Option("--embedding-base-url", help="Base URL for the embedding server (e.g. http://localhost:11434/v1)")
+        str,
+        typer.Option(
+            "--embedding-base-url",
+            help="Base URL for the embedding server (e.g. http://localhost:11434/v1)",
+        ),
     ] = "",
     embedding_api_key: Annotated[
-        str, typer.Option("--embedding-api-key", help="API key for the embedding server (any string for local servers)")
+        str,
+        typer.Option(
+            "--embedding-api-key",
+            help="API key for the embedding server (any string for local servers)",
+        ),
     ] = "",
     rag_top_k: Annotated[
-        int | None, typer.Option("--rag-top-k", help="Number of papers retrieved per RAG query (default: 10)")
+        int | None,
+        typer.Option("--rag-top-k", help="Number of papers retrieved per RAG query (default: 10)"),
     ] = None,
     rag_auto_index: Annotated[
         bool | None,
-        typer.Option("--rag-auto-index/--no-rag-auto-index", help="Auto-index new papers after each search/get run")
+        typer.Option(
+            "--rag-auto-index/--no-rag-auto-index",
+            help="Auto-index new papers after each search/get run",
+        ),
     ] = None,
 ):
     """View or update MOSAIC configuration."""
@@ -1049,14 +1140,18 @@ def config(
     _sources_changed = False
     for name in enable_source or []:
         if name not in cfg_mod._KNOWN_SOURCES:
-            rprint(f"[red]Unknown source: {name!r}. Known sources: {', '.join(sorted(cfg_mod._KNOWN_SOURCES))}[/red]")
+            rprint(
+                f"[red]Unknown source: {name!r}. Known sources: {', '.join(sorted(cfg_mod._KNOWN_SOURCES))}[/red]"
+            )
             raise typer.Exit(1)
         cfg["sources"].setdefault(name, {})["enabled"] = True
         rprint(f"[green]Source '{name}' enabled.[/green]")
         _sources_changed = True
     for name in disable_source or []:
         if name not in cfg_mod._KNOWN_SOURCES:
-            rprint(f"[red]Unknown source: {name!r}. Known sources: {', '.join(sorted(cfg_mod._KNOWN_SOURCES))}[/red]")
+            rprint(
+                f"[red]Unknown source: {name!r}. Known sources: {', '.join(sorted(cfg_mod._KNOWN_SOURCES))}[/red]"
+            )
             raise typer.Exit(1)
         cfg["sources"].setdefault(name, {})["enabled"] = False
         rprint(f"[dark_orange]Source '{name}' disabled.[/dark_orange]")
@@ -1088,7 +1183,9 @@ def config(
         if pedro_fair_use:
             rprint("[green]PEDro fair-use policy acknowledged. Source is now enabled.[/green]")
         else:
-            rprint("[dark_orange]PEDro fair-use acknowledgement removed. Source is now disabled.[/dark_orange]")
+            rprint(
+                "[dark_orange]PEDro fair-use acknowledgement removed. Source is now disabled.[/dark_orange]"
+            )
     if pedro_fetch_details is not None:
         cfg["sources"]["pedro"]["fetch_details"] = pedro_fetch_details
         if pedro_fetch_details:
@@ -1131,7 +1228,11 @@ def config(
     if _rag_changed:
         rprint("[green]RAG config updated.[/green]")
 
-    _pedro_changed = pedro_fair_use is not None or pedro_fetch_details is not None or pedro_rate_limit_delay is not None
+    _pedro_changed = (
+        pedro_fair_use is not None
+        or pedro_fetch_details is not None
+        or pedro_rate_limit_delay is not None
+    )
     _any_changed = any(
         [
             api_keys_changed,
@@ -1159,6 +1260,7 @@ def config(
 # ---------------------------------------------------------------------------
 # Skill subcommand
 # ---------------------------------------------------------------------------
+
 
 @skill_app.command("install")
 def skill_install(
@@ -1204,6 +1306,7 @@ def skill_show() -> None:
 # ---------------------------------------------------------------------------
 # JSON helpers
 # ---------------------------------------------------------------------------
+
 
 def _emit_json(
     papers: list,
@@ -1334,8 +1437,8 @@ def _print_search_stats(stats: dict, filters) -> None:
 
     table.add_section()
     table.add_row("[dim]Total raw[/dim]", f"[cyan]{raw_total}[/cyan]")
-    table.add_row("[dim]Merged[/dim]",    f"[cyan]{merged}[/cyan]")
-    table.add_row("[dim]Unique[/dim]",    f"[cyan]{unique}[/cyan]")
+    table.add_row("[dim]Merged[/dim]", f"[cyan]{merged}[/cyan]")
+    table.add_row("[dim]Unique[/dim]", f"[cyan]{unique}[/cyan]")
 
     filter_parts = []
     if filters:
@@ -1424,6 +1527,7 @@ def _post_process(
     if cfg.get("rag", {}).get("auto_index") and papers:
         try:
             from mosaic.rag import index_papers
+
             index_papers(papers, cfg, cache, progress=False)
         except Exception:
             pass  # auto-index failures are always silent
@@ -1431,13 +1535,14 @@ def _post_process(
 
 _RAINBOW = ["red", "dark_orange", "green", "cyan", "blue", "magenta"]
 
-_SORT_VALUES  = ["citations", "year", "relevance"]
+_SORT_VALUES = ["citations", "year", "relevance"]
 _FIELD_VALUES = ["title", "abstract", "all"]
 _AUTH_PROVIDERS = ["elsevier", "springer", "scopus"]
 
 
 def _complete_session_names() -> list[str]:
     from mosaic.auth import list_sessions
+
     return [s["name"] for s in list_sessions()]
 
 
@@ -1471,7 +1576,16 @@ def _print_results(papers: list, show_relevance: bool = False) -> None:
         color = _RAINBOW[(i - 1) % len(_RAINBOW)]
         src_color = _RAINBOW[hash(p.source) % len(_RAINBOW)]
         source = f"[{src_color}]{p.source}[/{src_color}]"
-        row = [f"[{color}]{i}[/{color}]", p.title[:80], p.short_authors, str(p.year or ""), doi, source, oa, pdf]
+        row = [
+            f"[{color}]{i}[/{color}]",
+            p.title[:80],
+            p.short_authors,
+            str(p.year or ""),
+            doi,
+            source,
+            oa,
+            pdf,
+        ]
         if show_citations:
             cited = str(p.citation_count) if p.citation_count is not None else "[dim]–[/dim]"
             row.append(cited)
@@ -1620,7 +1734,8 @@ def notebook_create(
     field: Annotated[
         str,
         typer.Option(
-            "--field", "-f",
+            "--field",
+            "-f",
             help='Scope query to "title", "abstract", or "all" (default)',
             autocompletion=lambda: _FIELD_VALUES,
         ),
@@ -1661,10 +1776,16 @@ def notebook_create(
 
     # collect requested artifacts
     _artifact_flags = {
-        "podcast": podcast, "video": video, "briefing": briefing,
-        "study_guide": study_guide, "quiz": quiz, "flashcards": flashcards,
-        "infographic": infographic, "slide_deck": slide_deck,
-        "data_table": data_table, "mind_map": mind_map,
+        "podcast": podcast,
+        "video": video,
+        "briefing": briefing,
+        "study_guide": study_guide,
+        "quiz": quiz,
+        "flashcards": flashcards,
+        "infographic": infographic,
+        "slide_deck": slide_deck,
+        "data_table": data_table,
+        "mind_map": mind_map,
     }
     _artifacts = {name for name, enabled in _artifact_flags.items() if enabled}
 
@@ -1859,6 +1980,7 @@ def auth_status() -> None:
 
 # ── mosaic cache subcommands ──────────────────────────────────────────────────
 
+
 def _cache_and_cfg():
     cfg = cfg_mod.load()
     return Cache(cfg["db_path"]), cfg
@@ -1872,57 +1994,60 @@ def cache_stats() -> None:
     mb = s["db_bytes"] / 1_048_576
 
     table = Table(show_header=False, box=box.SIMPLE, show_edge=False)
-    table.add_column("Key",   style="dim", min_width=20)
+    table.add_column("Key", style="dim", min_width=20)
     table.add_column("Value", justify="right")
-    table.add_row("Papers cached",    f"[cyan]{s['papers']}[/cyan]")
-    table.add_row("  with abstract",  f"[dim]{s['with_abstract']}[/dim]")
-    table.add_row("  open access",    f"[dim]{s['open_access']}[/dim]")
-    table.add_row("  with PDF URL",   f"[dim]{s['with_pdf_url']}[/dim]")
-    table.add_row("Downloads (ok)",   f"[green]{s['downloaded']}[/green]")
-    table.add_row("Searches logged",  f"[cyan]{s['searches']}[/cyan]")
-    table.add_row("Exports tracked",  f"[cyan]{s['exports']}[/cyan]")
-    table.add_row("DB size",          f"[dim]{mb:.2f} MB[/dim]")
+    table.add_row("Papers cached", f"[cyan]{s['papers']}[/cyan]")
+    table.add_row("  with abstract", f"[dim]{s['with_abstract']}[/dim]")
+    table.add_row("  open access", f"[dim]{s['open_access']}[/dim]")
+    table.add_row("  with PDF URL", f"[dim]{s['with_pdf_url']}[/dim]")
+    table.add_row("Downloads (ok)", f"[green]{s['downloaded']}[/green]")
+    table.add_row("Searches logged", f"[cyan]{s['searches']}[/cyan]")
+    table.add_row("Exports tracked", f"[cyan]{s['exports']}[/cyan]")
+    table.add_row("DB size", f"[dim]{mb:.2f} MB[/dim]")
     console.print(table)
 
 
 @cache_app.command("list")
 def cache_list(
-    query: Annotated[str,  typer.Option("--query", "-q", help="Filter by title/abstract")] = "",
-    limit: Annotated[int,  typer.Option("--limit", "-n", help="Max rows to show")] = 50,
-    offset: Annotated[int, typer.Option("--offset",      help="Skip first N rows")] = 0,
+    query: Annotated[str, typer.Option("--query", "-q", help="Filter by title/abstract")] = "",
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Max rows to show")] = 50,
+    offset: Annotated[int, typer.Option("--offset", help="Skip first N rows")] = 0,
 ) -> None:
     """List cached papers, newest first."""
     cache, _ = _cache_and_cfg()
     papers = cache.list_papers(limit=limit, offset=offset, query=query)
-    total  = cache.count_papers(query=query)
+    total = cache.count_papers(query=query)
 
     if not papers:
         rprint("[dim]No papers in cache.[/dim]")
         return
 
-    table = Table(show_header=True, header_style="cyan", box=box.SIMPLE,
-                  show_edge=False, expand=True)
-    table.add_column("#",       width=5)
-    table.add_column("Title",   min_width=30, ratio=3)
+    table = Table(
+        show_header=True, header_style="cyan", box=box.SIMPLE, show_edge=False, expand=True
+    )
+    table.add_column("#", width=5)
+    table.add_column("Title", min_width=30, ratio=3)
     table.add_column("Authors", ratio=2)
-    table.add_column("Year",    width=6)
-    table.add_column("Source",  width=16)
-    table.add_column("OA",      width=4)
-    table.add_column("PDF",     width=4)
-    table.add_column("Abstr",   width=5)
+    table.add_column("Year", width=6)
+    table.add_column("Source", width=16)
+    table.add_column("OA", width=4)
+    table.add_column("PDF", width=4)
+    table.add_column("Abstr", width=5)
 
     for i, p in enumerate(papers, offset + 1):
-        color    = _RAINBOW[(i - 1) % len(_RAINBOW)]
-        oa       = "[green]✓[/green]" if p.is_open_access else "[red]✗[/red]"
-        pdf      = "[green]✓[/green]" if p.pdf_url        else "[dim]–[/dim]"
-        abstract = "[green]✓[/green]" if p.abstract       else "[dim]–[/dim]"
+        color = _RAINBOW[(i - 1) % len(_RAINBOW)]
+        oa = "[green]✓[/green]" if p.is_open_access else "[red]✗[/red]"
+        pdf = "[green]✓[/green]" if p.pdf_url else "[dim]–[/dim]"
+        abstract = "[green]✓[/green]" if p.abstract else "[dim]–[/dim]"
         table.add_row(
             f"[{color}]{i}[/{color}]",
             p.title[:80],
             p.short_authors,
             str(p.year or ""),
             p.source,
-            oa, pdf, abstract,
+            oa,
+            pdf,
+            abstract,
         )
 
     console.print(table)
@@ -1932,9 +2057,7 @@ def cache_list(
 
 @cache_app.command("show")
 def cache_show(
-    identifier: Annotated[
-        str, typer.Argument(help="DOI, arXiv ID, or full UID of the paper")
-    ],
+    identifier: Annotated[str, typer.Argument(help="DOI, arXiv ID, or full UID of the paper")],
 ) -> None:
     """Show full cached metadata for a paper."""
     from mosaic.models import Paper as _Paper
@@ -1962,24 +2085,24 @@ def cache_show(
     def row(k, v):
         table.add_row(k, str(v) if v is not None else "[dim]–[/dim]")
 
-    row("Title",          paper.title)
-    row("Authors",        paper.short_authors)
-    row("Year",           paper.year)
-    row("DOI",            paper.doi)
-    row("arXiv ID",       paper.arxiv_id)
-    row("Journal",        paper.journal)
-    row("Source",         paper.source)
-    row("Open access",    "[green]yes[/green]" if paper.is_open_access else "no")
-    row("PDF URL",        paper.pdf_url)
+    row("Title", paper.title)
+    row("Authors", paper.short_authors)
+    row("Year", paper.year)
+    row("DOI", paper.doi)
+    row("arXiv ID", paper.arxiv_id)
+    row("Journal", paper.journal)
+    row("Source", paper.source)
+    row("Open access", "[green]yes[/green]" if paper.is_open_access else "no")
+    row("PDF URL", paper.pdf_url)
     row("Citation count", paper.citation_count)
-    row("UID",            paper.uid)
+    row("UID", paper.uid)
     if paper.abstract:
         row("Abstract", paper.abstract[:300] + ("…" if len(paper.abstract) > 300 else ""))
     if dl:
         table.add_section()
-        row("Local file",   dl["local_path"])
+        row("Local file", dl["local_path"])
         row("Download status", dl["status"])
-        row("Downloaded at",   dl["downloaded_at"])
+        row("Downloaded at", dl["downloaded_at"])
 
     console.print(table)
 
@@ -1994,14 +2117,14 @@ def cache_verify() -> None:
         rprint("[dim]No completed downloads tracked.[/dim]")
         return
 
-    ok      = [r for r in results if r["exists"]]
+    ok = [r for r in results if r["exists"]]
     missing = [r for r in results if not r["exists"]]
 
     rprint(f"[green]{len(ok)} file(s) OK[/green], [red]{len(missing)} missing[/red]")
 
     if missing:
         table = Table(show_header=True, header_style="cyan", box=box.SIMPLE, show_edge=False)
-        table.add_column("UID",        style="dim")
+        table.add_column("UID", style="dim")
         table.add_column("Missing path")
         for r in missing:
             table.add_row(r["uid"], r["local_path"] or "[dim]–[/dim]")
@@ -2022,9 +2145,7 @@ def cache_clean() -> None:
 
 @cache_app.command("clear")
 def cache_clear(
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip confirmation prompt")
-    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt")] = False,
 ) -> None:
     """Wipe the entire cache (papers, downloads, searches, exports)."""
     cache, _ = _cache_and_cfg()
@@ -2044,12 +2165,8 @@ def cache_export(
     output: Annotated[
         Path, typer.Argument(help="Output file (.md, .markdown, .csv, .json, .bib, .ris)")
     ],
-    query: Annotated[
-        str, typer.Option("--query", "-q", help="Filter by title/abstract")
-    ] = "",
-    limit: Annotated[
-        int, typer.Option("--limit", "-n", help="Max papers to export (0 = all)")
-    ] = 0,
+    query: Annotated[str, typer.Option("--query", "-q", help="Filter by title/abstract")] = "",
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Max papers to export (0 = all)")] = 0,
 ) -> None:
     """Bulk export cached papers to a file."""
     from mosaic.exporter import export

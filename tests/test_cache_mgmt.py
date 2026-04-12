@@ -1,6 +1,5 @@
 """Phase 4 & 5 — cache management methods and richness predicate."""
 
-
 from mosaic.models import Paper
 
 
@@ -17,6 +16,7 @@ def _p(doi="10.1/test", abstract=None, year=2020, authors=None, title="Test Pape
 
 
 # ── Phase 5: richness predicate ───────────────────────────────────────────────
+
 
 class TestIsRich:
     def test_rich_paper(self, tmp_cache):
@@ -55,6 +55,7 @@ class TestRichUids:
 
 # ── Phase 4: stats ────────────────────────────────────────────────────────────
 
+
 class TestStats:
     def test_counts_papers(self, tmp_cache):
         for i in range(3):
@@ -86,6 +87,7 @@ class TestStats:
 
 
 # ── Phase 4: list_papers / count_papers ──────────────────────────────────────
+
 
 class TestListPapers:
     def test_returns_all_papers(self, tmp_cache):
@@ -124,6 +126,7 @@ class TestListPapers:
 
 # ── Phase 4: verify + clean ───────────────────────────────────────────────────
 
+
 class TestVerifyAndClean:
     def test_verify_existing_file(self, tmp_cache, tmp_path, paper):
         f = tmp_path / "paper.pdf"
@@ -158,6 +161,7 @@ class TestVerifyAndClean:
 
 # ── Phase 4: clear ────────────────────────────────────────────────────────────
 
+
 class TestClear:
     def test_clear_removes_all_papers(self, tmp_cache):
         for i in range(3):
@@ -173,6 +177,7 @@ class TestClear:
 
 
 # ── Phase 4: export tracking ─────────────────────────────────────────────────
+
 
 class TestExportTracking:
     def test_track_and_check(self, tmp_cache, paper):

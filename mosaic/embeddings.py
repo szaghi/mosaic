@@ -30,8 +30,7 @@ def embed_texts(texts: list[str], emb_cfg: dict) -> list[list[float]]:
 
     if not model:
         raise ValueError(
-            "No embedding model configured. "
-            "Run: mosaic config --embedding-model <model-name>"
+            "No embedding model configured. Run: mosaic config --embedding-model <model-name>"
         )
 
     url = f"{base_url}/v1/embeddings" if base_url else "https://api.openai.com/v1/embeddings"

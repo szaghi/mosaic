@@ -13,8 +13,8 @@ from mosaic.models import Paper
 _log = logging.getLogger(__name__)
 
 _OA_BASE = "https://api.openalex.org"
-_BATCH_SIZE = 50          # W-IDs per /works batch call
-_BATCH_DELAY = 1.0        # seconds between batch calls (polite pool)
+_BATCH_SIZE = 50  # W-IDs per /works batch call
+_BATCH_DELAY = 1.0  # seconds between batch calls (polite pool)
 
 
 class OpenAlexCitationProvider(BaseCitationProvider):
@@ -105,6 +105,7 @@ class OpenAlexCitationProvider(BaseCitationProvider):
 # ---------------------------------------------------------------------------
 # Module-level helper
 # ---------------------------------------------------------------------------
+
 
 def _item_to_uid(item: dict) -> str | None:
     """Convert an OpenAlex work dict to a mosaic UID.

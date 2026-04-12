@@ -12,9 +12,9 @@ _DEFAULT_PROVIDERS = ["openalex", "crossref"]
 
 # Registry: provider name → factory callable
 _REGISTRY: dict[str, type[BaseCitationProvider]] = {
-    "openalex":       OpenAlexCitationProvider,
-    "crossref":       CrossRefCitationProvider,
-    "opencitations":  OpenCitationsCitationProvider,
+    "openalex": OpenAlexCitationProvider,
+    "crossref": CrossRefCitationProvider,
+    "opencitations": OpenCitationsCitationProvider,
 }
 
 
@@ -34,16 +34,16 @@ def build_citation_providers(cfg: dict) -> list[BaseCitationProvider]:
         order.  Unknown provider names are logged and skipped.
     """
     import logging
+
     _log = logging.getLogger(__name__)
 
     citations_cfg = cfg.get("rag", {}).get("citations", {})
     provider_names: list[str] = citations_cfg.get("providers", _DEFAULT_PROVIDERS)
 
     # Resolve polite-pool email from multiple config locations
-    email: str = (
-        cfg.get("unpaywall", {}).get("email", "")
-        or cfg.get("sources", {}).get("openalex", {}).get("email", "")
-    )
+    email: str = cfg.get("unpaywall", {}).get("email", "") or cfg.get("sources", {}).get(
+        "openalex", {}
+    ).get("email", "")
 
     providers: list[BaseCitationProvider] = []
     for name in provider_names:
@@ -53,6 +53,7 @@ def build_citation_providers(cfg: dict) -> list[BaseCitationProvider]:
             continue
         # Only pass email to providers whose __init__ accepts it
         import inspect
+
         sig = inspect.signature(cls.__init__)
         if "email" in sig.parameters:
             providers.append(cls(email=email))  # type: ignore[call-arg]
