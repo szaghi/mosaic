@@ -54,8 +54,18 @@ def _init(con: sqlite3.Connection) -> None:
             source       TEXT,
             is_open_access INTEGER DEFAULT 0,
             url          TEXT,
-            citation_count INTEGER
+            citation_count INTEGER,
+            openalex_id  TEXT
         );
+        CREATE TABLE IF NOT EXISTS paper_citations (
+            source_uid  TEXT NOT NULL,
+            target_uid  TEXT NOT NULL,
+            provider    TEXT NOT NULL DEFAULT 'openalex',
+            PRIMARY KEY (source_uid, target_uid)
+        );
+        CREATE INDEX IF NOT EXISTS idx_pc_source ON paper_citations(source_uid);
+        CREATE INDEX IF NOT EXISTS idx_pc_target ON paper_citations(target_uid);
+        CREATE INDEX IF NOT EXISTS idx_papers_openalex ON papers(openalex_id);
         CREATE TABLE IF NOT EXISTS downloads (
             uid        TEXT PRIMARY KEY,
             local_path TEXT,
@@ -84,15 +94,25 @@ def _init(con: sqlite3.Connection) -> None:
         );
     """)
     con.commit()
-    # Migrations — add columns introduced after the initial schema
+    # Migrations — add columns / tables introduced after the initial schema
     for stmt in (
         "ALTER TABLE papers ADD COLUMN citation_count INTEGER",
+        "ALTER TABLE papers ADD COLUMN openalex_id TEXT",
+        """CREATE TABLE IF NOT EXISTS paper_citations (
+            source_uid  TEXT NOT NULL,
+            target_uid  TEXT NOT NULL,
+            provider    TEXT NOT NULL DEFAULT 'openalex',
+            PRIMARY KEY (source_uid, target_uid)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_pc_source ON paper_citations(source_uid)",
+        "CREATE INDEX IF NOT EXISTS idx_pc_target ON paper_citations(target_uid)",
+        "CREATE INDEX IF NOT EXISTS idx_papers_openalex ON papers(openalex_id)",
     ):
         try:
             con.execute(stmt)
             con.commit()
         except sqlite3.OperationalError:
-            pass  # column already exists
+            pass  # already exists
 
 
 def upsert(con: sqlite3.Connection, paper: Paper) -> None:
@@ -109,7 +129,11 @@ def upsert(con: sqlite3.Connection, paper: Paper) -> None:
     """
     con.execute(
         """
-        INSERT INTO papers VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO papers
+            (uid, title, authors, year, doi, arxiv_id, pii, abstract,
+             journal, volume, issue, pages, pdf_url, source, is_open_access,
+             url, citation_count, openalex_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(uid) DO UPDATE SET
             abstract = CASE
                 WHEN excluded.abstract IS NULL THEN papers.abstract
@@ -129,14 +153,15 @@ def upsert(con: sqlite3.Connection, paper: Paper) -> None:
                     THEN excluded.authors
                 ELSE papers.authors
             END,
-            doi      = COALESCE(papers.doi,      excluded.doi),
-            arxiv_id = COALESCE(papers.arxiv_id, excluded.arxiv_id),
-            pii      = COALESCE(papers.pii,      excluded.pii),
-            journal  = COALESCE(papers.journal,  excluded.journal),
-            volume   = COALESCE(papers.volume,   excluded.volume),
-            issue    = COALESCE(papers.issue,    excluded.issue),
-            pages    = COALESCE(papers.pages,    excluded.pages),
-            url      = COALESCE(papers.url,      excluded.url)
+            doi         = COALESCE(papers.doi,         excluded.doi),
+            arxiv_id    = COALESCE(papers.arxiv_id,    excluded.arxiv_id),
+            pii         = COALESCE(papers.pii,         excluded.pii),
+            journal     = COALESCE(papers.journal,     excluded.journal),
+            volume      = COALESCE(papers.volume,      excluded.volume),
+            issue       = COALESCE(papers.issue,       excluded.issue),
+            pages       = COALESCE(papers.pages,       excluded.pages),
+            url         = COALESCE(papers.url,         excluded.url),
+            openalex_id = COALESCE(papers.openalex_id, excluded.openalex_id)
         """,
         (
             paper.uid,
@@ -156,6 +181,7 @@ def upsert(con: sqlite3.Connection, paper: Paper) -> None:
             int(paper.is_open_access),
             paper.url,
             paper.citation_count,
+            paper.openalex_id,
         ),
     )
     con.commit()
@@ -178,6 +204,7 @@ def get_download(con: sqlite3.Connection, uid: str) -> sqlite3.Row | None:
 
 
 def row_to_paper(row: sqlite3.Row) -> Paper:
+    keys = row.keys()
     return Paper(
         title=row["title"],
         authors=json.loads(row["authors"] or "[]"),
@@ -195,6 +222,7 @@ def row_to_paper(row: sqlite3.Row) -> Paper:
         is_open_access=bool(row["is_open_access"]),
         url=row["url"],
         citation_count=row["citation_count"],
+        openalex_id=row["openalex_id"] if "openalex_id" in keys else None,
     )
 
 
@@ -382,13 +410,15 @@ class Cache:
             return removed
 
     def clear(self) -> None:
-        """Wipe all papers, downloads, searches, and exports from the cache."""
+        """Wipe all papers, downloads, searches, exports, vector index, and citation graph."""
         with self._lock:
             self.con.executescript(
                 "DELETE FROM papers; DELETE FROM downloads; "
-                "DELETE FROM searches; DELETE FROM exports;"
+                "DELETE FROM searches; DELETE FROM exports; "
+                "DELETE FROM paper_citations; DELETE FROM rag_meta;"
             )
             self.con.commit()
+        self.rebuild_vec_table()  # drops vec_papers; safe whether or not sqlite-vec is loaded
 
     # ── Export tracking (Phase 4) ─────────────────────────────────────────────
 
@@ -501,3 +531,85 @@ class Cache:
         with self._lock:
             rows = self._conn.execute("SELECT * FROM papers").fetchall()
             return [row_to_paper(r) for r in rows]
+
+    # ── Citation graph ────────────────────────────────────────────────────────
+
+    def upsert_citation_edges(self, edges: list[tuple[str, str, str]]) -> None:
+        """Insert (source_uid, target_uid, provider) triples, ignoring duplicates.
+
+        Args:
+            edges: List of ``(source_uid, target_uid, provider)`` tuples.
+        """
+        with self._lock:
+            self._conn.executemany(
+                "INSERT OR IGNORE INTO paper_citations (source_uid, target_uid, provider) VALUES (?,?,?)",
+                edges,
+            )
+            self._conn.commit()
+
+    def get_citation_links(self, uid: str, candidate_uids: set[str]) -> int:
+        """Count citation edges between *uid* and any uid in *candidate_uids*.
+
+        Both directions are counted: edges where *uid* is the source (cites
+        a candidate) and edges where *uid* is the target (cited by a
+        candidate).
+
+        Args:
+            uid: The paper whose citation links are counted.
+            candidate_uids: Set of other UIDs to check for edges against.
+
+        Returns:
+            Total number of bidirectional citation links found.
+        """
+        if not candidate_uids:
+            return 0
+        with self._lock:
+            placeholders = ",".join("?" * len(candidate_uids))
+            candidates = list(candidate_uids)
+            outgoing = self._conn.execute(
+                f"SELECT COUNT(*) FROM paper_citations WHERE source_uid=? AND target_uid IN ({placeholders})",
+                [uid, *candidates],
+            ).fetchone()[0]
+            incoming = self._conn.execute(
+                f"SELECT COUNT(*) FROM paper_citations WHERE target_uid=? AND source_uid IN ({placeholders})",
+                [uid, *candidates],
+            ).fetchone()[0]
+            return outgoing + incoming
+
+    def get_citation_neighbors(self, uid: str) -> list[str]:
+        """Return UIDs of cached papers cited by *uid*.
+
+        Only returns target UIDs that are present in the papers table.
+
+        Args:
+            uid: Source paper UID.
+
+        Returns:
+            List of target UIDs present in the local cache.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT pc.target_uid FROM paper_citations pc
+                INNER JOIN papers p ON p.uid = pc.target_uid
+                WHERE pc.source_uid = ?
+                """,
+                (uid,),
+            ).fetchall()
+            return [r[0] for r in rows]
+
+    def get_enriched_uids(self) -> set[str]:
+        """Return source UIDs already present in paper_citations.
+
+        Used to skip re-enrichment of already-processed papers.  Note that
+        papers which were queried but had no local citation matches will NOT
+        appear here and will be re-attempted on the next enrichment run.
+
+        Returns:
+            Set of source UIDs with at least one stored citation edge.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT DISTINCT source_uid FROM paper_citations"
+            ).fetchall()
+            return {r[0] for r in rows}

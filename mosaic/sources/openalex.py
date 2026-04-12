@@ -112,6 +112,9 @@ class OpenAlexSource(BaseSource):
 
         pdf_url = best_oa.get("pdf_url") or primary.get("pdf_url")
 
+        oa_id_raw = item.get("id") or ""
+        openalex_id = oa_id_raw.removeprefix("https://openalex.org/") or None
+
         return Paper(
             title=item.get("title") or "",
             authors=authors,
@@ -128,6 +131,7 @@ class OpenAlexSource(BaseSource):
             is_open_access=oa.get("is_oa", False),
             url=item.get("id"),
             citation_count=item.get("cited_by_count"),
+            openalex_id=openalex_id,
         )
 
 

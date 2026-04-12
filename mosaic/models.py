@@ -79,6 +79,7 @@ class Paper:
     url: str | None = None
     citation_count: int | None = None
     relevance_score: float | None = None
+    openalex_id: str | None = None
 
     def to_dict(self) -> dict:
         """Serialise to a plain dict (thread-safe passing, JSON export)."""

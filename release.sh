@@ -2,124 +2,170 @@
 # release.sh — create a new MOSAIC release
 #
 # Usage:
-#   ./release.sh --major        # bump major (1.2.3 → 2.0.0)
-#   ./release.sh --minor        # bump minor (1.2.3 → 1.3.0)
-#   ./release.sh --patch        # bump patch (1.2.3 → 1.2.4)
-#   ./release.sh 2.5.0          # set exact version
+#   ./release.sh (--major | --minor | --patch | <X.Y.Z>)
+#
+#   --major, -M     X.Y.Z → X+1.0.0
+#   --minor, -m     X.Y.Z → X.Y+1.0
+#   --patch, -p     X.Y.Z → X.Y.Z+1
+#   <X.Y.Z>         set an explicit version
 #
 # What it does:
-#   1. Validates the working tree is clean
-#   2. Computes the new version
-#   3. Updates pyproject.toml and mosaic/__init__.py
-#   4. Generates CHANGELOG.md via git cliff (requires: pip install git-cliff)
-#   5. Commits the version bump + changelog
-#   6. Creates an annotated git tag vX.Y.Z
-#   7. Pushes commit + tag  →  triggers CI (tests → PyPI publish)
+#   1. Pre-flight: clean tree, on main, up-to-date with remote, tag free
+#   2. Lint gate (ruff check + format --check)
+#   3. Confirms with user
+#   4. Bumps version in pyproject.toml + mosaic/__init__.py
+#   5. Generates CHANGELOG.md and docs/guide/changelog.md via git-cliff
+#   6. Runs test suite
+#   7. Commits + annotated tag + push (--follow-tags → triggers CI → PyPI)
 
 set -euo pipefail
 
-# ── helpers ────────────────────────────────────────────────────────────────────
+TRUNK="main"
+INIT_FILE="mosaic/__init__.py"
 
-die() { echo "error: $*" >&2; exit 1; }
+die()  { echo "ERROR: $*" >&2; exit 1; }
+info() { echo "==> $*"; }
+
+usage() {
+  sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+  exit 1
+}
 
 current_version() {
-    grep -E '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/'
+  grep -E '^version = ' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/'
 }
 
 bump() {
-    local ver="$1" part="$2"
-    local major minor patch
-    IFS='.' read -r major minor patch <<< "$ver"
-    case "$part" in
-        major) echo "$((major + 1)).0.0" ;;
-        minor) echo "${major}.$((minor + 1)).0" ;;
-        patch) echo "${major}.${minor}.$((patch + 1))" ;;
-    esac
+  local ver="$1" part="$2"
+  local major minor patch
+  IFS='.' read -r major minor patch <<< "$ver"
+  case "$part" in
+    major) echo "$((major + 1)).0.0" ;;
+    minor) echo "${major}.$((minor + 1)).0" ;;
+    patch) echo "${major}.${minor}.$((patch + 1))" ;;
+  esac
 }
 
-validate_semver() {
-    [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "'$1' is not a valid semver (X.Y.Z)"
+# ── stage tracking + recovery trap ────────────────────────────────────────────
+STAGE="preflight"
+NEW_VER=""
+
+on_error() {
+  echo ""
+  echo "================================================================"
+  echo "  release.sh FAILED at stage: $STAGE"
+  echo "================================================================"
+  case "$STAGE" in
+    preflight | lint | confirm)
+      echo "  Nothing was changed. Fix the issue above and re-run."
+      ;;
+    bumped)
+      echo "  Version bump and changelog were modified locally but not committed."
+      echo "  To discard and start over:"
+      echo "    git checkout -- pyproject.toml ${INIT_FILE} CHANGELOG.md docs/guide/changelog.md"
+      ;;
+    committed)
+      echo "  Version bump was committed but not tagged/pushed. To resume:"
+      echo "    git tag -a v${NEW_VER} -m \"Release v${NEW_VER}\""
+      echo "    git push origin ${TRUNK} --follow-tags"
+      ;;
+    tagged)
+      echo "  Tag v${NEW_VER} was created locally but not pushed. To resume:"
+      echo "    git push origin ${TRUNK} --follow-tags"
+      ;;
+  esac
+  echo "================================================================"
 }
 
-# ── argument parsing ────────────────────────────────────────────────────────────
+trap 'on_error' ERR
 
-[[ $# -eq 1 ]] || die "Usage: $0 --major|--minor|--patch|X.Y.Z"
+# ── argument parsing ───────────────────────────────────────────────────────────
+[[ $# -ge 1 ]] || usage
 
-CURRENT=$(current_version)
-[[ -n "$CURRENT" ]] || die "could not read current version from pyproject.toml"
+BUMP_ARG=""
 
-case "$1" in
-    --major|--minor|--patch)
-        NEW=$(bump "$CURRENT" "${1#--}")
-        ;;
-    *)
-        validate_semver "$1"
-        NEW="$1"
-        ;;
+for arg in "$@"; do
+  case "$arg" in
+    --major | -M)           BUMP_ARG=major ;;
+    --minor | -m)           BUMP_ARG=minor ;;
+    --patch | -p)           BUMP_ARG=patch ;;
+    [0-9]*.[0-9]*.[0-9]*)  BUMP_ARG="$arg" ;;
+    *) usage ;;
+  esac
+done
+
+[[ -n "$BUMP_ARG" ]] || usage
+
+CUR_VER=$(current_version)
+[[ -n "$CUR_VER" ]] || die "could not read current version from pyproject.toml"
+
+case "$BUMP_ARG" in
+  major | minor | patch) NEW_VER=$(bump "$CUR_VER" "$BUMP_ARG") ;;
+  *)                     NEW_VER="$BUMP_ARG" ;;
 esac
 
-echo "current version : $CURRENT"
-echo "new version     : $NEW"
-echo ""
-
 # ── pre-flight checks ──────────────────────────────────────────────────────────
+STAGE="preflight"
+[[ -f "$INIT_FILE" ]]           || die "$INIT_FILE not found — run from the repo root"
+command -v git-cliff >/dev/null || die "'git-cliff' not found (install: pipx install git-cliff)"
 
-# must be on main branch
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-[[ "$BRANCH" == "main" ]] || die "releases must be cut from 'main' (currently on '$BRANCH')"
+CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+[[ "$CURRENT_BRANCH" == "$TRUNK" ]] \
+  || die "must be on '${TRUNK}' branch (currently on '${CURRENT_BRANCH}')"
 
-# working tree must be clean
-[[ -z "$(git status --porcelain)" ]] || die "working tree is not clean; commit or stash changes first"
+[[ -z "$(git status --porcelain)" ]] \
+  || die "working tree is not clean — commit or stash changes first"
 
-# tag must not already exist on remote
-git fetch --tags -q
-git ls-remote --tags origin "refs/tags/v${NEW}" | grep -q . && die "tag v${NEW} already exists on remote"
+git fetch --tags --quiet
+[[ -z "$(git tag -l "v${NEW_VER}")" ]] || die "tag v${NEW_VER} already exists"
+
+BEHIND=$(git rev-list --count HEAD..origin/${TRUNK} 2>/dev/null || echo 0)
+[[ "$BEHIND" -eq 0 ]] \
+  || die "${TRUNK} is ${BEHIND} commit(s) behind origin/${TRUNK} — run: git pull origin ${TRUNK}"
+
+# ── lint gate ──────────────────────────────────────────────────────────────────
+STAGE="lint"
+info "Running ruff lint + format check"
+.venv/bin/ruff check mosaic/ tests/         || die "lint failed — run 'make fmt' to fix, then retry"
+.venv/bin/ruff format --check mosaic/ tests/ || die "format check failed — run 'make fmt' to fix, then retry"
 
 # ── confirm ────────────────────────────────────────────────────────────────────
+STAGE="confirm"
+echo "  Current version : $CUR_VER"
+echo "  New version     : $NEW_VER"
+echo
+read -r -p "Proceed? [y/N] " confirm
+[[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 
-read -r -p "Proceed with release v${NEW}? [y/N] " REPLY
-[[ "${REPLY,,}" == "y" ]] || { echo "aborted."; exit 0; }
-echo ""
+# ── bump version ───────────────────────────────────────────────────────────────
+STAGE="bumped"
+info "Bumping version ($CUR_VER → $NEW_VER)"
 
-# ── update version in files ────────────────────────────────────────────────────
+sed -i "s/^version = \"${CUR_VER}\"/version = \"${NEW_VER}\"/" pyproject.toml
+grep -q "version = \"${NEW_VER}\"" pyproject.toml || die "pyproject.toml was not updated"
 
-echo "--- updating pyproject.toml"
-sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" pyproject.toml
-
-echo "--- updating mosaic/__init__.py"
-sed -i "s/__version__ = \"${CURRENT}\"/__version__ = \"${NEW}\"/" mosaic/__init__.py
-
-# sanity-check that the replacements actually happened
-grep -q "version = \"${NEW}\"" pyproject.toml       || die "pyproject.toml was not updated"
-grep -q "__version__ = \"${NEW}\"" mosaic/__init__.py || die "mosaic/__init__.py was not updated"
+sed -i "s/__version__ = \"${CUR_VER}\"/__version__ = \"${NEW_VER}\"/" "$INIT_FILE"
+grep -q "__version__ = \"${NEW_VER}\"" "$INIT_FILE" || die "$INIT_FILE was not updated"
 
 # ── generate changelog ─────────────────────────────────────────────────────────
-
-command -v git-cliff &>/dev/null || die "git-cliff not found — install with: cargo install git-cliff"
-
-echo "--- generating CHANGELOG.md for v${NEW}"
-# Tag doesn't exist yet, so pass --tag to pretend it does for the header
-git cliff --tag "v${NEW}" -o CHANGELOG.md
-
-# Mirror into VitePress docs (skip the preamble, start at first version section)
+info "Generating changelog for v${NEW_VER}"
+git cliff --tag "v${NEW_VER}" -o CHANGELOG.md
 { printf -- "---\ntitle: Changelog\n---\n\n"; awk '/^## \[/{found=1} found' CHANGELOG.md; } > docs/guide/changelog.md
 
-# ── commit + tag ───────────────────────────────────────────────────────────────
+# ── run tests ──────────────────────────────────────────────────────────────────
+info "Running test suite"
+.venv/bin/pytest
 
-echo "--- committing version bump"
-git add pyproject.toml mosaic/__init__.py CHANGELOG.md docs/guide/changelog.md
-git commit -m "chore(release): bump version to ${NEW}"
+# ── commit, tag, push ──────────────────────────────────────────────────────────
+STAGE="committed"
+info "Committing version bump"
+git add pyproject.toml "$INIT_FILE" CHANGELOG.md docs/guide/changelog.md
+git commit -m "chore(release): bump version to ${NEW_VER}"
 
-# ── push ───────────────────────────────────────────────────────────────────────
+STAGE="tagged"
+git tag -a "v${NEW_VER}" -m "Release v${NEW_VER}"
 
-echo "--- pushing commit to origin"
-git push origin main
+info "Pushing ${TRUNK} + tag to origin (CI will run tests and publish to PyPI)"
+git push origin "${TRUNK}" --follow-tags
 
-echo "--- creating annotated tag v${NEW}"
-git tag -a "v${NEW}" -m "Release v${NEW}"
-
-echo "--- pushing tag to origin"
-git push origin "v${NEW}"
-
-echo ""
-echo "released v${NEW} — CI will run tests and publish to PyPI automatically."
+info "Done — v${NEW_VER} released"

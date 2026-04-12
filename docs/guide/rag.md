@@ -326,6 +326,36 @@ The embedding model is only needed when:
 - Running `mosaic index` (or `mosaic index --reindex`)
 - Using `auto_index = true`
 
+## Citation graph
+
+The vector index can be augmented with a **citation graph** that boosts papers
+sharing bibliographic edges with other retrieved results. The graph is built
+from OpenAlex (primary) and CrossRef (fallback), requires no LLM, and is
+stored as a lightweight edge table in the same SQLite cache.
+
+```bash
+# Enrich after indexing
+mosaic index --enrich-citations
+```
+
+To enable boosting, add the following to `~/.config/mosaic/config.toml`:
+
+```toml
+[rag.citations]
+enabled = true
+```
+
+Citation boosting re-ranks retrieved papers using a combined score:
+
+```
+score = (1 / rank) × (1 + α × citation_links_in_result_set)
+```
+
+The default `boost_alpha = 0.3` gives a modest nudge; tune it up for tightly
+scoped corpora where citation relationships are highly informative.
+
+See [Citation Graph](./citation-graph) for the full reference.
+
 ## Notes and limitations (v1)
 
 - **Abstracts only**: indexing uses title + abstract. Full-PDF chunking is reserved for a future release (`chunk_size` is already in the config for forward compatibility).

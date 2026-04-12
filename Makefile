@@ -1,12 +1,31 @@
-PIPX_PY := $(HOME)/.local/share/pipx/venvs/mosaic-search/bin/python
+.PHONY: dev test lint fmt clean
 
-.PHONY: dev test
+VENV   := .venv
+PYTHON := $(VENV)/bin/python
+PIP    := $(VENV)/bin/pip
 
-# Reinstall from local source into the pipx venv (keeps pipx upgrade working).
-dev:
-	$(PIPX_PY) -m pip install --no-deps -q .
-	@echo "mosaic updated from source"
+$(VENV)/bin/activate:
+	python3 -m venv $(VENV)
 
-# Run the test suite
-test:
-	.venv/bin/pytest
+## Install package in editable mode with dev extras
+dev: $(VENV)/bin/activate
+	$(PIP) install -e ".[dev]"
+
+## Run test suite
+test: dev
+	$(VENV)/bin/pytest
+
+## Check linting (no fixes)
+lint: dev
+	$(VENV)/bin/ruff check mosaic/ tests/
+	$(VENV)/bin/ruff format --check mosaic/ tests/
+
+## Auto-fix lint and format
+fmt: dev
+	$(VENV)/bin/ruff check --fix mosaic/ tests/
+	$(VENV)/bin/ruff format mosaic/ tests/
+
+## Remove build artifacts
+clean:
+	rm -rf dist/ build/ *.egg-info .pytest_cache .ruff_cache .coverage coverage.xml
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; true

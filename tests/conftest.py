@@ -69,6 +69,32 @@ def paper():
     )
 
 
+@pytest.fixture
+def paper_with_openalex_id():
+    """Paper that already has a stored OpenAlex W-ID."""
+    return Paper(
+        title="BERT: Pre-training of Deep Bidirectional Transformers",
+        authors=["Jacob Devlin", "Ming-Wei Chang"],
+        year=2019,
+        doi="10.18653/v1/n19-1423",
+        abstract="We introduce BERT.",
+        source="OpenAlex",
+        openalex_id="W2963403868",
+    )
+
+
+@pytest.fixture
+def tmp_cache_with_citations(tmp_path):
+    """Cache pre-populated with two papers and one citation edge between them."""
+    cache = Cache(str(tmp_path / "test_citations.db"))
+    p1 = Paper(title="Paper A", doi="10.9999/a", source="test", year=2020, abstract="abstract a")
+    p2 = Paper(title="Paper B", doi="10.9999/b", source="test", year=2021, abstract="abstract b")
+    cache.save(p1)
+    cache.save(p2)
+    cache.upsert_citation_edges([(p1.uid, p2.uid, "openalex")])
+    return cache, p1, p2
+
+
 def make_response(text="", json_data=None, status_code=200):
     """Build a minimal mock httpx response."""
     from unittest.mock import MagicMock

@@ -303,6 +303,7 @@ mosaic index [OPTIONS]
 | `--query` | `-q` | str | | Embed only papers matching this cache query |
 | `--from` | | path | | Embed only papers listed in a `.bib` or `.csv` file |
 | `--batch-size` | | int | `96` | Texts sent per embedding API call |
+| `--enrich-citations` | | flag | off | Fetch citation edges from OpenAlex / CrossRef after embedding and store them for graph-boosted retrieval |
 
 Requires `sqlite-vec`: `pipx inject mosaic-search sqlite-vec`.
 See the [RAG & Literature Analysis guide](./rag) for full setup instructions.
@@ -321,6 +322,9 @@ mosaic index --query "protein folding"
 
 # Index papers from a BibTeX file
 mosaic index --from refs.bib
+
+# Enrich with citation graph (OpenAlex + CrossRef edges)
+mosaic index --enrich-citations
 ```
 
 ---

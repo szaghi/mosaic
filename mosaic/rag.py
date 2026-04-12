@@ -175,6 +175,10 @@ def retrieve(
     """
     Embed *query* and return the top-k most similar Paper objects.
 
+    When ``cfg["rag"]["citations"]["enabled"]`` is True, applies citation
+    graph boosting: papers that share citation edges with other top results
+    are promoted using a reciprocal-rank × citation-factor score.
+
     *pre_filter*: optional list of UIDs to restrict the search to a subset.
     """
     from mosaic.config import get_embedding_cfg
@@ -194,8 +198,18 @@ def retrieve(
         filter_set = set(pre_filter)
         uids = [u for u in uids if u in filter_set][:top_k]
 
+    # ── Citation graph boosting ───────────────────────────────────────────────
+    citations_cfg = cfg.get("rag", {}).get("citations", {})
+    if citations_cfg.get("enabled", False) and uids:
+        alpha = float(citations_cfg.get("boost_alpha", 0.3))
+        uids = _citation_boost(uids, cache, alpha, top_k)
+
+        if citations_cfg.get("expand_neighbors", False):
+            uids = _expand_neighbors(uids, cache, top_k)
+
+    uids = uids[:top_k]
     papers = cache.get_papers_by_uids(uids)
-    # Preserve similarity order
+    # Preserve post-boost order
     uid_order = {uid: i for i, uid in enumerate(uids)}
     papers.sort(key=lambda p: uid_order.get(p.uid, 9999))
     return papers
@@ -243,6 +257,64 @@ def _build_context(papers: list[Paper]) -> str:
             f"    {abstract_snippet}"
         )
     return "\n\n".join(lines)
+
+
+def _citation_boost(
+    uids: list[str],
+    cache: Cache,
+    alpha: float,
+    top_k: int,
+) -> list[str]:
+    """Re-rank *uids* by combining reciprocal rank with citation link count.
+
+    Score for position *i*::
+
+        score(i) = (1 / (i + 1)) * (1 + alpha * citation_links(uid_i, uid_set))
+
+    Papers with more cross-citations to other retrieved papers rise in rank.
+    When ``alpha=0`` the original cosine order is preserved.
+
+    Args:
+        uids: UIDs in cosine-similarity order (best first).
+        cache: Local SQLite cache for citation lookups.
+        alpha: Citation boost weight.  0 = pure cosine order.
+        top_k: Number of UIDs to retain after re-ranking.
+
+    Returns:
+        Re-ranked list of UIDs, length ≤ ``len(uids)``.
+    """
+    uid_set = set(uids)
+    scored: list[tuple[float, str]] = []
+    for i, uid in enumerate(uids):
+        rr = 1.0 / (i + 1)
+        links = cache.get_citation_links(uid, uid_set - {uid})
+        scored.append((rr * (1.0 + alpha * links), uid))
+    scored.sort(key=lambda t: t[0], reverse=True)
+    return [uid for _, uid in scored]
+
+
+def _expand_neighbors(uids: list[str], cache: Cache, top_k: int) -> list[str]:
+    """Extend *uids* with 1-hop citation neighbors present in the local cache.
+
+    Adds neighbors of the top-*top_k* results that are not already in *uids*,
+    preserving the existing order and appending new candidates at the end.
+
+    Args:
+        uids: Current UID list (post-boost).
+        cache: Local SQLite cache.
+        top_k: How many top UIDs to explore for neighbors.
+
+    Returns:
+        Extended UID list with neighbors appended (deduplicated).
+    """
+    seen = set(uids)
+    extended = list(uids)
+    for uid in uids[:top_k]:
+        for neighbor in cache.get_citation_neighbors(uid):
+            if neighbor not in seen:
+                seen.add(neighbor)
+                extended.append(neighbor)
+    return extended
 
 
 def _call_llm(prompt: str, cfg: dict) -> str:

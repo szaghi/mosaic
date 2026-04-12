@@ -66,6 +66,12 @@ _DEFAULTS: dict = {
         "top_k":              10,   # papers retrieved per query
         "chunk_size":         512,  # max characters per text chunk (reserved for future full-PDF mode)
         "auto_index":         False, # silently index new papers after each search/get
+        "citations": {
+            "enabled":          False,  # apply citation graph boosting in retrieve()
+            "boost_alpha":      0.3,    # re-scoring weight; 0 = pure cosine, >0 = citation boost
+            "providers":        ["openalex", "crossref"],  # priority order
+            "expand_neighbors": False,  # widen recall by adding 1-hop citation neighbors
+        },
     },
 }
 

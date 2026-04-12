@@ -569,6 +569,13 @@ def index(
     query: Annotated[str, typer.Option("--query", "-q", help="Embed only papers matching this query")] = "",
     from_file: Annotated[Optional[Path], typer.Option("--from", help="Embed only papers from a .bib or .csv file")] = None,
     batch_size: Annotated[int, typer.Option("--batch-size", help="Texts per embedding API call")] = 96,
+    enrich_citations: Annotated[
+        bool,
+        typer.Option(
+            "--enrich-citations",
+            help="Fetch citation edges from OpenAlex/CrossRef after embedding and store them for graph-boosted retrieval",
+        ),
+    ] = False,
 ):
     """Build or update the vector index for semantic search and RAG."""
     from mosaic.rag import index_papers
@@ -606,6 +613,19 @@ def index(
     except ValueError as e:
         rprint(f"[red]{e}[/red]")
         raise typer.Exit(1)
+
+    # ── Citation enrichment ───────────────────────────────────────────────────
+    if enrich_citations or cfg.get("rag", {}).get("citations", {}).get("enabled", False):
+        from mosaic.citations.enrichment import enrich_citations as _enrich
+        rprint(f"[cyan]Enriching citation graph for {len(papers)} papers…[/cyan]")
+        try:
+            n_enriched, n_skipped = _enrich(papers, cfg, cache, reindex=reindex)
+            rprint(
+                f"[green]Citation edges stored for {n_enriched} paper(s).[/green] "
+                f"{n_skipped} skipped (already enriched or no local matches)."
+            )
+        except Exception as e:
+            rprint(f"[yellow]Citation enrichment warning: {e}[/yellow]")
 
 
 @app.command()

@@ -15,17 +15,26 @@ git cliff --unreleased
 git cliff -o CHANGELOG.md
 { printf -- "---\ntitle: Changelog\n---\n\n"; awk '/^## \[/{found=1} found' CHANGELOG.md; } > docs/guide/changelog.md
 
-# Install for development
-pip install -e ".[dev]"
+# Install for development (creates .venv if needed)
+make dev
 
 # Run all tests with coverage
-pytest
+make test
 
 # Run a single test file
-pytest tests/test_search.py
+.venv/bin/pytest tests/test_search.py
 
 # Run a single test
-pytest tests/test_search.py::test_name
+.venv/bin/pytest tests/test_search.py::test_name
+
+# Check linting and formatting (no fixes)
+make lint
+
+# Auto-fix lint issues and apply formatting
+make fmt
+
+# Remove build artifacts
+make clean
 
 # Run the CLI
 python -m mosaic search "transformer attention"

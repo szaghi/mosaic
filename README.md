@@ -92,6 +92,9 @@ Index your paper library once and ask questions in natural language. Get structu
 # 1. Index all cached papers (incremental — already-indexed papers are skipped)
 mosaic index
 
+# 1b. Optionally enrich with citation graph (boosts retrieval via OpenAlex edges)
+mosaic index --enrich-citations
+
 # 2. Single-shot analysis
 mosaic ask "What FDTD schemes achieve high-order accuracy in time?" --show-sources
 mosaic ask "What open problems remain in discontinuous Galerkin methods?" --mode gaps

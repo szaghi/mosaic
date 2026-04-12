@@ -265,6 +265,28 @@ chunk_size = 512
 
 # Set to true to silently index new papers after every search / get run.
 auto_index = false
+
+[rag.citations]
+# Citation graph — populated by `mosaic index --enrich-citations`.
+# Boosts RAG retrieval scores for papers that share bibliographic edges
+# with other results in the retrieved set. Off by default.
+
+# Enable citation-graph boosting during retrieval.
+enabled = false
+
+# Boost strength. 0.3 gives a modest nudge toward well-connected papers;
+# raise toward 1.0 for tightly-scoped corpora where citation links are
+# highly informative. See the Citation Graph guide for tuning advice.
+boost_alpha = 0.3
+
+# Providers used when running `mosaic index --enrich-citations`.
+# Order = priority. Available: "openalex" (90 %+ DOI coverage),
+# "crossref" (variable), "opencitations" (OA-skewed).
+providers = ["openalex", "crossref"]
+
+# When true, 1-hop citation neighbours are added to the retrieval candidate
+# pool before final ranking — expands coverage at the cost of topic drift.
+expand_neighbors = false
 ```
 
 ## Source credentials
