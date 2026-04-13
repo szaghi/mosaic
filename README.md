@@ -11,7 +11,7 @@
 ### Multi-sOurce Scientific Article Indexer and Collector
 
 > Search, discover, and download scientific papers from 21 sources — with a single command.
-> Ask questions, find gaps, and compare methods with fully local AI. Or send results to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
+> Ask questions, find gaps, compare methods, and map citation networks with fully local AI. Or send results to [Google NotebookLM](https://notebooklm.google.com/) for AI-powered summaries, podcasts, and more.
 
 [![Version](https://img.shields.io/pypi/v/mosaic-search?label=version)](https://pypi.org/project/mosaic-search/)
 [![Tests](https://github.com/szaghi/mosaic/actions/workflows/tests.yml/badge.svg)](https://github.com/szaghi/mosaic/actions/workflows/tests.yml)
@@ -49,6 +49,15 @@ mosaic chat   # interactive multi-turn session
 
 # Re-rank results by relevance to a query — BM25, instant, no model needed
 mosaic search "graph neural networks" --cached --sort relevance
+
+# Explore the citation network: hubs, clusters, graph export
+mosaic index --enrich-citations
+mosaic network --query "transformer attention" --cluster --top 5
+mosaic network --output graph.json        # D3.js / Gephi / NetworkX
+
+# Compare methods across papers with an LLM — markdown table, CSV, or JSON
+mosaic compare --query "diffusion models" --sort citations -n 15 --output comparison.md
+mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
 
 # Turn results into an AI-powered notebook: podcast, slides, quiz, mind map…
 mosaic notebook create "Transformers" --query "transformer architecture" --oa-only --podcast
@@ -105,6 +114,65 @@ mosaic chat
 ```
 
 Requires `sqlite-vec` and an embedding model. See the [RAG guide](https://szaghi.github.io/mosaic/guide/rag) for Ollama setup, model selection, and all CLI options.
+
+---
+
+### Citation network — `mosaic network`
+
+After enriching the local cache with citation edges, `mosaic network` lets you explore the topology of your corpus: identify hub papers, cluster by community, and export the graph for downstream tools.
+
+```bash
+# 1. Enrich the citation graph (OpenAlex + CrossRef edges)
+mosaic index --enrich-citations
+
+# 2. Show the most-connected papers across the whole graph
+mosaic network --top 10
+
+# 3. Topic subgraph: 2-hop BFS from matching seed papers, clustered
+mosaic network --query "transformer attention" --depth 2 --cluster --top 5
+
+# 4. Export for downstream tools
+mosaic network --output graph.json     # D3.js / Gephi / NetworkX node-link
+mosaic network --output graph.gv       # Graphviz DOT  →  dot -Tpng graph.gv -o graph.png
+mosaic network --output graph.md       # Mermaid diagram for README / Obsidian
+```
+
+Terminal output with `--cluster`:
+
+```
+── Cluster 1 — Attention Is All You Need (8 papers) ───────────────────────
+ Hub  Attention Is All You Need       Vaswani et al.   2017  degree=6
+ Hub  BERT: Pre-training of Deep…     Devlin et al.    2019  degree=6
+      Efficient Transformers Survey   Tay et al.       2020  degree=3
+```
+
+Louvain community detection via `networkx` (`pipx inject mosaic-search networkx`); falls back to connected components when not installed.
+
+See the [Citation Network guide](https://szaghi.github.io/mosaic/guide/network).
+
+---
+
+### Compare papers — `mosaic compare`
+
+Generate a structured comparison table across any set of cached papers. When an LLM is configured it extracts dimensions (method, dataset, metric, result) from each paper's abstract; otherwise metadata fields (year, source, journal, DOI) are populated.
+
+```bash
+# Compare top-cited diffusion model papers (LLM fills in method/dataset/metric/result)
+mosaic compare --query "diffusion models" --sort citations -n 15
+
+# Save as Markdown — ready to paste into a paper or Obsidian note
+mosaic compare --query "transformer attention" --output comparison.md
+
+# Custom comparison axes
+mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
+
+# Export as CSV for Excel / Google Sheets
+mosaic compare --query "GNN" -n 20 --output gnn-comparison.csv
+```
+
+No LLM? A notice is printed and metadata-only fields are populated — the command never fails silently.
+
+See the [Compare Papers guide](https://szaghi.github.io/mosaic/guide/compare).
 
 ---
 
@@ -200,6 +268,11 @@ See the [Agent Workflows guide](https://szaghi.github.io/mosaic/guide/agent-work
 <td><b>🤖 NotebookLM integration</b><br><sub>Podcast · video · slides · quiz · mind map · flashcards · briefing — queued in one command with <code>mosaic notebook create</code>. <a href="https://szaghi.github.io/mosaic/guide/notebooklm">NotebookLM guide</a></sub></td>
 </tr>
 <tr>
+<td><b>🕸️ Citation network</b><br><sub>Explore hub papers and topic clusters from your local citation graph. BFS subgraph, Louvain/connected-components clustering. Export to JSON (D3/Gephi), Graphviz DOT, or Mermaid. <a href="https://szaghi.github.io/mosaic/guide/network">Citation Network guide</a></sub></td>
+<td><b>📋 Compare papers</b><br><sub>Generate a structured comparison table across any set of cached papers — method, dataset, metric, result — with an LLM, or metadata-only without one. Export to Markdown, CSV, or JSON. <a href="https://szaghi.github.io/mosaic/guide/compare">Compare Papers guide</a></sub></td>
+<td></td>
+</tr>
+<tr>
 <td><b>⚡ Offline-first cache</b><br><sub>SQLite — repeated queries are instant, no re-fetching. <code>mosaic search "query" --cached</code> for instant offline search. <a href="https://szaghi.github.io/mosaic/guide/usage#offline--cached-search">Usage guide</a></sub></td>
 <td><b>🧩 Custom sources</b><br><sub>Wire any JSON REST API as a new source with a few lines of TOML — no Python needed. <a href="https://szaghi.github.io/mosaic/guide/custom-sources">Custom sources guide</a></sub></td>
 <td><b>🗒️ Obsidian integration</b><br><sub>Write paper notes directly into an Obsidian vault — YAML frontmatter, <code>&gt;[!abstract]</code> callout, metadata table, and <code>[[wikilinks]]</code> to related papers. <a href="https://szaghi.github.io/mosaic/guide/obsidian">Obsidian integration guide</a></sub></td>
@@ -264,12 +337,14 @@ The core install covers all 21 search sources and the full CLI. Extra dependenci
 
 | Feature | Extra | Install |
 |---------|-------|---------|
+| **Everything** | `[all]` | `pipx install 'mosaic-search[all]'` + `playwright install chromium` |
 | **Web UI** (`mosaic ui`) | `[ui]` | `pipx inject mosaic-search "flask>=3.0" "waitress>=3.0"` |
 | **Local RAG** (`mosaic index/ask/chat`) | `[rag]` | `pipx inject mosaic-search sqlite-vec` |
+| **Louvain clustering** (`mosaic network --cluster`) | `[analysis]` | `pipx inject mosaic-search networkx` |
 | **Browser sessions** (`mosaic auth login`) | `[browser]` | `pipx inject mosaic-search "playwright>=1.40"` + `playwright install chromium` |
 | **NotebookLM** (`mosaic notebook`) | `[notebooklm]` | `pipx inject --include-apps mosaic-search "notebooklm-py[browser]"` + `playwright install chromium` |
 
-For `uv`: replace `pipx inject` with `uv tool inject`. For `pip`/venv: `pip install 'mosaic-search[extra]'`.
+For `uv`: replace `pipx install/inject` with `uv tool install/inject`. For `pip`/venv: `pip install 'mosaic-search[all]'`.
 
 Full setup instructions for each feature → [Installation guide](https://szaghi.github.io/mosaic/guide/installation).
 

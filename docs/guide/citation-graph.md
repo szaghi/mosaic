@@ -84,6 +84,13 @@ Set `enabled = true` to trigger enrichment automatically every time you run `mos
 enabled = true
 ```
 
+## Related commands
+
+Once you have citation edges stored, you can use two additional commands built on top of the graph:
+
+- **`mosaic network`** — explore topology, identify hubs, cluster into communities, and export to JSON/DOT/Mermaid.  See the [Citation Network](./network) guide.
+- **`mosaic compare`** — generate a structured comparison table across a set of papers using an LLM.  See the [Compare Papers](./compare) guide.
+
 ## CLI reference
 
 ### `mosaic index --enrich-citations`

@@ -404,6 +404,81 @@ mosaic chat --from refs.bib
 
 ---
 
+### `network`
+
+Analyse the local citation network and visualise paper clusters.
+
+```
+mosaic network [OPTIONS]
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--query TEXT` | `-q` | str | | Seed the graph from cached papers matching this query |
+| `--depth INT` | | int | `2` | Citation hops to follow from seed papers |
+| `--min-connections INT` | | int | `1` | Exclude papers with fewer edges than this |
+| `--cluster` | | flag | off | Group papers into topic clusters |
+| `--output FILE` | `-o` | path | | Write graph to file (`.json`, `.gv`, `.md`) |
+| `--top INT` | | int | `5` | Most-connected papers to show per cluster in the terminal |
+
+Requires citation edges — run `mosaic index --enrich-citations` first.  Louvain clustering requires the optional `[analysis]` extra: `pip install 'mosaic-search[analysis]'`.
+
+See the [Citation Network guide](./network) for format details and workflow examples.
+
+**Examples:**
+
+```bash
+# Most-connected papers in the full graph
+mosaic network --top 10
+
+# Topic subgraph with cluster report
+mosaic network --query "transformer attention" --cluster --top 5
+
+# Export for D3.js / Gephi
+mosaic network --output graph.json
+
+# Export Mermaid diagram
+mosaic network --query "protein folding" --depth 2 --output protein.md
+```
+
+---
+
+### `compare`
+
+Compare a set of papers across structured dimensions using an LLM.
+
+```
+mosaic compare [OPTIONS]
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--query TEXT` | `-q` | str | | Filter papers from the cache by title/abstract |
+| `--from FILE` | | path | | Load papers from a `.bib` or `.csv` file |
+| `--max INT` | `-n` | int | `20` | Maximum number of papers to compare |
+| `--dimensions TEXT` | | str | `method,dataset,metric,result` | Comma-separated comparison axes |
+| `--output FILE` | `-o` | path | | Write table to file (`.md`, `.csv`, `.json`) |
+| `--sort TEXT` | | str | | Pre-sort: `citations` or `year` |
+
+When no LLM is configured, only metadata fields (year, source, journal, DOI) are populated and a notice is printed.
+
+See the [Compare Papers guide](./compare) for setup and examples.
+
+**Examples:**
+
+```bash
+# Compare top-cited diffusion model papers
+mosaic compare --query "diffusion models" --sort citations -n 15 --output comparison.md
+
+# Compare along custom axes
+mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
+
+# Export as CSV
+mosaic compare --query "GNN" -n 20 --output gnn-comparison.csv
+```
+
+---
+
 ### `ui`
 
 Launch the MOSAIC web interface in your browser.

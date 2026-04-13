@@ -617,3 +617,18 @@ class Cache:
         with self._lock:
             rows = self._conn.execute("SELECT DISTINCT source_uid FROM paper_citations").fetchall()
             return {r[0] for r in rows}
+
+    def get_all_citation_edges(self) -> list[tuple[str, str]]:
+        """Return all (source_uid, target_uid) pairs stored in paper_citations.
+
+        Used by the citation network analyser to build the full graph in
+        memory before traversal and clustering.
+
+        Returns:
+            List of ``(source_uid, target_uid)`` tuples.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT source_uid, target_uid FROM paper_citations"
+            ).fetchall()
+            return [(r[0], r[1]) for r in rows]

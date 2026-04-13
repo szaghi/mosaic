@@ -68,12 +68,35 @@ The core install covers all 21 search sources and the full CLI. The table below 
 
 | Feature | Extra | What it enables |
 |---------|-------|-----------------|
+| **Everything** | `[all]` | All features below in one shot |
 | **Web UI** | `[ui]` | `mosaic ui` — browser-based interface |
 | **Local RAG** | `[rag]` | `mosaic index` / `mosaic ask` / `mosaic chat` — local LLM Q&A over your library |
+| **Louvain clustering** | `[analysis]` | `mosaic network --cluster` — Louvain community detection via networkx |
 | **Browser sessions** | `[browser]` | `mosaic auth login` — download PDFs from sites requiring login |
 | **NotebookLM** | `[notebooklm]` | `mosaic notebook` — create Google NotebookLM notebooks from searches |
 
-Each feature has its own subsection below.
+### Install everything at once
+
+```bash
+pipx install 'mosaic-search[all]'          # pipx
+uv tool install 'mosaic-search[all]'       # uv
+pip install 'mosaic-search[all]'           # pip / venv
+```
+
+::: warning Playwright browser required
+`[all]` installs the Playwright library but does **not** download a browser binary. Run this once after installation:
+
+```bash
+# pipx
+~/.local/share/pipx/venvs/mosaic-search/bin/playwright install chromium
+# uv
+~/.local/share/uv/tools/mosaic-search/bin/playwright install chromium
+# pip / venv
+playwright install chromium
+```
+:::
+
+Each individual feature also has its own subsection below.
 
 ---
 
@@ -184,6 +207,18 @@ mosaic config \
 ```
 
 Cloud OpenAI works too — see the [RAG guide](./rag) for all setup options, model recommendations, and usage examples.
+
+## Optional: Louvain clustering {#optional-analysis}
+
+`mosaic network --cluster` uses connected-components by default (no extra dependency). For higher-quality Louvain community detection install the `analysis` extra:
+
+```bash
+pipx inject mosaic-search networkx          # pipx
+uv tool inject mosaic-search networkx       # uv
+pip install 'mosaic-search[analysis]'       # pip / venv
+```
+
+See the [Citation Network guide](./network) for usage and export options.
 
 ## Verify
 

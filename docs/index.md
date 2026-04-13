@@ -14,8 +14,11 @@ hero:
       text: Get Started
       link: /guide/installation
     - theme: alt
-      text: Agent Workflows
-      link: /guide/agent-workflows
+      text: Citation Network
+      link: /guide/network
+    - theme: alt
+      text: Compare Papers
+      link: /guide/compare
     - theme: alt
       text: Local RAG Guide
       link: /guide/rag
@@ -51,6 +54,12 @@ features:
   - icon: 🤖
     title: NotebookLM Integration
     details: Turn any search into a Google NotebookLM notebook — podcast, video overview, slides, quiz, flashcards, mind map, and briefing doc queued in one command with mosaic notebook create.
+  - icon: 🕸️
+    title: Citation Network
+    details: Explore hub papers and topic clusters from your local citation graph. BFS subgraph from any seed query, Louvain or connected-components clustering, and graph export to JSON (D3/Gephi), Graphviz DOT, or Mermaid — all with `mosaic network`.
+  - icon: 📋
+    title: Compare Papers
+    details: Generate a structured comparison table (method, dataset, metric, result) across any set of cached papers using an LLM. Falls back gracefully to metadata fields without one. Export to Markdown, CSV, or JSON with `mosaic compare`.
   - icon: 🦾
     title: Claude Code Skill & AI Agent Mode
     details: Install the bundled Claude Code skill with `mosaic skill install` — gives Claude Code full knowledge of every command, source, and option. The `--json` flag on search and similar emits a structured JSON envelope to stdout for piping, scripting, and CI pipelines.
@@ -68,7 +77,13 @@ features:
 ## Quick start
 
 ```bash
-pipx install mosaic-search   # or: uv tool install mosaic-search
+# Core install — all 21 sources and the full CLI
+pipx install mosaic-search
+
+# Everything at once — RAG, web UI, Louvain clustering, browser sessions, NotebookLM
+pipx install 'mosaic-search[all]'
+playwright install chromium   # browser binary (needed for auth and NotebookLM)
+
 mosaic config --unpaywall-email you@example.com
 mosaic search "attention is all you need" --oa-only --download
 ```
@@ -96,6 +111,47 @@ mosaic chat                                   # interactive multi-turn session
 ```
 
 Runs entirely on your machine via [Ollama](https://ollama.com) or any OpenAI-compatible server. → [RAG guide](./guide/rag)
+
+---
+
+### Citation network — `mosaic network`
+
+After enriching your cache with citation edges, explore the topology of your corpus: identify hub papers, cluster by community, and export the graph for downstream tools — without leaving the terminal.
+
+```bash
+# Enrich the citation graph (OpenAlex + CrossRef edges)
+mosaic index --enrich-citations
+
+# Most-connected papers across the full graph
+mosaic network --top 10
+
+# Topic subgraph with cluster report
+mosaic network --query "transformer attention" --depth 2 --cluster --top 5
+
+# Export for D3.js / Gephi / Mermaid
+mosaic network --output graph.json
+mosaic network --output graph.md
+```
+
+Louvain clustering via `networkx` (`pipx inject mosaic-search networkx`); falls back to connected components automatically.
+
+→ [Citation Network guide](./guide/network)
+
+---
+
+### Compare papers — `mosaic compare`
+
+Generate a structured comparison table across any set of cached papers. With an LLM configured, it extracts dimensions (method, dataset, metric, result) from each abstract. Without one, metadata fields are used and a notice is printed — the command never fails silently.
+
+```bash
+# Compare top-cited papers on a topic
+mosaic compare --query "diffusion models" --sort citations -n 15 --output comparison.md
+
+# Custom dimensions from a BibTeX file
+mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
+```
+
+→ [Compare Papers guide](./guide/compare)
 
 ---
 

@@ -6,7 +6,8 @@ description: >
   Use this skill whenever the user asks about: building a bibliography programmatically, searching
   for papers across multiple sources, downloading OA PDFs, exporting to BibTeX/Zotero/Obsidian,
   interpreting mosaic --json output in AI agent or CI workflows, RAG over a paper library, finding
-  similar papers, or any task that involves mosaic search/get/similar/ask/chat/index/skill commands.
+  similar papers, analysing citation networks, comparing papers across structured dimensions, or any
+  task that involves mosaic search/get/similar/ask/chat/index/network/compare/skill commands.
   When in doubt, trigger this skill — it is better to consult it unnecessarily than to miss it.
 ---
 
@@ -22,6 +23,8 @@ AI agent and CI workflows.
 mosaic search "query"           # search all enabled sources
 mosaic get <doi>                # fetch metadata + download PDF by DOI
 mosaic similar <doi|arxiv_id>   # find related papers via OpenAlex + Semantic Scholar
+mosaic network                  # explore citation network, identify hubs and clusters
+mosaic compare                  # structured comparison table across cached papers (LLM or metadata)
 mosaic index                    # build/update vector index for RAG
 mosaic ask "question"           # RAG Q&A over cached papers
 mosaic chat                     # interactive multi-turn RAG session
@@ -235,6 +238,117 @@ mosaic search "deep learning" --output refs.bib --output summary.md
 
 ---
 
+## network Command
+
+Explore the local citation graph built by `mosaic index --enrich-citations`.
+
+```bash
+mosaic network [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--query`, `-q` | — | Seed graph from cached papers matching this query (BFS subgraph) |
+| `--depth` | 2 | Citation hops to follow from seed papers |
+| `--min-connections` | 1 | Exclude papers with fewer edges than this |
+| `--cluster` | off | Group papers into topic clusters (Louvain if `networkx` installed, else connected components) |
+| `--output`, `-o` | — | Write graph to file: `.json` (D3/Gephi node-link), `.gv` (Graphviz DOT), `.md` (Mermaid) |
+| `--top` | 5 | Most-connected papers to show per cluster in terminal output |
+
+**Requires** citation edges — run `mosaic index --enrich-citations` first.
+**Louvain clustering** requires `networkx`: `pipx inject mosaic-search networkx`.
+
+```bash
+# Most-connected papers in the full graph
+mosaic network --top 10
+
+# Topic subgraph with community clusters
+mosaic network --query "transformer attention" --depth 2 --cluster --top 5
+
+# Export for downstream tools
+mosaic network --output graph.json   # D3.js / Gephi / NetworkX
+mosaic network --output graph.gv     # Graphviz: dot -Tpng graph.gv -o graph.png
+mosaic network --output graph.md     # Mermaid diagram for README / Obsidian
+
+# Combine: topic subgraph → cluster report → save Mermaid
+mosaic network --query "diffusion models" --cluster --top 5 --output diffusion.md
+```
+
+### JSON node-link schema
+
+```json
+{
+  "nodes": [
+    {
+      "id": "doi:10.48550/arxiv.1706.03762",
+      "title": "Attention Is All You Need",
+      "year": 2017,
+      "authors": "Vaswani et al.",
+      "citation_count": 85000,
+      "cluster": 0
+    }
+  ],
+  "links": [
+    { "source": "doi:10.48550/...", "target": "doi:10.18653/..." }
+  ]
+}
+```
+
+`cluster` is `null` when `--cluster` is not used.
+
+---
+
+## compare Command
+
+Generate a structured comparison table across cached papers. With a configured LLM, extracts
+dimensions from each paper's title + abstract. Without one, populates only metadata fields and
+prints a notice — never fails silently.
+
+```bash
+mosaic compare [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--query`, `-q` | — | Filter papers from cache by title/abstract |
+| `--from` | — | Load papers from a `.bib` or `.csv` file |
+| `--max`, `-n` | 20 | Maximum number of papers to compare |
+| `--dimensions` | `method,dataset,metric,result` | Comma-separated comparison axes |
+| `--output`, `-o` | — | Write table to file: `.md`, `.csv`, `.json` |
+| `--sort` | — | Pre-sort papers: `citations` (most cited first) or `year` (newest first) |
+
+```bash
+# Compare top-cited cached papers on a topic (LLM fills in method/dataset/metric/result)
+mosaic compare --query "diffusion models" --sort citations -n 15
+
+# Save as Markdown
+mosaic compare --query "transformer attention" --output comparison.md
+
+# Custom dimensions from a BibTeX file
+mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
+
+# Export as CSV for Excel / Google Sheets
+mosaic compare --query "GNN" -n 20 --output gnn-comparison.csv
+
+# Export as JSON for scripting
+mosaic compare --query "protein folding" --output folding.json
+```
+
+**Metadata-only dimensions** (no LLM needed): `year`, `source`, `journal`, `doi`, `authors`,
+`citations`. All other dimension names require an LLM and return `–` without one.
+
+**LLM setup** (same config as RAG):
+
+```bash
+mosaic config --llm-provider openai --llm-api-key YOUR_KEY
+# or Anthropic:
+mosaic config --llm-provider anthropic --llm-api-key YOUR_KEY
+# or local Ollama:
+mosaic config --llm-provider openai --llm-base-url http://localhost:11434/v1 --llm-api-key ollama
+```
+
+---
+
 ## RAG Commands
 
 ```bash
@@ -354,10 +468,18 @@ for p in unique:
     if p["pdf_url"] and p.get("doi"):
         subprocess.run(["mosaic", "get", p["doi"]])
 
-# --- Step 6: Index and ask ---
-subprocess.run(["mosaic", "index"])
+# --- Step 6: Index, enrich citations, and ask ---
+subprocess.run(["mosaic", "index", "--enrich-citations"])
 subprocess.run(["mosaic", "ask", "Summarise the evolution of attention mechanisms",
                 "--mode", "synthesis", "--output", "synthesis.md"])
+
+# --- Step 7: Explore the citation network ---
+subprocess.run(["mosaic", "network", "--query", "attention mechanism",
+                "--cluster", "--top", "5", "--output", "network.md"])
+
+# --- Step 8: Compare methods across top-cited papers ---
+subprocess.run(["mosaic", "compare", "--query", "attention mechanism",
+                "--sort", "citations", "-n", "20", "--output", "comparison.md"])
 ```
 
 ---
@@ -416,6 +538,8 @@ https://szaghi.github.io/mosaic/
 - [Usage guide](https://szaghi.github.io/mosaic/guide/usage)
 - [Sources reference](https://szaghi.github.io/mosaic/guide/sources)
 - [RAG guide](https://szaghi.github.io/mosaic/guide/rag)
+- [Citation Network guide](https://szaghi.github.io/mosaic/guide/network)
+- [Compare Papers guide](https://szaghi.github.io/mosaic/guide/compare)
 - [Zotero integration](https://szaghi.github.io/mosaic/guide/zotero)
 - [Obsidian integration](https://szaghi.github.io/mosaic/guide/obsidian)
 - [Web UI guide](https://szaghi.github.io/mosaic/guide/web-ui)
