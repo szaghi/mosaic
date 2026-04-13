@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.5.5] — 2026-04-13
+### Added
+- **rag**: Add full-text PDF chunking with multi-vector indexing
+
+
 ## [1.5.4] — 2026-04-13
 ### Fixed
 - **rag**: Wire auto_index to mosaic get and fix /sources in chat
