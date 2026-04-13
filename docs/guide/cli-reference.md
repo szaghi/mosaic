@@ -458,7 +458,7 @@ mosaic chat [OPTIONS]
 | Command | Effect |
 |---------|--------|
 | `/mode <mode>` | Switch prompt mode (`synthesis`, `gaps`, `compare`, `extract`) |
-| `/sources` | Show the retrieval pool for the current session |
+| `/sources` | Show the papers retrieved for the last question |
 | `/clear` | Clear conversation history |
 | `/quit` | Exit the chat |
 

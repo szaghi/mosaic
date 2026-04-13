@@ -260,7 +260,7 @@ Once inside the session, type your question and press Enter. Special commands:
 | Command | Effect |
 |---------|--------|
 | `/mode synthesis` | Switch prompt mode (also: `gaps`, `compare`, `extract`) |
-| `/sources` | Show the papers that would be retrieved for the current pool |
+| `/sources` | Show the papers retrieved for the last question |
 | `/clear` | Clear conversation history (papers are re-retrieved fresh) |
 | `/quit` | Exit the chat |
 

@@ -644,6 +644,14 @@ def get(
     if obsidian:
         _push_to_obsidian([paper], cfg, subfolder_override=obsidian_folder)
 
+    if cfg.get("rag", {}).get("auto_index"):
+        try:
+            from mosaic.rag import index_papers
+
+            index_papers([paper], cfg, cache, progress=False)
+        except Exception:
+            pass  # auto-index failures are always silent
+
 
 _CITE_STYLES = ["bibtex", "apa", "mla", "chicago", "harvard", "vancouver"]
 
@@ -962,6 +970,7 @@ def chat(
 
     current_mode = mode
     history: list[dict] = []
+    last_papers: list = []  # papers retrieved for the most recent question
 
     console.print(Rule("[cyan]mosaic chat[/cyan]"))
     rprint("[dim]Commands: /mode <synthesis|gaps|compare|extract>  /sources  /clear  /quit[/dim]\n")
@@ -985,6 +994,7 @@ def chat(
                 break
             if cmd == "/clear":
                 history.clear()
+                last_papers.clear()
                 rprint("[dim]Conversation history cleared.[/dim]")
             elif cmd == "/mode":
                 valid = {"synthesis", "gaps", "compare", "extract"}
@@ -994,10 +1004,12 @@ def chat(
                 else:
                     rprint(f"[red]Unknown mode. Choose from: {', '.join(sorted(valid))}[/red]")
             elif cmd == "/sources":
-                show_papers = retrieve(query or "research", cfg, cache, pre_filter=pre_filter)
-                for i, p in enumerate(show_papers, 1):
-                    authors = ", ".join(p.authors[:2]) if p.authors else "Unknown"
-                    rprint(f"  [{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})")
+                if not last_papers:
+                    rprint("[dim]No sources yet — ask a question first.[/dim]")
+                else:
+                    for i, p in enumerate(last_papers, 1):
+                        authors = ", ".join(p.authors[:2]) if p.authors else "Unknown"
+                        rprint(f"  [{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})")
             else:
                 rprint(f"[red]Unknown command: {cmd}[/red]")
             continue
@@ -1013,6 +1025,7 @@ def chat(
             rprint("[yellow]No indexed papers found. Run `mosaic index` first.[/yellow]")
             continue
 
+        last_papers = papers
         context = _build_context(papers)
         template = _PROMPTS.get(current_mode, _PROMPTS["synthesis"])
         system_prompt = template.format(query=user_input, context=context)
@@ -1554,6 +1567,14 @@ def _bulk_download(
 
     if obsidian and papers_list:
         _push_to_obsidian(papers_list, cfg, subfolder_override=obsidian_folder)
+
+    if cfg.get("rag", {}).get("auto_index") and papers_list:
+        try:
+            from mosaic.rag import index_papers
+
+            index_papers(papers_list, cfg, cache, progress=False)
+        except Exception:
+            pass  # auto-index failures are always silent
 
 
 def _print_search_stats(stats: dict, filters) -> None:
