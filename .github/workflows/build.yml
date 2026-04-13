@@ -102,12 +102,21 @@ jobs:
         run: |
           TAG=$(gh release list --repo "$REPO" --limit 1 --json tagName -q '.[0].tagName')
           echo "Updating assets on release $TAG"
+          # Delete existing assets explicitly — gh release upload --clobber races
+          # against the GitHub API and produces HTTP 422 "already exists".
+          for name in MOSAIC-macOS-arm64.zip MOSAIC-Linux.tar.gz MOSAIC-Windows.zip; do
+            id=$(gh api "repos/$REPO/releases/tags/$TAG" \
+                   --jq ".assets[] | select(.name==\"$name\") | .id" 2>/dev/null || true)
+            if [ -n "$id" ]; then
+              echo "Deleting existing asset $name (id=$id)"
+              gh api -X DELETE "repos/$REPO/releases/assets/$id"
+            fi
+          done
           gh release upload "$TAG" \
             MOSAIC-macOS-arm64/MOSAIC-macOS-arm64.zip \
             MOSAIC-Linux/MOSAIC-Linux.tar.gz \
             MOSAIC-Windows/MOSAIC-Windows.zip \
-            --repo "$REPO" \
-            --clobber
+            --repo "$REPO"
 
   notify:
     name: Telegram announcement
