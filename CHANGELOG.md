@@ -4,6 +4,15 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.5.1] — 2026-04-13
+### Added
+- **cli**: Add mosaic network and mosaic compare commands
+
+
+### Fixed
+- **cli**: Clean up type annotation spacing and sorting logic in mosaic commands
+
+
 ## [1.5.0] — 2026-04-12
 ### Added
 - **citations-rag**: Implement comprehensive citation processing pipeline ⚠ BREAKING CHANGE
