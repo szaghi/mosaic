@@ -162,3 +162,101 @@ class TestGetDownloadedUids:
         tmp_cache.save(p)
         tmp_cache.set_download(p.uid, "/tmp/x.pdf", "error")
         assert tmp_cache.get_downloaded_uids() == set()
+
+
+# ---------------------------------------------------------------------------
+# Chunk index tests
+# ---------------------------------------------------------------------------
+
+
+def _skip_if_no_sqlite_vec():
+    try:
+        import sqlite_vec  # noqa: F401
+    except ImportError:
+        import pytest
+
+        pytest.skip("sqlite-vec not installed")
+
+
+class TestUpsertChunksBatch:
+    def test_basic_insert(self, tmp_cache):
+        _skip_if_no_sqlite_vec()
+        p = Paper(title="T", doi="10.1/t", source="test")
+        tmp_cache.save(p)
+        rows = [(f"{p.uid}::0", p.uid, 0, "chunk text", 0, 10, [0.1, 0.9])]
+        tmp_cache.upsert_chunks_batch(rows, 2)
+        texts = tmp_cache.get_chunk_texts([f"{p.uid}::0"])
+        assert texts[f"{p.uid}::0"] == "chunk text"
+
+    def test_idempotent_upsert(self, tmp_cache):
+        _skip_if_no_sqlite_vec()
+        p = Paper(title="T2", doi="10.1/t2", source="test")
+        tmp_cache.save(p)
+        rows = [(f"{p.uid}::0", p.uid, 0, "text", 0, 4, [1.0, 0.0])]
+        tmp_cache.upsert_chunks_batch(rows, 2)
+        tmp_cache.upsert_chunks_batch(rows, 2)  # second call must not raise
+        texts = tmp_cache.get_chunk_texts([f"{p.uid}::0"])
+        assert f"{p.uid}::0" in texts
+
+    def test_empty_rows_no_op(self, tmp_cache):
+        tmp_cache.upsert_chunks_batch([], 2)  # must not raise
+
+
+class TestVectorSearchChunks:
+    def test_returns_ordered_results(self, tmp_cache):
+        _skip_if_no_sqlite_vec()
+        dim = 2
+        p1 = Paper(title="P1", doi="10.1/p1", source="test")
+        p2 = Paper(title="P2", doi="10.1/p2", source="test")
+        tmp_cache.save(p1)
+        tmp_cache.save(p2)
+        tmp_cache.upsert_chunks_batch(
+            [
+                (f"{p1.uid}::0", p1.uid, 0, "text1", 0, 5, [1.0, 0.0]),
+                (f"{p2.uid}::0", p2.uid, 0, "text2", 0, 5, [0.0, 1.0]),
+            ],
+            dim,
+        )
+        results = tmp_cache.vector_search_chunks([1.0, 0.0], k=2)
+        assert len(results) == 2
+        assert results[0][0] == f"{p1.uid}::0"  # closest first
+
+
+class TestGetChunkTexts:
+    def test_returns_correct_texts(self, tmp_cache):
+        _skip_if_no_sqlite_vec()
+        p = Paper(title="T", doi="10.1/gc", source="test")
+        tmp_cache.save(p)
+        tmp_cache.upsert_chunks_batch(
+            [
+                (f"{p.uid}::0", p.uid, 0, "first chunk", 0, 11, [1.0, 0.0]),
+                (f"{p.uid}::1", p.uid, 1, "second chunk", 11, 23, [0.5, 0.5]),
+            ],
+            2,
+        )
+        result = tmp_cache.get_chunk_texts([f"{p.uid}::0"])
+        assert result == {f"{p.uid}::0": "first chunk"}
+        assert f"{p.uid}::1" not in result
+
+    def test_missing_chunk_id_not_in_result(self, tmp_cache):
+        result = tmp_cache.get_chunk_texts(["nonexistent::0"])
+        assert result == {}
+
+
+class TestGetIndexedUidsWithChunks:
+    def test_returns_uids_from_paper_chunks(self, tmp_cache):
+        _skip_if_no_sqlite_vec()
+        p = Paper(title="T", doi="10.1/ic", source="test")
+        tmp_cache.save(p)
+        tmp_cache.upsert_chunks_batch([(f"{p.uid}::0", p.uid, 0, "t", 0, 1, [1.0, 0.0])], 2)
+        assert p.uid in tmp_cache.get_indexed_uids()
+
+
+class TestRebuildVecTableDropsChunks:
+    def test_rebuild_clears_paper_chunks(self, tmp_cache):
+        _skip_if_no_sqlite_vec()
+        p = Paper(title="T", doi="10.1/rb", source="test")
+        tmp_cache.save(p)
+        tmp_cache.upsert_chunks_batch([(f"{p.uid}::0", p.uid, 0, "t", 0, 1, [1.0, 0.0])], 2)
+        tmp_cache.rebuild_vec_table()
+        assert p.uid not in tmp_cache.get_indexed_uids()

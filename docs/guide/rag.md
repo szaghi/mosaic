@@ -387,7 +387,7 @@ See [Citation Graph](./citation-graph) for the full reference.
 
 ## Notes and limitations (v1)
 
-- **Abstracts only**: indexing uses title + abstract. Full-PDF chunking is reserved for a future release (`chunk_size` is already in the config for forward compatibility).
+- **Indexed text**: each paper is embedded as `Title / Authors / Venue / Abstract`. Full-PDF chunking is reserved for a future release (`chunk_size` is already in the config for forward compatibility).
 - **Model consistency**: the embedding model is stored in the database. Changing it requires `mosaic index --reindex` to rebuild all vectors.
-- **No incremental updates to changed abstracts**: if a paper's abstract is enriched after initial indexing (e.g. via `mosaic cache enrich`), re-run `mosaic index` to pick up the change.
+- **No incremental updates to changed metadata**: if a paper's abstract, authors, or venue are enriched after initial indexing, re-run `mosaic index` (without `--reindex` — only new/un-indexed papers are processed) or `mosaic index --reindex` to rebuild all vectors.
 - **sqlite-vec required**: install with `pipx inject mosaic-search sqlite-vec`. The rest of MOSAIC works without it.

@@ -69,6 +69,79 @@ _PROMPTS: dict[str, str] = {
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _paper_to_text(paper: Paper) -> str:
+    """Build the text string embedded for a paper.
+
+    Fields included (in order): title, authors (up to 10), venue, abstract.
+    Year is intentionally omitted — it carries no semantic content for
+    embedding-based retrieval.
+    """
+    parts: list[str] = []
+    if paper.title:
+        parts.append(f"Title: {paper.title}")
+    if paper.authors:
+        authors_str = "; ".join(paper.authors[:10])
+        parts.append(f"Authors: {authors_str}")
+    if paper.journal:
+        parts.append(f"Venue: {paper.journal}")
+    if paper.abstract:
+        parts.append(f"Abstract: {paper.abstract}")
+    return "\n".join(parts)
+
+
+def _chunk_text(
+    text: str,
+    chunk_chars: int = 1600,
+    overlap_chars: int = 200,
+) -> list[tuple[str, int, int]]:
+    """Split text into overlapping chunks at word boundaries.
+
+    Parameters
+    ----------
+    text : str
+        Input text to split.
+    chunk_chars : int
+        Target maximum characters per chunk (approx. chunk_chars / 4 tokens).
+    overlap_chars : int
+        Characters of overlap between consecutive chunks.
+
+    Returns
+    -------
+    list[tuple[str, int, int]]
+        List of (chunk_text, char_start, char_end) triples.
+        A text shorter than chunk_chars is returned as a single chunk.
+    """
+    text = text.strip()
+    if not text:
+        return []
+    if len(text) <= chunk_chars:
+        return [(text, 0, len(text))]
+
+    chunks: list[tuple[str, int, int]] = []
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_chars, len(text))
+        # Walk back to a word boundary unless we are at the end
+        if end < len(text):
+            boundary = text.rfind(" ", start, end)
+            if boundary > start:
+                end = boundary
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append((chunk, start, end))
+        # Advance with overlap
+        next_start = end - overlap_chars
+        if next_start <= start:
+            next_start = end  # guard against infinite loop
+        start = next_start
+    return chunks
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -80,15 +153,17 @@ def index_papers(
     *,
     reindex: bool = False,
     progress: bool = True,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """
-    Embed and store papers not yet in the vector index.
+    Embed and store papers not yet in the chunk index.
 
-    Returns ``(newly_indexed, skipped_already_indexed)``.
+    Returns ``(newly_indexed, skipped_already_indexed, full_text_count)``.
     Papers with neither title nor abstract are silently skipped.
+    full_text_count is the number of papers indexed via full PDF text.
     """
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
 
+    from mosaic import pdf as _pdf
     from mosaic.config import get_embedding_cfg
     from mosaic.embeddings import embed_texts
 
@@ -98,6 +173,11 @@ def index_papers(
         raise ValueError(
             "No embedding model configured. Run: mosaic config --embedding-model <model-name>"
         )
+
+    rag_cfg = cfg.get("rag", {})
+    chunk_chars = int(rag_cfg.get("chunk_size", 400)) * 4
+    overlap_chars = int(rag_cfg.get("chunk_overlap", 50)) * 4
+    full_text_enabled = rag_cfg.get("full_text_index", True)
 
     # Detect model change
     stored_model = cache.get_rag_meta("embedding_model")
@@ -117,12 +197,17 @@ def index_papers(
     ]
 
     if not candidates:
-        return 0, len(papers) - len(candidates)
+        return 0, len(papers) - len(candidates), 0
 
-    texts = [(p.title or "") + " " + (p.abstract or "") for p in candidates]
+    # Warn if full_text_index is enabled but pymupdf is not installed
+    if full_text_enabled and not _pdf.is_available():
+        _log.warning(
+            "full_text_index is enabled but pymupdf is not installed. "
+            "Run: pipx inject mosaic-search pymupdf"
+        )
 
     batch_size = 96
-    newly_indexed = 0
+    full_text_count = 0
 
     if progress:
         prog = Progress(
@@ -138,17 +223,52 @@ def index_papers(
         prog = None
         task = None
 
+    # Build all chunk rows first
+    all_chunk_rows: list[tuple] = []
+
     try:
-        for i in range(0, len(candidates), batch_size):
-            batch_papers = candidates[i : i + batch_size]
-            batch_texts = texts[i : i + batch_size]
-            embeddings = embed_texts(batch_texts, emb_cfg)
+        for paper in candidates:
+            chunks: list[tuple[str, int, int]] = []
+
+            # Try full-text extraction from downloaded PDF
+            if full_text_enabled and _pdf.is_available():
+                dl = cache.get_download(paper.uid)
+                if dl and dl["status"] == "ok" and dl["local_path"]:
+                    raw_text = _pdf.extract_text(dl["local_path"])
+                    if raw_text:
+                        header = _paper_to_text(paper)
+                        raw_chunks = _chunk_text(raw_text, chunk_chars, overlap_chars)
+                        chunks = [
+                            (f"{header}\n\n{c_text}", c_start, c_end)
+                            for c_text, c_start, c_end in raw_chunks
+                        ]
+                        full_text_count += 1
+
+            if not chunks:
+                # Fall back to metadata-only single chunk
+                meta_text = _paper_to_text(paper)
+                if meta_text:
+                    chunks = [(meta_text, 0, len(meta_text))]
+
+            for idx, (chunk_text, char_start, char_end) in enumerate(chunks):
+                chunk_id = f"{paper.uid}::{idx}"
+                all_chunk_rows.append((paper, chunk_id, idx, chunk_text, char_start, char_end))
+
+        # Embed in batches of chunk rows
+        for i in range(0, len(all_chunk_rows), batch_size):
+            batch = all_chunk_rows[i : i + batch_size]
+            texts = [r[3] for r in batch]
+            embeddings = embed_texts(texts, emb_cfg)
             dim = len(embeddings[0])
-            rows = [(p.uid, emb) for p, emb in zip(batch_papers, embeddings, strict=True)]
-            cache.upsert_embeddings_batch(rows, dim)
-            newly_indexed += len(batch_papers)
+            rows = [
+                (r[1], r[0].uid, r[2], r[3], r[4], r[5], emb)
+                for r, emb in zip(batch, embeddings, strict=True)
+            ]
+            cache.upsert_chunks_batch(rows, dim)
             if prog and task is not None:
-                prog.advance(task, len(batch_papers))
+                # Advance by number of unique papers in this batch
+                unique_papers = len({r[0].uid for r in batch})
+                prog.advance(task, unique_papers)
     finally:
         if prog:
             prog.stop()
@@ -156,8 +276,9 @@ def index_papers(
     # Persist model name for future consistency checks
     cache.set_rag_meta("embedding_model", model)
 
+    newly_indexed = len(candidates)
     skipped = len(papers) - len(candidates)
-    return newly_indexed, skipped
+    return newly_indexed, skipped, full_text_count
 
 
 def retrieve(
@@ -168,15 +289,31 @@ def retrieve(
     k: int | None = None,
     pre_filter: list[str] | None = None,
 ) -> list[Paper]:
-    """
-    Embed *query* and return the top-k most similar Paper objects.
+    """Embed query and return top-k papers. See retrieve_with_context for chunk texts."""
+    papers, _ = _retrieve_impl(query, cfg, cache, k=k, pre_filter=pre_filter)
+    return papers
 
-    When ``cfg["rag"]["citations"]["enabled"]`` is True, applies citation
-    graph boosting: papers that share citation edges with other top results
-    are promoted using a reciprocal-rank * citation-factor score.
 
-    *pre_filter*: optional list of UIDs to restrict the search to a subset.
-    """
+def retrieve_with_context(
+    query: str,
+    cfg: dict,
+    cache: Cache,
+    *,
+    k: int | None = None,
+    pre_filter: list[str] | None = None,
+) -> tuple[list[Paper], dict[str, str]]:
+    """Embed query, de-duplicate chunks to paper level, return papers + best chunk texts."""
+    return _retrieve_impl(query, cfg, cache, k=k, pre_filter=pre_filter)
+
+
+def _retrieve_impl(
+    query: str,
+    cfg: dict,
+    cache: Cache,
+    *,
+    k: int | None = None,
+    pre_filter: list[str] | None = None,
+) -> tuple[list[Paper], dict[str, str]]:
     from mosaic.config import get_embedding_cfg
     from mosaic.embeddings import embed_texts
 
@@ -185,30 +322,80 @@ def retrieve(
 
     query_embeddings = embed_texts([query], emb_cfg)
     if not query_embeddings:
-        return []
+        return [], {}
     query_vec = query_embeddings[0]
 
-    uids = cache.vector_search(query_vec, top_k * 3 if pre_filter else top_k)
+    # Try vec_chunks first (new format), fall back to vec_papers (legacy)
+    use_chunks = True
+    chunk_results: list[tuple[str, float]] = []
+    try:
+        chunk_results = cache.vector_search_chunks(query_vec, top_k * 10)
+    except Exception as exc:
+        if "no such table" in str(exc).lower():
+            use_chunks = False
+        else:
+            raise
 
+    if not use_chunks or not chunk_results:
+        # Legacy fallback: vec_papers
+        try:
+            uids = cache.vector_search(query_vec, top_k * 3 if pre_filter else top_k)
+        except Exception:
+            uids = []
+        if not use_chunks:
+            _log.warning(
+                "Vector index uses the old format. "
+                "Run 'mosaic index --reindex' to enable full-text chunking."
+            )
+        if pre_filter:
+            filter_set = set(pre_filter)
+            uids = [u for u in uids if u in filter_set][:top_k]
+        citations_cfg = cfg.get("rag", {}).get("citations", {})
+        if citations_cfg.get("enabled", False) and uids:
+            alpha = float(citations_cfg.get("boost_alpha", 0.3))
+            uids = _citation_boost(uids, cache, alpha, top_k)
+            if citations_cfg.get("expand_neighbors", False):
+                uids = _expand_neighbors(uids, cache, top_k)
+        uids = uids[:top_k]
+        papers = cache.get_papers_by_uids(uids)
+        uid_order = {uid: i for i, uid in enumerate(uids)}
+        papers.sort(key=lambda p: uid_order.get(p.uid, 9999))
+        return papers, {}
+
+    # De-duplicate chunks to paper level: keep best (lowest) distance per uid
+    best: dict[str, tuple[str, float]] = {}  # uid -> (chunk_id, distance)
+    for chunk_id, dist in chunk_results:
+        uid = chunk_id.rsplit("::", 1)[0]
+        if uid not in best or dist < best[uid][1]:
+            best[uid] = (chunk_id, dist)
+
+    # Apply pre_filter
     if pre_filter:
         filter_set = set(pre_filter)
-        uids = [u for u in uids if u in filter_set][:top_k]
+        best = {uid: v for uid, v in best.items() if uid in filter_set}
 
-    # ── Citation graph boosting ───────────────────────────────────────────────
+    # Sort by best chunk distance
+    uids = sorted(best, key=lambda u: best[u][1])
+
+    # Citation boosting
     citations_cfg = cfg.get("rag", {}).get("citations", {})
     if citations_cfg.get("enabled", False) and uids:
         alpha = float(citations_cfg.get("boost_alpha", 0.3))
         uids = _citation_boost(uids, cache, alpha, top_k)
-
         if citations_cfg.get("expand_neighbors", False):
             uids = _expand_neighbors(uids, cache, top_k)
 
     uids = uids[:top_k]
+
+    # Fetch papers and best chunk texts
     papers = cache.get_papers_by_uids(uids)
-    # Preserve post-boost order
     uid_order = {uid: i for i, uid in enumerate(uids)}
     papers.sort(key=lambda p: uid_order.get(p.uid, 9999))
-    return papers
+
+    best_chunk_ids = [best[uid][0] for uid in uids if uid in best]
+    chunk_texts = cache.get_chunk_texts(best_chunk_ids)
+
+    return papers, chunk_texts
 
 
 def semantic_search(
@@ -277,11 +464,11 @@ def ask(
 
     Returns ``(answer_text, retrieved_papers)``.
     """
-    papers = retrieve(query, cfg, cache, k=k, pre_filter=pre_filter)
+    papers, chunk_texts = retrieve_with_context(query, cfg, cache, k=k, pre_filter=pre_filter)
     if not papers:
         return "No indexed papers found. Run `mosaic index` first.", []
 
-    context = _build_context(papers)
+    context = _build_context(papers, chunk_texts)
     template = _PROMPTS.get(mode, _PROMPTS["synthesis"])
     prompt = template.format(query=query, context=context)
 
@@ -294,17 +481,32 @@ def ask(
 # ---------------------------------------------------------------------------
 
 
-def _build_context(papers: list[Paper]) -> str:
-    lines = []
+def _build_context(
+    papers: list[Paper],
+    chunk_texts: dict[str, str] | None = None,
+) -> str:
+    """Build numbered context block for the LLM prompt."""
+    parts = []
     for i, p in enumerate(papers, 1):
-        authors = ", ".join(p.authors[:3]) if p.authors else "Unknown"
-        if len(p.authors) > 3:
+        authors = ", ".join(p.authors[:5]) if p.authors else "Unknown"
+        if len(p.authors) > 5:
             authors += " et al."
-        abstract_snippet = (p.abstract or "")[:400]
-        lines.append(
-            f"[{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})\n    {abstract_snippet}"
-        )
-    return "\n\n".join(lines)
+        header = f"[{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})"
+        if p.journal:
+            header += f", {p.journal}"
+
+        # Use best-matching chunk text if available, else fall back to abstract
+        body = ""
+        if chunk_texts:
+            for chunk_id, text in chunk_texts.items():
+                if chunk_id.startswith(p.uid + "::"):
+                    body = text
+                    break
+        if not body:
+            body = (p.abstract or "")[:400] or "(no abstract)"
+
+        parts.append(f"{header}\n{body}")
+    return "\n\n---\n\n".join(parts)
 
 
 def _citation_boost(

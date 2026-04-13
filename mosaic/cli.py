@@ -785,10 +785,23 @@ def index(
         rprint("[yellow]No papers found in cache. Run some searches first.[/yellow]")
         raise typer.Exit()
 
+    from mosaic import pdf as _pdf
+
+    if cfg.get("rag", {}).get("full_text_index", True) and not _pdf.is_available():
+        rprint(
+            "[yellow]Warning: full_text_index is enabled but pymupdf is not installed.\n"
+            "Run: pipx inject mosaic-search pymupdf\n"
+            "Falling back to metadata-only indexing.[/yellow]"
+        )
+
     rprint(f"[cyan]Indexing {len(papers)} papers…[/cyan]")
     try:
-        newly, skipped = index_papers(papers, cfg, cache, reindex=reindex)
+        newly, skipped, full_text = index_papers(papers, cfg, cache, reindex=reindex)
         rprint(f"[green]Indexed {newly} new paper(s).[/green] {skipped} already indexed.")
+        if full_text:
+            rprint(
+                f"  [dim]└─ {full_text} full-text (PDF), {newly - full_text} metadata-only[/dim]"
+            )
     except ValueError as e:
         rprint(f"[red]{e}[/red]")
         raise typer.Exit(1) from None
@@ -1244,6 +1257,19 @@ def config(
             help="Auto-index new papers after each search/get run",
         ),
     ] = None,
+    chunk_overlap: Annotated[
+        int | None,
+        typer.Option(
+            "--chunk-overlap", help="Token overlap between consecutive chunks (default: 50)"
+        ),
+    ] = None,
+    full_text_index: Annotated[
+        bool | None,
+        typer.Option(
+            "--full-text-index/--no-full-text-index",
+            help="Index full PDF text when available (requires pymupdf)",
+        ),
+    ] = None,
 ):
     """View or update MOSAIC configuration."""
     cfg = cfg_mod.load()
@@ -1379,6 +1405,12 @@ def config(
         _rag_changed = True
     if rag_auto_index is not None:
         cfg["rag"]["auto_index"] = rag_auto_index
+        _rag_changed = True
+    if chunk_overlap is not None:
+        cfg["rag"]["chunk_overlap"] = chunk_overlap
+        _rag_changed = True
+    if full_text_index is not None:
+        cfg["rag"]["full_text_index"] = full_text_index
         _rag_changed = True
     if _rag_changed:
         rprint("[green]RAG config updated.[/green]")

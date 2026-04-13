@@ -64,7 +64,9 @@ _DEFAULTS: dict = {
         "embedding_base_url": "",  # e.g. "http://localhost:11434/v1" for Ollama
         "embedding_api_key": "",  # leave empty to inherit llm.api_key
         "top_k": 10,  # papers retrieved per query
-        "chunk_size": 512,  # max characters per text chunk (reserved for future full-PDF mode)
+        "chunk_size": 512,  # max tokens per text chunk
+        "chunk_overlap": 50,  # overlap between consecutive chunks in tokens
+        "full_text_index": True,  # index full PDF text when available (requires pymupdf)
         "auto_index": False,  # silently index new papers after each search/get
         "citations": {
             "enabled": False,  # apply citation graph boosting in retrieve()

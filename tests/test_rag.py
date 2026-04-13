@@ -140,9 +140,9 @@ class TestBuildContext:
         assert "Beta" in ctx
 
     def test_author_et_al_truncation(self):
-        """More than 3 authors should show 'et al.'."""
+        """More than 5 authors should show 'et al.'."""
         p = _paper("MultiAuthor", year=2022)
-        p.authors = ["A", "B", "C", "D", "E"]
+        p.authors = ["A", "B", "C", "D", "E", "F"]
         ctx = _build_context([p])
         assert "et al." in ctx
 
@@ -213,10 +213,12 @@ class TestIndexPapersModelChange:
         }
 
         fake_emb = [[0.1, 0.2, 0.3]]
-        with patch("mosaic.embeddings.embed_texts", return_value=fake_emb):
-            with patch.object(tmp_cache, "upsert_embeddings_batch"):
-                # Should not raise
-                newly, skipped = index_papers(papers, cfg, tmp_cache, reindex=True, progress=False)
+        with (
+            patch("mosaic.embeddings.embed_texts", return_value=fake_emb),
+            patch.object(tmp_cache, "upsert_chunks_batch"),
+        ):
+            # Should not raise
+            newly, skipped, _ft = index_papers(papers, cfg, tmp_cache, reindex=True, progress=False)
 
         assert newly == 1
 
@@ -492,3 +494,195 @@ class TestSemanticSearch:
         with patch("httpx.post", return_value=m):
             results = semantic_search("query", cache, _CFG_EMB, k=5)
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# TestChunkText
+# ---------------------------------------------------------------------------
+
+
+class TestChunkText:
+    def test_short_text_returns_single_chunk(self):
+        from mosaic.rag import _chunk_text
+
+        text = "Short text."
+        result = _chunk_text(text, chunk_chars=1600)
+        assert len(result) == 1
+        assert result[0][0] == text
+        assert result[0][1] == 0
+        assert result[0][2] == len(text)
+
+    def test_long_text_splits_into_multiple_chunks(self):
+        from mosaic.rag import _chunk_text
+
+        text = "word " * 500  # 2500 chars
+        result = _chunk_text(text, chunk_chars=1000, overlap_chars=100)
+        assert len(result) > 1
+
+    def test_overlap_present(self):
+        from mosaic.rag import _chunk_text
+
+        text = "alpha " * 400  # 2400 chars
+        result = _chunk_text(text, chunk_chars=1000, overlap_chars=200)
+        # End of chunk N should overlap with start of chunk N+1
+        assert len(result) >= 2
+        end_of_first = result[0][2]
+        start_of_second = result[1][1]
+        assert start_of_second < end_of_first
+
+    def test_empty_text_returns_empty_list(self):
+        from mosaic.rag import _chunk_text
+
+        assert _chunk_text("") == []
+
+    def test_no_mid_word_cuts(self):
+        from mosaic.rag import _chunk_text
+
+        text = "hello world " * 200
+        for chunk_text, _, _ in _chunk_text(text, chunk_chars=500, overlap_chars=50):
+            assert chunk_text == chunk_text.strip()
+
+
+# ---------------------------------------------------------------------------
+# TestIndexPapersChunks
+# ---------------------------------------------------------------------------
+
+
+class TestIndexPapersChunks:
+    def test_paper_with_pdf_stores_multiple_chunks(self, tmp_cache):
+        from unittest.mock import patch
+
+        from mosaic.rag import index_papers
+
+        paper = Paper(
+            title="Deep Learning",
+            abstract="A study of deep learning.",
+            doi="10.1/dl",
+            source="test",
+        )
+        tmp_cache.save(paper)
+        tmp_cache.set_download(paper.uid, "/tmp/dl.pdf", "ok")
+
+        long_text = "neural network " * 300  # enough to produce multiple chunks
+        cfg = {
+            "rag": {
+                "embedding_model": "test-model",
+                "chunk_size": 100,
+                "chunk_overlap": 20,
+                "full_text_index": True,
+                "top_k": 10,
+                "citations": {},
+            }
+        }
+
+        with (
+            patch("mosaic.pdf.is_available", return_value=True),
+            patch("mosaic.pdf.extract_text", return_value=long_text),
+            patch(
+                "mosaic.embeddings.embed_texts",
+                side_effect=lambda texts, cfg: [[0.1, 0.2]] * len(texts),
+            ),
+            patch("mosaic.db.Cache.get_rag_meta", return_value=None),
+            patch.object(tmp_cache, "upsert_chunks_batch"),
+        ):
+            newly, skipped, ft = index_papers([paper], cfg, tmp_cache)
+
+        assert newly == 1
+        assert ft == 1
+
+    def test_paper_without_pdf_stores_single_chunk(self, tmp_cache):
+        from unittest.mock import patch
+
+        from mosaic.rag import index_papers
+
+        paper = Paper(
+            title="Meta-Learning", abstract="Abstract text.", doi="10.1/ml", source="test"
+        )
+        tmp_cache.save(paper)
+
+        cfg = {
+            "rag": {
+                "embedding_model": "test-model",
+                "chunk_size": 400,
+                "chunk_overlap": 50,
+                "full_text_index": True,
+                "top_k": 10,
+                "citations": {},
+            }
+        }
+
+        with (
+            patch("mosaic.pdf.is_available", return_value=False),
+            patch("mosaic.embeddings.embed_texts", return_value=[[0.1, 0.2]]),
+            patch("mosaic.db.Cache.get_rag_meta", return_value=None),
+            patch.object(tmp_cache, "upsert_chunks_batch"),
+        ):
+            newly, skipped, ft = index_papers([paper], cfg, tmp_cache)
+
+        assert newly == 1
+        assert ft == 0
+
+    def test_returns_three_tuple(self, tmp_cache):
+        from unittest.mock import patch
+
+        from mosaic.rag import index_papers
+
+        paper = Paper(title="T", abstract="A", doi="10.1/t", source="test")
+        tmp_cache.save(paper)
+
+        cfg = {
+            "rag": {
+                "embedding_model": "m",
+                "chunk_size": 400,
+                "chunk_overlap": 50,
+                "full_text_index": False,
+                "top_k": 10,
+                "citations": {},
+            }
+        }
+
+        with (
+            patch("mosaic.embeddings.embed_texts", return_value=[[0.0, 1.0]]),
+            patch("mosaic.db.Cache.get_rag_meta", return_value=None),
+            patch.object(tmp_cache, "upsert_chunks_batch"),
+        ):
+            result = index_papers([paper], cfg, tmp_cache)
+
+        assert len(result) == 3
+
+
+# ---------------------------------------------------------------------------
+# TestRetrieveChunkDedup
+# ---------------------------------------------------------------------------
+
+
+class TestRetrieveChunkDedup:
+    def test_dedup_keeps_best_score_per_paper(self, tmp_cache):
+        """Two chunks from the same paper -> one paper in results."""
+        from unittest.mock import patch
+
+        from mosaic.rag import retrieve
+
+        paper = Paper(title="Chunked Paper", abstract="Abstract.", doi="10.1/cp", source="test")
+        tmp_cache.save(paper)
+
+        uid = paper.uid
+        chunk_results = [(f"{uid}::0", 0.5), (f"{uid}::1", 0.3)]
+
+        cfg = {
+            "rag": {
+                "embedding_model": "m",
+                "top_k": 10,
+                "citations": {"enabled": False},
+            }
+        }
+
+        with (
+            patch("mosaic.embeddings.embed_texts", return_value=[[0.1, 0.9]]),
+            patch.object(tmp_cache, "vector_search_chunks", return_value=chunk_results),
+            patch.object(tmp_cache, "get_chunk_texts", return_value={f"{uid}::1": "chunk text"}),
+        ):
+            papers = retrieve("query", cfg, tmp_cache)
+
+        assert len(papers) == 1
+        assert papers[0].uid == uid
