@@ -2,6 +2,15 @@
 title: Changelog
 ---
 
+## [1.5.2] — 2026-04-13
+### Added
+- **search**: Add --semantic and --downloaded-only flags to search
+
+
+### Documentation
+- **build**: Update coverage reports and workflow config
+
+
 ## [1.5.1] — 2026-04-13
 ### Added
 - **cli**: Add mosaic network and mosaic compare commands
