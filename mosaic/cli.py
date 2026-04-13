@@ -645,6 +645,88 @@ def get(
         _push_to_obsidian([paper], cfg, subfolder_override=obsidian_folder)
 
 
+_CITE_STYLES = ["bibtex", "apa", "mla", "chicago", "harvard", "vancouver"]
+
+
+@app.command()
+def cite(
+    doi: Annotated[str, typer.Argument(help="DOI of the paper (e.g. 10.48550/arXiv.1706.03762)")],
+    style: Annotated[
+        str,
+        typer.Option(
+            "--style",
+            "-s",
+            help="Citation style: bibtex (default), apa, mla, chicago, harvard, vancouver",
+            autocompletion=lambda: _CITE_STYLES,
+        ),
+    ] = "bibtex",
+    copy: Annotated[
+        bool,
+        typer.Option("--copy", "-c", help="Copy the formatted citation to the clipboard"),
+    ] = False,
+):
+    """Format and print a citation for a paper by DOI.
+
+    Checks the local cache first; falls back to Crossref for unknown DOIs.
+    BibTeX is rendered locally from stored metadata. All other styles use
+    the Crossref content-negotiation endpoint (doi.org) — network required.
+    """
+    import httpx as _httpx
+
+    from mosaic.cite import (
+        SUPPORTED_STYLES,
+        bibtex_citation,
+        copy_to_clipboard,
+        fetch_formatted_citation,
+        resolve_paper,
+    )
+    from mosaic.parsing import normalise_doi
+
+    style = style.lower()
+    if style not in SUPPORTED_STYLES:
+        rprint(
+            f"[red]Unknown style '{style}'. Supported: {', '.join(SUPPORTED_STYLES)}[/red]"
+        )
+        raise typer.Exit(1) from None
+
+    cfg = cfg_mod.load()
+    cache = Cache(cfg["db_path"])
+    email = cfg.get("unpaywall", {}).get("email", "")
+
+    bare_doi = normalise_doi(doi)
+    if not bare_doi:
+        rprint(f"[red]Could not parse DOI: {doi!r}[/red]")
+        raise typer.Exit(1) from None
+
+    try:
+        if style == "bibtex":
+            paper = resolve_paper(bare_doi, cache, email)
+            citation_text = bibtex_citation(paper)
+        else:
+            citation_text = fetch_formatted_citation(bare_doi, style, email)
+    except _httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            rprint(f"[red]DOI not found: {bare_doi}[/red]")
+        else:
+            rprint(f"[red]HTTP error {exc.response.status_code} fetching DOI {bare_doi}[/red]")
+        raise typer.Exit(1) from None
+    except _httpx.ConnectError:
+        rprint("[red]Network unavailable — could not reach Crossref.[/red]")
+        raise typer.Exit(1) from None
+    except _httpx.TimeoutException:
+        rprint("[red]Request timed out — Crossref did not respond in time.[/red]")
+        raise typer.Exit(1) from None
+
+    print(citation_text)
+
+    if copy:
+        ok = copy_to_clipboard(citation_text)
+        if ok:
+            rprint("[dim]Copied to clipboard.[/dim]")
+        else:
+            rprint("[yellow]Warning: clipboard unavailable — output printed above.[/yellow]")
+
+
 @app.command()
 def index(
     reindex: Annotated[

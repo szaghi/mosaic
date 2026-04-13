@@ -226,6 +226,52 @@ mosaic search "diffusion model" --semantic --downloaded-only   # only papers on 
 
 ---
 
+### `cite`
+
+Fetch and format a citation string for a paper by DOI.
+
+```
+mosaic cite [OPTIONS] DOI
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--style` | `-s` | str | `bibtex` | Citation style — tab-completes: `bibtex`, `apa`, `mla`, `chicago`, `harvard`, `vancouver` |
+| `--copy` | `-c` | flag | off | Copy the formatted citation to the clipboard |
+
+**Metadata resolution:**
+1. Local cache is checked first — no network call if the paper is already cached.
+2. On a cache miss, MOSAIC queries `api.crossref.org/works/{doi}` and saves the result.
+
+**Style dispatch:**
+
+| Style | Technique | Network needed? |
+|-------|-----------|----------------|
+| `bibtex` (default) | Rendered locally from the `Paper` object | Only on cache miss |
+| `apa`, `mla`, `chicago`, `harvard`, `vancouver` | Crossref content negotiation via `doi.org` | Always |
+
+**Clipboard:** `--copy` tries `pyperclip` first, then platform-native tools (`pbcopy`, `xclip`/`xsel`, `clip`). Prints a yellow warning and falls back to stdout-only if all methods fail.
+
+**Examples:**
+
+```bash
+# BibTeX (default) — cache-first, no network if already known
+mosaic cite 10.48550/arXiv.1706.03762
+
+# Human-readable styles via Crossref content negotiation
+mosaic cite 10.48550/arXiv.1706.03762 --style apa
+mosaic cite 10.48550/arXiv.1706.03762 --style mla
+mosaic cite 10.48550/arXiv.1706.03762 --style chicago
+
+# Copy to clipboard
+mosaic cite 10.48550/arXiv.1706.03762 --style apa --copy
+
+# URL-prefixed DOIs are also accepted
+mosaic cite https://doi.org/10.48550/arXiv.1706.03762
+```
+
+---
+
 ### `similar`
 
 Find papers related to a given DOI or arXiv ID.

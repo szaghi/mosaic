@@ -4,11 +4,11 @@ description: >
   Expert knowledge of MOSAIC (Multi-source Scientific Article Indexer and Collector) — a CLI tool
   for searching, downloading, and managing scientific papers from 21 sources with a single command.
   Use this skill whenever the user asks about: building a bibliography programmatically, searching
-  for papers across multiple sources, downloading OA PDFs, exporting to BibTeX/Zotero/Obsidian,
-  interpreting mosaic --json output in AI agent or CI workflows, RAG over a paper library, semantic
-  search over a local paper library, finding similar papers, analysing citation networks, comparing
-  papers across structured dimensions, or any task that involves mosaic
-  search/get/similar/ask/chat/index/network/compare/skill commands.
+  for papers across multiple sources, downloading OA PDFs, formatting citation strings (BibTeX/APA/
+  MLA/Chicago), exporting to BibTeX/Zotero/Obsidian, interpreting mosaic --json output in AI agent
+  or CI workflows, RAG over a paper library, semantic search over a local paper library, finding
+  similar papers, analysing citation networks, comparing papers across structured dimensions, or any
+  task that involves mosaic search/get/cite/similar/ask/chat/index/network/compare/skill commands.
   When in doubt, trigger this skill — it is better to consult it unnecessarily than to miss it.
 ---
 
@@ -23,6 +23,7 @@ AI agent and CI workflows.
 ```bash
 mosaic search "query"           # search all enabled sources
 mosaic get <doi>                # fetch metadata + download PDF by DOI
+mosaic cite <doi>               # format citation string (BibTeX/APA/MLA/Chicago/…)
 mosaic similar <doi|arxiv_id>   # find related papers via OpenAlex + Semantic Scholar
 mosaic network                  # explore citation network, identify hubs and clusters
 mosaic compare                  # structured comparison table across cached papers (LLM or metadata)
@@ -210,6 +211,27 @@ mosaic get --from library.csv   # bulk-download from CSV file (must have 'doi' c
 ```
 
 Options: `--oa-only`, `--download-dir`, `--zotero`, `--zotero-collection`, `--obsidian`.
+
+## cite Command
+
+Format and print a citation string for a paper by DOI. Checks the local cache first; falls back
+to Crossref on a cache miss. BibTeX is rendered locally; all other styles use Crossref content
+negotiation (network required).
+
+```bash
+mosaic cite <doi>                        # BibTeX (default) — no network if cached
+mosaic cite <doi> --style apa            # APA via doi.org content negotiation
+mosaic cite <doi> --style mla
+mosaic cite <doi> --style chicago
+mosaic cite <doi> --style harvard
+mosaic cite <doi> --style vancouver
+mosaic cite <doi> --style apa --copy     # copy to clipboard (pbcopy/xclip/clip fallback)
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--style`, `-s` | `bibtex` | Citation style; tab-completes: `bibtex apa mla chicago harvard vancouver` |
+| `--copy`, `-c` | off | Copy result to clipboard |
 
 ## similar Command
 

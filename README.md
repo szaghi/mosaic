@@ -39,6 +39,10 @@ mosaic search "attention is all you need" --oa-only --download
 # Discover related literature from any DOI or arXiv ID — no query needed
 mosaic similar 10.48550/arXiv.1706.03762 --sort citations
 
+# Format a citation string — BibTeX (default), APA, MLA, Chicago, and more
+mosaic cite 10.48550/arXiv.1706.03762
+mosaic cite 10.48550/arXiv.1706.03762 --style apa --copy   # copy to clipboard
+
 # Bulk-download your entire Zotero / JabRef library
 mosaic get --from refs.bib --oa-only
 
