@@ -684,9 +684,7 @@ def cite(
 
     style = style.lower()
     if style not in SUPPORTED_STYLES:
-        rprint(
-            f"[red]Unknown style '{style}'. Supported: {', '.join(SUPPORTED_STYLES)}[/red]"
-        )
+        rprint(f"[red]Unknown style '{style}'. Supported: {', '.join(SUPPORTED_STYLES)}[/red]")
         raise typer.Exit(1) from None
 
     cfg = cfg_mod.load()

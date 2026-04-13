@@ -28,7 +28,9 @@ def _make_cr_response(item: dict, status: int = 200) -> MagicMock:
     return m
 
 
-def _make_cn_response(text: str, status: int = 200, content_type: str = "text/bibliography") -> MagicMock:
+def _make_cn_response(
+    text: str, status: int = 200, content_type: str = "text/bibliography"
+) -> MagicMock:
     """Build a mock httpx response shaped like a doi.org content-negotiation reply."""
     m = MagicMock()
     m.status_code = status
