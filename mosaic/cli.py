@@ -2018,8 +2018,8 @@ def _print_network(
                 p = papers_map.get(uid)
                 is_hub = deg.get(uid, 0) == max_deg and max_deg > 0
                 hub_mark = "[bold cyan]Hub[/bold cyan]" if is_hub else ""
-                title = (p.title[:65] if p else uid)
-                authors = (p.short_authors if p else "")
+                title = p.title[:65] if p else uid
+                authors = p.short_authors if p else ""
                 year = str(p.year or "") if p else ""
                 d_val = deg.get(uid, 0)
                 tbl.add_row(hub_mark, title, authors, year, f"[dim]degree={d_val}[/dim]")
@@ -2069,9 +2069,7 @@ def compare(
         Path | None,
         typer.Option("--from", help="Load papers from a .bib or .csv file"),
     ] = None,
-    n: Annotated[
-        int, typer.Option("--max", "-n", help="Maximum number of papers to compare")
-    ] = 20,
+    n: Annotated[int, typer.Option("--max", "-n", help="Maximum number of papers to compare")] = 20,
     dimensions: Annotated[
         str,
         typer.Option(
@@ -2139,9 +2137,9 @@ def compare(
 
     # ── Sort ──────────────────────────────────────────────────────────────────
     if sort == "citations":
-        papers = sorted(papers, key=lambda p: (p.citation_count or 0), reverse=True)
+        papers = sorted(papers, key=lambda p: p.citation_count or 0, reverse=True)
     elif sort == "year":
-        papers = sorted(papers, key=lambda p: (p.year or 0), reverse=True)
+        papers = sorted(papers, key=lambda p: p.year or 0, reverse=True)
 
     papers = papers[:n]
 
