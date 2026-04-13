@@ -514,9 +514,7 @@ class Cache:
             ).fetchall()
             return [r[0] for r in rows]
 
-    def vector_search_scored(
-        self, query_embedding: list[float], k: int
-    ) -> list[tuple[str, float]]:
+    def vector_search_scored(self, query_embedding: list[float], k: int) -> list[tuple[str, float]]:
         """Return up to k (uid, distance) pairs ordered by distance (closest first)."""
         with self._lock:
             rows = self._conn.execute(
@@ -534,9 +532,7 @@ class Cache:
     def get_downloaded_uids(self) -> set[str]:
         """Return UIDs of papers with at least one successful local download."""
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT uid FROM downloads WHERE status = 'ok'"
-            ).fetchall()
+            rows = self._conn.execute("SELECT uid FROM downloads WHERE status = 'ok'").fetchall()
             return {r[0] for r in rows}
 
     def rebuild_vec_table(self) -> None:

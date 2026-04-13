@@ -134,9 +134,7 @@ class TestVectorSearchScored:
         tmp_cache.save(p1)
         tmp_cache.save(p2)
         # p1 embedding is identical to query; p2 is distant
-        tmp_cache.upsert_embeddings_batch(
-            [(p1.uid, [1.0, 0.0]), (p2.uid, [0.0, 1.0])], dim
-        )
+        tmp_cache.upsert_embeddings_batch([(p1.uid, [1.0, 0.0]), (p2.uid, [0.0, 1.0])], dim)
         results = tmp_cache.vector_search_scored([1.0, 0.0], k=2)
         assert results[0][0] == p1.uid
         assert results[1][0] == p2.uid

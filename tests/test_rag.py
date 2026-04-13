@@ -470,9 +470,7 @@ class TestSemanticSearch:
         p_nd = _paper("Not Downloaded", uid_suffix="-nd")
         cache.save(p_dl)
         cache.save(p_nd)
-        cache.upsert_embeddings_batch(
-            [(p_dl.uid, [1.0, 0.0]), (p_nd.uid, [0.9, 0.1])], dim
-        )
+        cache.upsert_embeddings_batch([(p_dl.uid, [1.0, 0.0]), (p_nd.uid, [0.9, 0.1])], dim)
         cache.set_download(p_dl.uid, "/tmp/dl.pdf", "ok")
 
         with patch("httpx.post", return_value=_make_emb_response([[1.0, 0.0]])):

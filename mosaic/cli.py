@@ -1612,9 +1612,7 @@ def _complete_session_names() -> list[str]:
     return [s["name"] for s in list_sessions()]
 
 
-def _print_results(
-    papers: list, show_relevance: bool = False, score_label: str = "Rel."
-) -> None:
+def _print_results(papers: list, show_relevance: bool = False, score_label: str = "Rel.") -> None:
     show_citations = any(p.citation_count is not None for p in papers)
 
     table = Table(
