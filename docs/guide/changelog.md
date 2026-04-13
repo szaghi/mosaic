@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.5.4] — 2026-04-13
+### Fixed
+- **rag**: Wire auto_index to mosaic get and fix /sources in chat
+
+
 ## [1.5.3] — 2026-04-13
 ### Added
 - **cli**: Add mosaic cite command for DOI citation formatting
