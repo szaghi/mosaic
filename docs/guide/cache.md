@@ -202,14 +202,45 @@ A record is *rich* when it has:
 mosaic search "protein folding" --prefer-cache --oa-only --sort citations
 ```
 
-## Offline search (--cached)
+## Offline search
+
+### Keyword search — `--cached`
 
 Use `--cached` to search *only* the local cache — no network requests, no API keys needed, instant results:
 
 ```bash
 mosaic search "attention mechanism" --cached
+mosaic search "protein folding" --cached --sort citations --oa-only
 ```
 
 All the usual filters, sort, and export options still apply. See [Usage → Offline / cached search](./usage#offline-cached-search) for details.
 
 ![Offline cached search demo](/gifs/14_cached_search.gif)
+
+### Semantic search — `--semantic`
+
+`--semantic` goes beyond keyword matching: it embeds the query with the same model used by
+`mosaic index` and retrieves the most similar papers from the vector index. Synonyms,
+paraphrases, and conceptual relationships are handled — even if the exact keywords are absent.
+
+```bash
+# Retrieve by meaning, not keyword overlap
+mosaic search "methods that learn without labels" --semantic
+
+# Only papers you have downloaded
+mosaic search "attention mechanism" --semantic --downloaded-only
+```
+
+The results table shows a **Sim.** column (0 – 1) showing the cosine-like similarity score.
+
+**Prerequisites:** `sqlite-vec` installed and `mosaic index` run at least once. See the [RAG guide](./rag) for setup.
+
+### `--downloaded-only`
+
+Both `--cached` and `--semantic` accept `--downloaded-only` to restrict results to papers for
+which a PDF is stored locally:
+
+```bash
+mosaic search "graph neural network" --cached --downloaded-only
+mosaic search "diffusion model" --semantic --downloaded-only
+```

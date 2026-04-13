@@ -82,3 +82,85 @@ class TestLocalSearch:
     def test_no_match_returns_empty(self, tmp_cache):
         tmp_cache.save(_paper(title="Something Else"))
         assert tmp_cache.search_local("QuantumComputing99") == []
+
+
+class TestVectorSearchScored:
+    def test_returns_uid_and_float_distance(self, tmp_cache):
+        try:
+            import sqlite_vec  # noqa: F401
+        except ImportError:
+            import pytest
+
+            pytest.skip("sqlite-vec not installed")
+
+        dim = 3
+        emb = [0.1, 0.2, 0.3]
+        p = _paper(doi="10.1/vec", title="Vector Paper")
+        tmp_cache.save(p)
+        tmp_cache.upsert_embedding(p.uid, emb, dim)
+
+        results = tmp_cache.vector_search_scored(emb, k=1)
+        assert len(results) == 1
+        uid, dist = results[0]
+        assert uid == p.uid
+        assert isinstance(dist, float)
+        assert dist >= 0.0
+
+    def test_empty_index_returns_empty(self, tmp_cache):
+        try:
+            import sqlite_vec  # noqa: F401
+        except ImportError:
+            import pytest
+
+            pytest.skip("sqlite-vec not installed")
+
+        # No embeddings inserted — vec_papers table does not exist yet.
+        import sqlite3
+
+        with pytest.raises((RuntimeError, sqlite3.OperationalError)):
+            tmp_cache.vector_search_scored([0.1, 0.2], k=5)
+
+    def test_ordering_closest_first(self, tmp_cache):
+        try:
+            import sqlite_vec  # noqa: F401
+        except ImportError:
+            import pytest
+
+            pytest.skip("sqlite-vec not installed")
+
+        dim = 2
+        p1 = _paper(doi="10.1/a", title="Paper A")
+        p2 = _paper(doi="10.1/b", title="Paper B")
+        tmp_cache.save(p1)
+        tmp_cache.save(p2)
+        # p1 embedding is identical to query; p2 is distant
+        tmp_cache.upsert_embeddings_batch(
+            [(p1.uid, [1.0, 0.0]), (p2.uid, [0.0, 1.0])], dim
+        )
+        results = tmp_cache.vector_search_scored([1.0, 0.0], k=2)
+        assert results[0][0] == p1.uid
+        assert results[1][0] == p2.uid
+        assert results[0][1] <= results[1][1]  # distances non-decreasing
+
+
+class TestGetDownloadedUids:
+    def test_returns_ok_uids_only(self, tmp_cache):
+        p_ok = _paper(doi="10.1/ok", title="OK Paper")
+        p_fail = _paper(doi="10.1/fail", title="Fail Paper")
+        tmp_cache.save(p_ok)
+        tmp_cache.save(p_fail)
+        tmp_cache.set_download(p_ok.uid, "/tmp/ok.pdf", "ok")
+        tmp_cache.set_download(p_fail.uid, "/tmp/fail.pdf", "error")
+
+        result = tmp_cache.get_downloaded_uids()
+        assert p_ok.uid in result
+        assert p_fail.uid not in result
+
+    def test_empty_when_no_downloads(self, tmp_cache):
+        assert tmp_cache.get_downloaded_uids() == set()
+
+    def test_empty_when_all_failed(self, tmp_cache):
+        p = _paper(doi="10.1/x", title="Some Paper")
+        tmp_cache.save(p)
+        tmp_cache.set_download(p.uid, "/tmp/x.pdf", "error")
+        assert tmp_cache.get_downloaded_uids() == set()

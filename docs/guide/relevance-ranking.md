@@ -369,6 +369,61 @@ mosaic --verbose search "attention mechanism" --sort relevance
 
 ---
 
+## Semantic search — `--semantic`
+
+`--sort relevance` (BM25 / LLM) ranks papers that are *already fetched or cached* by keyword or
+conceptual fit. **`--semantic`** goes one step further: it embeds the query with the same model
+used by `mosaic index` and retrieves the top-*k* most similar papers directly from the vector
+index, bypassing full-text keyword matching entirely.
+
+```bash
+# Retrieve by meaning — no keywords required
+mosaic search "methods for learning without labels" --semantic
+mosaic search "graph networks that generalise to unseen structures" --semantic -n 20
+
+# Semantic search over downloaded papers only
+mosaic search "attention mechanism" --semantic --downloaded-only
+
+# Override similarity ordering with citation count
+mosaic search "diffusion models" --semantic --sort citations
+```
+
+The results table shows a **Sim.** column (0 – 1) — the cosine-like similarity between the
+query vector and each paper's stored embedding.
+
+### Prerequisites
+
+`--semantic` requires:
+1. `sqlite-vec` installed: `pipx inject mosaic-search sqlite-vec`
+2. An embedding model configured: `mosaic config --embedding-model <model>`
+3. Papers indexed: `mosaic index` (run once; incremental)
+
+### `--semantic` vs `--sort relevance`
+
+| | `--sort relevance` | `--semantic` |
+|---|---|---|
+| Method | BM25 keyword scoring (or LLM) | Dense vector KNN |
+| Setup needed | Nothing (BM25) | `mosaic index` + embedding model |
+| Score column | **Rel.** | **Sim.** |
+| Understands synonyms | With LLM only | Always |
+| Works on network results | Yes | No (local index only) |
+| `--downloaded-only` support | No | Yes |
+
+### `--downloaded-only`
+
+Pass `--downloaded-only` with either `--semantic` or `--cached` to restrict results to papers
+for which a PDF is stored locally. Useful for interrogating what you have actually read:
+
+```bash
+# All semantically similar papers you have on disk
+mosaic search "protein structure prediction" --semantic --downloaded-only
+
+# Keyword search restricted to downloaded papers
+mosaic search "AlphaFold" --cached --downloaded-only
+```
+
+---
+
 ## Notes and limitations
 
 - **Scores are query-relative.** A score of 0.87 means "87% as relevant as the

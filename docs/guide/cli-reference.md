@@ -51,6 +51,8 @@ mosaic search [OPTIONS] QUERY
 | `--sort` | | str | | Sort results: `citations`, `year`, or `relevance` — tab-completes |
 | `--stats` | | flag | off | Print per-source counts and deduplication stats |
 | `--cached` | | flag | off | Search only the local cache — no network requests |
+| `--semantic` | | flag | off | Search the local **vector index** by meaning — requires `mosaic index` to have been run. Results are ranked by similarity and show a **Sim.** column (0 – 1). `--sort citations` / `--sort year` override the similarity ordering; `--sort relevance` is ignored (similarity is already the sort). |
+| `--downloaded-only` | | flag | off | Restrict results to papers with a locally downloaded PDF (only with `--cached` or `--semantic`) |
 | `--prefer-cache` | | flag | off | Substitute rich cached records for freshly fetched ones (see [Cache Management](./cache)) |
 | `--zotero` | | flag | off | Export results to Zotero |
 | `--zotero-collection` | | str | | Zotero collection name (created if missing) |
@@ -119,6 +121,18 @@ Each filter is applied at the **source API level** where supported, then as a **
 - `citations`: sort by citation count descending; adds a **Cited** column to the results table
 - `year`: sort by publication year descending (newest first)
 - `relevance`: re-score every paper against the query and sort by score descending; adds a **Rel.** column (0.00 – 1.00).  Uses BM25 by default; upgrades to LLM scoring when `[llm]` is configured.  See the [Relevance Ranking guide](./relevance-ranking) for setup.
+
+**`--semantic` vs `--sort relevance`:**
+Both rank by relevance, but they use fundamentally different techniques:
+
+| | `--sort relevance` | `--semantic` |
+|---|---|---|
+| Method | BM25 keyword scoring (or LLM) | Dense vector KNN (embedding model) |
+| Requires | Nothing (BM25) or `[llm]` config | `mosaic index` + embedding model |
+| Score column | **Rel.** | **Sim.** |
+| Handles synonyms | With LLM only | Always |
+| Works offline | Yes (BM25) | Yes (vectors already stored) |
+| Network search | Yes | No (local index only) |
 
 **`--field` / `-f` behaviour:**
 - `all` (default): query is sent as a general full-text search to each source
@@ -197,6 +211,15 @@ mosaic search "attention mechanism" --output attention.json
 # Save to multiple formats in one search
 mosaic search "diffusion models" -y 2023-2025 --oa-only \
   --output results.md --output refs.bib --output results.json
+
+# Offline keyword search from local cache
+mosaic search "attention mechanism" --cached
+mosaic search "protein folding" --cached --sort citations --oa-only
+
+# Offline semantic search over the local vector index (requires mosaic index)
+mosaic search "methods that learn representations without labels" --semantic
+mosaic search "graph neural network" --semantic --sort citations
+mosaic search "diffusion model" --semantic --downloaded-only   # only papers on disk
 ```
 
 ![Output formats demo](/gifs/08_output_formats.gif)

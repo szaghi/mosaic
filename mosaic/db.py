@@ -500,7 +500,7 @@ class Cache:
                 return set()
 
     def vector_search(self, query_embedding: list[float], k: int) -> list[str]:
-        """Return up to k UIDs ordered by cosine similarity (closest first)."""
+        """Return up to k UIDs ordered by distance (closest first)."""
         with self._lock:
             rows = self._conn.execute(
                 """
@@ -513,6 +513,31 @@ class Cache:
                 (json.dumps(query_embedding), k),
             ).fetchall()
             return [r[0] for r in rows]
+
+    def vector_search_scored(
+        self, query_embedding: list[float], k: int
+    ) -> list[tuple[str, float]]:
+        """Return up to k (uid, distance) pairs ordered by distance (closest first)."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT uid, distance
+                FROM vec_papers
+                WHERE embedding MATCH ?
+                  AND k = ?
+                ORDER BY distance
+                """,
+                (json.dumps(query_embedding), k),
+            ).fetchall()
+            return [(r[0], float(r[1])) for r in rows]
+
+    def get_downloaded_uids(self) -> set[str]:
+        """Return UIDs of papers with at least one successful local download."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT uid FROM downloads WHERE status = 'ok'"
+            ).fetchall()
+            return {r[0] for r in rows}
 
     def rebuild_vec_table(self) -> None:
         """Drop and recreate vec_papers (needed when embedding model changes)."""

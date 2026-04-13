@@ -211,6 +211,58 @@ def retrieve(
     return papers
 
 
+def semantic_search(
+    query: str,
+    cache: Cache,
+    cfg: dict,
+    k: int = 20,
+    *,
+    downloaded_only: bool = False,
+) -> list[Paper]:
+    """Embed *query* and return the top-k cached papers ordered by similarity.
+
+    Each returned paper has ``relevance_score`` set to
+    ``1 / (1 + L2_distance)``, mapping distance to a (0, 1] similarity value.
+
+    Raises RuntimeError if sqlite-vec is not installed, or ValueError if no
+    embedding model is configured.
+    """
+    from mosaic.config import get_embedding_cfg
+    from mosaic.embeddings import embed_texts
+
+    emb_cfg = get_embedding_cfg(cfg)
+    vecs = embed_texts([query], emb_cfg)
+    if not vecs:
+        return []
+    query_vec = vecs[0]
+
+    # Over-fetch when filtering by download status to absorb the loss.
+    fetch_k = k * 4 if downloaded_only else k
+    try:
+        scored = cache.vector_search_scored(query_vec, fetch_k)
+    except Exception as exc:
+        if "no such table" in str(exc).lower():
+            raise RuntimeError(
+                "No vector index found. Run 'mosaic index' first to build the semantic search index."
+            ) from exc
+        raise
+
+    if downloaded_only:
+        downloaded = cache.get_downloaded_uids()
+        scored = [(uid, dist) for uid, dist in scored if uid in downloaded]
+
+    scored = scored[:k]
+    uids = [uid for uid, _ in scored]
+    dist_map = dict(scored)
+
+    papers = cache.get_papers_by_uids(uids)
+    uid_order = {uid: i for i, uid in enumerate(uids)}
+    papers.sort(key=lambda p: uid_order.get(p.uid, 9999))
+    for p in papers:
+        p.relevance_score = 1.0 / (1.0 + dist_map.get(p.uid, 0.0))
+    return papers
+
+
 def ask(
     query: str,
     cfg: dict,

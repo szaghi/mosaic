@@ -303,6 +303,35 @@ mosaic ask "Compare DDPM, DDIM, and score SDE approaches" \
   --mode compare --output diffusion_comparison.md
 ```
 
+## Semantic search — `mosaic search --semantic`
+
+Once papers are indexed, you can search the vector index directly and get a ranked
+list of papers — without generating a natural-language answer. This is useful when you
+want to **explore** the library rather than synthesise it.
+
+```bash
+# Retrieve by meaning, not keyword overlap
+mosaic search "self-supervised contrastive learning" --semantic
+
+# Limit to papers you have on disk
+mosaic search "attention mechanism" --semantic --downloaded-only
+
+# More results, sorted by citation count after semantic retrieval
+mosaic search "diffusion generative model" --semantic -n 30 --sort citations
+```
+
+The results table shows a **Sim.** column (0 – 1) — a normalised cosine similarity score.
+The same embedding model used by `mosaic index` is used to embed the query at search time.
+
+::: tip When to use `--semantic` vs `mosaic ask`
+- `--semantic` returns a ranked **paper list** — fast, no LLM needed at query time.
+- `mosaic ask` retrieves papers and then **synthesises an answer** — requires an LLM.
+
+Use `--semantic` to explore and curate; use `mosaic ask` to analyse and summarise.
+:::
+
+---
+
 ## Hands-free corpus growth with `auto_index`
 
 Set `auto_index = true` in `[rag]` (or via `mosaic config --rag-auto-index`) to silently embed new papers after every `mosaic search` or `mosaic get` run. Indexing failures are always silent and never block the main operation.

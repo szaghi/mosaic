@@ -47,6 +47,10 @@ mosaic index
 mosaic ask "What are the main approaches to high-order Maxwell solvers?" --show-sources
 mosaic chat   # interactive multi-turn session
 
+# Semantic search over local library — find by meaning, not keywords
+mosaic search "methods that learn without labels" --semantic
+mosaic search "attention mechanism" --semantic --downloaded-only   # only papers on disk
+
 # Re-rank results by relevance to a query — BM25, instant, no model needed
 mosaic search "graph neural networks" --cached --sort relevance
 
@@ -114,6 +118,23 @@ mosaic chat
 ```
 
 Requires `sqlite-vec` and an embedding model. See the [RAG guide](https://szaghi.github.io/mosaic/guide/rag) for Ollama setup, model selection, and all CLI options.
+
+### Semantic search — mosaic search --semantic
+
+Once papers are indexed, search the vector index directly and get a ranked paper list — without generating a natural-language answer. Handles synonyms and paraphrases that keyword search misses. Shows a **Sim.** (0–1) column in the results table.
+
+```bash
+# Retrieve by meaning, not keyword overlap
+mosaic search "self-supervised representation learning" --semantic
+
+# Restrict to papers you have downloaded locally
+mosaic search "protein structure prediction" --semantic --downloaded-only
+
+# Semantic retrieval, then sort survivors by citation count
+mosaic search "diffusion generative model" --semantic -n 30 --sort citations
+```
+
+No LLM needed at query time — only the stored embeddings and the embedding model to encode the query.
 
 ---
 

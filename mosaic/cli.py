@@ -175,6 +175,20 @@ def search(
     cached: Annotated[
         bool, typer.Option("--cached", help="Search only the local cache — no network requests")
     ] = False,
+    semantic: Annotated[
+        bool,
+        typer.Option(
+            "--semantic",
+            help="Search the local vector index by meaning instead of keywords (requires 'mosaic index' to have been run)",
+        ),
+    ] = False,
+    downloaded_only: Annotated[
+        bool,
+        typer.Option(
+            "--downloaded-only",
+            help="Limit results to papers with a locally downloaded PDF (only with --cached or --semantic)",
+        ),
+    ] = False,
     prefer_cache: Annotated[
         bool,
         typer.Option(
@@ -198,37 +212,85 @@ def search(
         cfg["sources"]["pedro"]["fetch_details"] = True
     cache = Cache(cfg["db_path"])
 
-    if cached:
+    if cached or semantic:
         filters, year_warning = build_filters(
             year=year, author=list(author), journal=journal, field=field, raw_query=raw_query
         )
         if year_warning:
             rprint(f"[red]{year_warning}[/red]")
             raise typer.Exit(1)
-        if not json_output:
-            rprint(f"[dim]Searching local cache for '{query}'…[/dim]")
-        papers = cache.search_local(query)
-        if filters:
-            papers = [p for p in papers if filters.match(p)]
-        if json_output:
-            _emit_json(papers, query=query)
-            return
-        _post_process(
-            papers,
-            cfg,
-            cache,
-            query=query,
-            output=list(output),
-            do_download=download,
-            sort_by=sort_by,
-            oa_only=oa_only,
-            pdf_only=pdf_only,
-            zotero=zotero,
-            zotero_collection=zotero_collection,
-            zotero_local=zotero_local,
-            obsidian=obsidian,
-            obsidian_folder=obsidian_folder,
-        )
+
+        if semantic:
+            if not json_output:
+                rprint(f"[dim]Searching local vector index for '{query}'…[/dim]")
+            try:
+                from mosaic.rag import semantic_search
+
+                papers = semantic_search(
+                    query, cache, cfg, k=max_results, downloaded_only=downloaded_only
+                )
+            except RuntimeError as e:
+                rprint(f"[red]{e}[/red]")
+                raise typer.Exit(1) from None
+            except ValueError as e:
+                rprint(f"[red]{e}[/red]")
+                rprint(
+                    "[dim]Hint: run mosaic config --embedding-model <model> to configure an embedding model.[/dim]"
+                )
+                raise typer.Exit(1) from None
+            if filters:
+                papers = [p for p in papers if filters.match(p)]
+            # --sort citations/year is allowed; --sort relevance would clobber
+            # semantic ordering with BM25, so treat it as no sort.
+            effective_sort = sort_by if sort_by in ("citations", "year") else ""
+            if json_output:
+                _emit_json(papers, query=query)
+                return
+            _post_process(
+                papers,
+                cfg,
+                cache,
+                query=query,
+                output=list(output),
+                do_download=download,
+                sort_by=effective_sort,
+                oa_only=oa_only,
+                pdf_only=pdf_only,
+                zotero=zotero,
+                zotero_collection=zotero_collection,
+                zotero_local=zotero_local,
+                obsidian=obsidian,
+                obsidian_folder=obsidian_folder,
+                show_score=True,
+            )
+        else:
+            if not json_output:
+                rprint(f"[dim]Searching local cache for '{query}'…[/dim]")
+            papers = cache.search_local(query)
+            if filters:
+                papers = [p for p in papers if filters.match(p)]
+            if downloaded_only:
+                dld = cache.get_downloaded_uids()
+                papers = [p for p in papers if p.uid in dld]
+            if json_output:
+                _emit_json(papers, query=query)
+                return
+            _post_process(
+                papers,
+                cfg,
+                cache,
+                query=query,
+                output=list(output),
+                do_download=download,
+                sort_by=sort_by,
+                oa_only=oa_only,
+                pdf_only=pdf_only,
+                zotero=zotero,
+                zotero_collection=zotero_collection,
+                zotero_local=zotero_local,
+                obsidian=obsidian,
+                obsidian_folder=obsidian_folder,
+            )
         return
 
     sources = build_sources(cfg)
@@ -1477,6 +1539,7 @@ def _post_process(
     zotero_local: bool = False,
     obsidian: bool = False,
     obsidian_folder: str = "",
+    show_score: bool = False,
 ) -> None:
     """Shared post-processing: filter, export, download, push to Zotero/Obsidian."""
     if sort_by and sort_by not in ("citations", "year", "relevance"):
@@ -1494,7 +1557,9 @@ def _post_process(
     for p in papers:
         cache.save(p)
 
-    _print_results(papers, show_relevance=sort_by == "relevance")
+    show_rel = sort_by == "relevance" or show_score
+    score_label = "Sim." if show_score else "Rel."
+    _print_results(papers, show_relevance=show_rel, score_label=score_label)
 
     if output:
         from mosaic.exporter import export
@@ -1547,7 +1612,9 @@ def _complete_session_names() -> list[str]:
     return [s["name"] for s in list_sessions()]
 
 
-def _print_results(papers: list, show_relevance: bool = False) -> None:
+def _print_results(
+    papers: list, show_relevance: bool = False, score_label: str = "Rel."
+) -> None:
     show_citations = any(p.citation_count is not None for p in papers)
 
     table = Table(
@@ -1568,7 +1635,7 @@ def _print_results(papers: list, show_relevance: bool = False) -> None:
     if show_citations:
         table.add_column("Cited", width=7, justify="right")
     if show_relevance:
-        table.add_column("Rel.", width=6, justify="right")
+        table.add_column(score_label, width=6, justify="right")
 
     for i, p in enumerate(papers, 1):
         oa = "[green]yes[/green]" if p.is_open_access else "[red]no[/red]"

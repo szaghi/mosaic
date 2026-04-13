@@ -5,9 +5,10 @@ description: >
   for searching, downloading, and managing scientific papers from 21 sources with a single command.
   Use this skill whenever the user asks about: building a bibliography programmatically, searching
   for papers across multiple sources, downloading OA PDFs, exporting to BibTeX/Zotero/Obsidian,
-  interpreting mosaic --json output in AI agent or CI workflows, RAG over a paper library, finding
-  similar papers, analysing citation networks, comparing papers across structured dimensions, or any
-  task that involves mosaic search/get/similar/ask/chat/index/network/compare/skill commands.
+  interpreting mosaic --json output in AI agent or CI workflows, RAG over a paper library, semantic
+  search over a local paper library, finding similar papers, analysing citation networks, comparing
+  papers across structured dimensions, or any task that involves mosaic
+  search/get/similar/ask/chat/index/network/compare/skill commands.
   When in doubt, trigger this skill — it is better to consult it unnecessarily than to miss it.
 ---
 
@@ -161,6 +162,8 @@ mosaic search "query" [OPTIONS]
 | `--download`, `-d` | off | Download available PDFs after search |
 | `--output`, `-o` | — | Save results to file (`.md`, `.csv`, `.json`, `.bib`, `.ris`); repeatable |
 | `--cached` | off | Search only the local cache — no network requests |
+| `--semantic` | off | Search local vector index by meaning (requires `mosaic index` + embedding model); shows **Sim.** column |
+| `--downloaded-only` | off | Restrict to papers with a locally downloaded PDF (only with `--cached` or `--semantic`) |
 | `--prefer-cache` | off | Prefer richer cached records over freshly fetched data |
 | `--stats` | off | Print per-source counts and deduplication stats |
 | `--zotero` | off | Export results to Zotero |
@@ -355,18 +358,26 @@ mosaic config --llm-provider openai --llm-base-url http://localhost:11434/v1 --l
 # 1. Build/update the vector index (incremental — already-indexed papers are skipped)
 mosaic index
 
-# 2. Single-shot analysis
+# 2. Semantic search — retrieve by meaning, no LLM needed at query time
+mosaic search "methods that learn without labels" --semantic          # ranked paper list + Sim. column
+mosaic search "attention mechanism" --semantic --downloaded-only      # only papers on disk
+mosaic search "diffusion model" --semantic -n 20 --sort citations     # sort by citations after retrieval
+
+# 3. Single-shot analysis (LLM required)
 mosaic ask "What FDTD schemes achieve high-order accuracy in time?" --mode synthesis
 mosaic ask "What open problems remain in discontinuous Galerkin methods?" --mode gaps
 mosaic ask "Compare DDPM, DDIM, and score SDE" --mode compare --output report.md
 mosaic ask "Extract all methods with accuracy claims" --mode extract
 
-# 3. Interactive session
+# 4. Interactive session
 mosaic chat
 ```
 
-**Modes**: `synthesis` (state of the art), `gaps` (open problems), `compare` (side-by-side
-methods), `extract` (structured per-paper data extraction).
+**`--semantic`**: embeds the query and retrieves top-k papers from the vector index. Shows a **Sim.**
+column (0–1). No LLM needed at query time. Requires `mosaic index` + embedding model.
+
+**Modes for `mosaic ask`**: `synthesis` (state of the art), `gaps` (open problems), `compare`
+(side-by-side methods), `extract` (structured per-paper data extraction).
 
 Requires `sqlite-vec` (`pipx inject mosaic-search sqlite-vec`) and a configured embedding model
 + LLM. See `mosaic config --embedding-model ...` / `--llm-provider ...`.
