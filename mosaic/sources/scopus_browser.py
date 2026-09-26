@@ -125,13 +125,13 @@ class ScopusBrowserSource(BaseSource):
         """
         from playwright.async_api import async_playwright
 
-        from mosaic.auth import _launch_browser, session_path
+        from mosaic.auth import launch_browser, session_path
 
         state_file = session_path(session_name)
 
         papers: list[Paper] = []
         async with async_playwright() as p:
-            browser = await _launch_browser(p, headless=True)
+            browser = await launch_browser(p, headless=True)
             context = await browser.new_context(storage_state=str(state_file))
             page = await context.new_page()
             await page.add_init_script(

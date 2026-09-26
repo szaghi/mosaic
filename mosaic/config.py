@@ -80,7 +80,7 @@ _DEFAULTS: dict = {
 }
 
 
-_KNOWN_SOURCES: set[str] = {
+KNOWN_SOURCES: set[str] = {
     "arxiv",
     "semantic_scholar",
     "sciencedirect",
@@ -127,7 +127,7 @@ def validate(cfg: dict) -> list[str]:
     sources = cfg.get("sources")
     if isinstance(sources, dict):
         for name, src_cfg in sources.items():
-            if name not in _KNOWN_SOURCES:
+            if name not in KNOWN_SOURCES:
                 warnings.append(f"unknown source '{name}'")
             if isinstance(src_cfg, dict):
                 if "enabled" in src_cfg and not isinstance(src_cfg["enabled"], bool):
@@ -161,6 +161,14 @@ def validate(cfg: dict) -> list[str]:
             warnings.append("obsidian.wikilinks should be a bool")
 
     return warnings
+
+
+def default_value(*keys: str):
+    """Return a copy of the default config value at *keys* (e.g. ``"rag", "chunk_size"``)."""
+    node = _DEFAULTS
+    for key in keys:
+        node = node[key]
+    return copy.deepcopy(node)
 
 
 def load() -> dict:

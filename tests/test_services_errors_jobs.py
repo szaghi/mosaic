@@ -774,7 +774,7 @@ class TestJobsRobustness:
             assert job.status == "done" and job.wait(timeout=0)
             assert job.result == {"papers": []} and job.meta == {"k": "v"}
             job.created_at -= JobManager._MAX_AGE + 1
-            mgr._cleanup()
+            mgr.purge_stale()
             assert mgr.get(job_id) is None
         finally:
             mgr.shutdown()

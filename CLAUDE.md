@@ -45,15 +45,19 @@ mosaic config --show
 
 ## Architecture
 
-**MOSAIC** is a CLI tool (`mosaic` entry point → `mosaic/cli.py`) that fans out paper searches across multiple scientific sources, deduplicates results, caches them locally, and can download PDFs.
+**MOSAIC** is a CLI tool (`mosaic` entry point → `mosaic/cli/`) that fans out paper searches across multiple scientific sources, deduplicates results, caches them locally, and can download PDFs.
 
 ### Data flow
 
-1. `cli.py` loads config, instantiates enabled sources via `source_registry.py:build_sources()`, calls `search_all()`.
+1. `mosaic/cli/search.py` loads config, instantiates enabled sources via `source_registry.py:build_sources()`, calls `search_all()`.
 2. `search.py:search_all()` queries sources in parallel (thread pool), merges duplicates by `Paper.uid` (`services.merge_papers`, same field rules as the SQLite upsert), applies `SearchFilters` as a post-processing safety net.
 3. `workflows.finalize_search()` applies prefer-cache / OA / PDF / sort, saves results to the SQLite cache (`db.py:Cache`) and logs the search; PDFs are downloaded via `workflows.download_papers()` → `downloader.py`.
 
-The web UI (`mosaic/ui/`) must stay a thin layer over the same `services.py` / `workflows.py` / `rag.py` functions as the CLI — add shared logic there, not in `cli.py` or `ui/routes.py`.
+The web UI (`mosaic/ui/`) must stay a thin layer over the same `services.py` / `workflows.py` / `rag.py` functions as the CLI — add shared logic there, not in `mosaic/cli/` or `mosaic/ui/routes/`.
+
+- **`mosaic/cli/`** — Typer app split by area: `app.py` (Typer objects, global options, console), `helpers.py` (shared display/export helpers, `open_cache()`), and one module per command group (`search`, `rag`, `settings`, `skill`, `notebook`, `analysis`, `ui`, `auth`, `cache`). `mosaic/cli/__init__.py` imports them in registration order. Open the cache with `helpers.open_cache(cfg)` so it is closed when the command ends.
+- **`mosaic/ui/routes/`** — Flask views split by area on a single `ui` blueprint (templates keep `url_for("ui.<view>")`): `common.py` (blueprint + shared helpers such as `app_cfg()`, `render_results()`, `poll_html()`), then `search`, `papers`, `exports`, `settings`, `notebook`, `bulk`, `library`, `analysis`, `rag`, `sessions`. Background workers open their own `with Cache(cfg["db_path"]) as cache:`.
+- Code in one module must not import `_private` names from another: promote shared helpers to public API.
 
 ### Key modules
 
@@ -71,6 +75,11 @@ The web UI (`mosaic/ui/`) must stay a thin layer over the same `services.py` / `
 - **`gui_launcher.py`** — Entry point for standalone desktop app (PyInstaller). Opens web UI in a Chromium `--app` window.
 - **`db.py`** — SQLite cache: `papers` (upsert on uid with field-level merge rules — longer abstract, OA OR, fill missing fields incl. year; an existing `pdf_url` is never overwritten), `downloads` (local file paths and status), `searches`, `exports`, citation edges and the RAG chunk/vector tables. Schema migrations run in `_init()` and must work on caches created by older releases. Background jobs open their own connection with `with Cache(path) as cache:` so it is closed when the job ends.
 - **`config.py`** — Reads/writes `~/.config/mosaic/config.toml`; deep-merges user config over defaults. DB lives at `~/.local/share/mosaic/cache.db`, downloads at `~/mosaic-papers/`. Zotero config under `[zotero]` section (`api_key`, `user_id`).
+
+### Adding a CLI command or a web page
+
+- CLI: add the command to the module of its area in `mosaic/cli/` (or a new module imported from `mosaic/cli/__init__.py`), keeping business logic in `services.py` / `workflows.py`.
+- Web UI: add the view to the matching module in `mosaic/ui/routes/`, the template in `mosaic/ui/templates/`, and the link in the `nav_groups` list in `base.html`.
 
 ### Adding a new source
 

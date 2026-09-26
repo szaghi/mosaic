@@ -160,11 +160,11 @@ def _to_bibtex(papers: list[Paper], path: Path) -> None:
     entries = []
     for i, p in enumerate(papers, 1):
         key = _unique_key(_bibtex_key(p, i), used)
-        entries.append(_bibtex_entry(p, i, key=key))
+        entries.append(bibtex_entry(p, i, key=key))
     path.write_text("\n\n".join(entries) + "\n", encoding="utf-8")
 
 
-def _bibtex_entry(p: Paper, index: int, key: str | None = None) -> str:
+def bibtex_entry(p: Paper, index: int, key: str | None = None) -> str:
     entry_type = "article" if p.journal else "misc"
     key = key or _bibtex_key(p, index)
 

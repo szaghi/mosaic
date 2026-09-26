@@ -133,7 +133,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "B011", "PT", "N802", "RUF059"]
-"mosaic/cli.py" = ["B006", "B008", "RUF013"]
+"mosaic/cli/**" = ["B006", "B008", "RUF013"]  # Typer option defaults
 "mosaic.spec" = ["E", "F"]
 
 [tool.ruff.lint.isort]

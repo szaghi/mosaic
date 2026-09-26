@@ -6,8 +6,9 @@ import httpx
 
 from mosaic.models import Paper
 from mosaic.services import merge_papers
-from mosaic.sources.openalex import _SELECT, OpenAlexSource
-from mosaic.sources.semantic_scholar import _FIELDS as _SS_FIELDS
+from mosaic.sources.openalex import SELECT as _OA_SELECT
+from mosaic.sources.openalex import OpenAlexSource
+from mosaic.sources.semantic_scholar import FIELDS as _SS_FIELDS
 from mosaic.sources.semantic_scholar import SemanticScholarSource
 
 _OA_BASE = "https://api.openalex.org"
@@ -93,7 +94,7 @@ def _similar_openalex(
     fetch_params: dict = {
         "filter": f"ids.openalex:{'|'.join(w_ids)}",
         "per_page": len(w_ids),
-        "select": _SELECT,
+        "select": _OA_SELECT,
     }
     if email:
         fetch_params["mailto"] = email
@@ -102,7 +103,7 @@ def _similar_openalex(
     resp2.raise_for_status()
 
     parser = OpenAlexSource()
-    papers = [parser._parse(item) for item in resp2.json().get("results", [])]
+    papers = [parser.parse(item) for item in resp2.json().get("results", [])]
     return seed_title, papers
 
 
@@ -134,7 +135,7 @@ def _similar_ss(
     resp.raise_for_status()
 
     parser = SemanticScholarSource()
-    return [parser._parse(item) for item in resp.json().get("recommendedPapers", [])]
+    return [parser.parse(item) for item in resp.json().get("recommendedPapers", [])]
 
 
 def _oa_work_url(identifier: str) -> str:

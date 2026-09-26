@@ -36,6 +36,15 @@ class BaseSource(ABC):
         """
         ...
 
+    def parse(self, record):
+        """Convert one raw API record into a :class:`Paper`.
+
+        Public entry point for code that fetches records itself (e.g. similar
+        papers, the bioRxiv Europe PMC fallback); delegates to the source's
+        ``_parse`` implementation.
+        """
+        return self._parse(record)
+
     def available(self) -> bool:
         """Return False if the source is misconfigured (e.g. missing API key)."""
         return True

@@ -93,13 +93,13 @@ class SpringerBrowserSource(BaseSource):
         """
         from playwright.async_api import async_playwright
 
-        from mosaic.auth import _launch_browser
+        from mosaic.auth import launch_browser
 
         pages_needed = math.ceil(max_results / _PAGE_SIZE)
         papers: list[Paper] = []
 
         async with async_playwright() as p:
-            browser = await _launch_browser(p, headless=True)
+            browser = await launch_browser(p, headless=True)
             context = await browser.new_context()
             page = await context.new_page()
             try:

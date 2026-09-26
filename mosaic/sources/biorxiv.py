@@ -169,7 +169,7 @@ class BioRxivSource(BaseSource):
         epmc_query = f'{base_query} AND SRC:PPR AND (PUBLISHER:"bioRxiv" OR PUBLISHER:"medRxiv")'
         papers = []
         for item in epmc.fetch(epmc_query, max_results):
-            paper = epmc._parse(item)
+            paper = epmc.parse(item)
             details = item.get("bookOrReportDetails")
             publisher = details.get("publisher", "") if isinstance(details, dict) else ""
             server = "medrxiv" if publisher.lower() == "medrxiv" else "biorxiv"

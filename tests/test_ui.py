@@ -91,8 +91,8 @@ class TestSearch:
         assert resp.status_code == 200
         assert b"Please enter a search query" in resp.data
 
-    @patch("mosaic.ui.routes.build_sources")
-    @patch("mosaic.ui.routes.search_all")
+    @patch("mosaic.ui.routes.search.build_sources")
+    @patch("mosaic.ui.routes.search.search_all")
     def test_search_submit_and_status(self, mock_search, mock_build, client, app):
         papers = [_make_paper()]
         mock_search.return_value = papers
@@ -220,7 +220,7 @@ class TestInputValidation:
 
     def test_invalid_year_format_shows_warning(self, client, app):
         """Invalid year filter is rejected with a message (like the CLI), not ignored."""
-        with patch("mosaic.ui.routes.search_all") as mock_search:
+        with patch("mosaic.ui.routes.search.search_all") as mock_search:
             resp = client.post(
                 "/search",
                 data={
@@ -249,8 +249,8 @@ class TestInputValidation:
     def test_bad_max_results_does_not_crash(self, client, app):
         """Non-numeric max_results should not cause 500 error."""
         with (
-            patch("mosaic.ui.routes.build_sources") as mock_build,
-            patch("mosaic.ui.routes.search_all") as mock_search,
+            patch("mosaic.ui.routes.search.build_sources") as mock_build,
+            patch("mosaic.ui.routes.search.search_all") as mock_search,
         ):
             mock_build.return_value = [MagicMock(name="arXiv")]
             mock_search.return_value = []
@@ -266,7 +266,7 @@ class TestInputValidation:
 
     def test_similar_bad_max_results(self, client, app):
         """Non-numeric max_results on similar page should not crash."""
-        with patch("mosaic.ui.routes._run_similar"):
+        with patch("mosaic.ui.routes.search._run_similar"):
             resp = client.post(
                 "/similar",
                 data={

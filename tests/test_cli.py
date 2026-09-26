@@ -61,9 +61,9 @@ class TestSearch:
         src = MagicMock()
         src.name = "My Repo"
         with (
-            patch("mosaic.cli.build_sources", return_value=[src]),
-            patch("mosaic.cli.source_choices", return_value={"myrepo": "My Repo"}),
-            patch("mosaic.cli.search_all", return_value=[]) as search,
+            patch("mosaic.cli.search.build_sources", return_value=[src]),
+            patch("mosaic.cli.search.source_choices", return_value={"myrepo": "My Repo"}),
+            patch("mosaic.cli.search.search_all", return_value=[]) as search,
         ):
             result = runner.invoke(app, ["search", "q", "--source", "myrepo", "--json"])
         assert result.exit_code == 0, result.output
@@ -71,8 +71,8 @@ class TestSearch:
 
     def test_search_is_logged_for_history(self):
         with (
-            patch("mosaic.cli.build_sources", return_value=[]),
-            patch("mosaic.cli.search_all", return_value=[Paper(title="T", doi="10.1/t")]),
+            patch("mosaic.cli.search.build_sources", return_value=[]),
+            patch("mosaic.cli.search.search_all", return_value=[Paper(title="T", doi="10.1/t")]),
         ):
             runner.invoke(app, ["search", "logged query", "--json", "--year", "2020"])
         with _cache() as cache:

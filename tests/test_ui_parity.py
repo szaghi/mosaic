@@ -243,9 +243,9 @@ class TestNetworkSearch:
             _paper(title="a", doi="10.1/a", year=2023),
         ]
         with (
-            patch("mosaic.ui.routes.build_sources", return_value=[src]),
-            patch("mosaic.ui.routes.source_choices", return_value={"myrepo": "My Repo"}),
-            patch("mosaic.ui.routes.search_all", return_value=papers) as search,
+            patch("mosaic.ui.routes.search.build_sources", return_value=[src]),
+            patch("mosaic.ui.routes.search.source_choices", return_value={"myrepo": "My Repo"}),
+            patch("mosaic.ui.routes.search.search_all", return_value=papers) as search,
         ):
             resp = client.post(
                 "/search",
@@ -263,7 +263,7 @@ class TestNetworkSearch:
 class TestSimilar:
     def test_paper_not_found_message(self, client, app):
         with patch(
-            "mosaic.ui.routes._run_similar", return_value={"seed_title": None, "papers": []}
+            "mosaic.ui.routes.search._run_similar", return_value={"seed_title": None, "papers": []}
         ):
             resp = client.post("/similar", data={"identifier": "10.9/none"})
             _wait(app, resp.data, "/similar/status")
@@ -397,7 +397,7 @@ class TestNotebook:
     def test_system_exit_in_job_does_not_poll_forever(self, client, app):
         with (
             patch("mosaic.notebooklm_bridge.preflight_error", return_value=None),
-            patch("mosaic.ui.routes._run_notebook_from_query", side_effect=SystemExit(1)),
+            patch("mosaic.ui.routes.notebook._run_notebook_from_query", side_effect=SystemExit(1)),
         ):
             resp = client.post("/notebook", data={"name": "NB", "query": "q"})
             _wait(app, resp.data, "/notebook/status")

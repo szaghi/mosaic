@@ -44,24 +44,24 @@ def _run(coro):
 
 
 # ---------------------------------------------------------------------------
-# _require_notebooklm
+# require_notebooklm
 # ---------------------------------------------------------------------------
 
 
 class TestRequireNotebooklm:
     def test_raises_when_not_installed(self):
-        from mosaic.notebooklm_bridge import _require_notebooklm
+        from mosaic.notebooklm_bridge import require_notebooklm
 
         with patch.dict(sys.modules, {"notebooklm": None}):
             with pytest.raises(ImportError, match="mosaic-search\\[notebooklm\\]"):
-                _require_notebooklm()
+                require_notebooklm()
 
     def test_passes_when_installed(self):
-        from mosaic.notebooklm_bridge import _require_notebooklm
+        from mosaic.notebooklm_bridge import require_notebooklm
 
         fake_mod, _ = _make_fake_notebooklm()
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
-            _require_notebooklm()  # should not raise
+            require_notebooklm()  # should not raise
 
 
 # ---------------------------------------------------------------------------

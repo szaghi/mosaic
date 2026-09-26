@@ -40,7 +40,7 @@ class JobManager:
     def submit(
         self, fn: Callable, *args: Any, meta: dict[str, Any] | None = None, **kwargs: Any
     ) -> str:
-        self._cleanup()
+        self.purge_stale()
         job_id = uuid.uuid4().hex[:12]
         job = Job(id=job_id, meta=dict(meta or {}))
         with self._lock:
@@ -54,7 +54,7 @@ class JobManager:
 
         The job is purged like any other, so data attached to it does not leak.
         """
-        self._cleanup()
+        self.purge_stale()
         job_id = uuid.uuid4().hex[:12]
         job = Job(id=job_id, status="done", result=result, meta=dict(meta or {}))
         job._event.set()
@@ -99,7 +99,7 @@ class JobManager:
                 if j.status != "running" and (now - j.created_at) > self._MAX_AGE
             ]
 
-    def _cleanup(self) -> None:
+    def purge_stale(self) -> None:
         """Remove stale finished jobs to prevent unbounded memory growth."""
         stale = self.stale_job_ids()
         if not stale:
