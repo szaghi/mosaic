@@ -78,6 +78,10 @@
       </label>
     </div>
     <label>
+      <input type="checkbox" name="require_year">
+      <span>Exclude papers without a known year when filtering by year</span>
+    </label>
+    <label>
       Raw query <small>(bypass field transforms, sent directly to source APIs)</small>
       <input type="text" name="raw_query" placeholder="Advanced: raw API query override"
              value="{{ pf.get('raw_query', '') }}">

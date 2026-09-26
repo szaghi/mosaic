@@ -778,3 +778,18 @@ class TestJobsRobustness:
             assert mgr.get(job_id) is None
         finally:
             mgr.shutdown()
+
+
+class TestRequireYear:
+    def test_unknown_year_passes_by_default_and_fails_when_required(self):
+        undated = Paper(title="Undated", doi="10.1/u")
+        lenient, _ = build_filters(year="2020")
+        strict, _ = build_filters(year="2020", require_year=True)
+        assert lenient.match(undated) is True
+        assert strict.match(undated) is False
+        assert strict.match(Paper(title="Dated", doi="10.1/d", year=2020)) is True
+
+    def test_require_year_alone_is_not_a_filter(self):
+        assert build_filters(require_year=True) == (None, None)
+        only_author, _ = build_filters(author="Smith", require_year=True)
+        assert only_author.match(Paper(title="x", authors=["J Smith"])) is True

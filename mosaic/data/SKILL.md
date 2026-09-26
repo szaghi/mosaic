@@ -158,6 +158,7 @@ mosaic search "query" [OPTIONS]
 | `--oa-only` | off | Open-access papers only |
 | `--pdf-only` | off | Papers with downloadable PDF only |
 | `--year`, `-y` | — | Year filter: `"2020"`, `"2020-2024"`, or `"2020,2022,2024"` |
+| `--require-year` | off | With `--year`, drop papers whose year is unknown (kept by default) |
 | `--author`, `-a` | — | Author name filter (repeatable) |
 | `--journal`, `-j` | — | Journal name filter (substring match) |
 | `--field`, `-f` | `all` | Scope query to `"title"`, `"abstract"`, or `"all"` |

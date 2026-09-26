@@ -92,9 +92,21 @@ class SearchFilters:
     field: str = "all"
     # Raw query override: sent directly to the source API, bypassing field transformation
     raw_query: str = ""
+    # With a year filter, drop papers whose year is unknown (by default they pass)
+    require_year: bool = False
+
+    @property
+    def has_year_filter(self) -> bool:
+        return self.years is not None or self.year_from is not None or self.year_to is not None
 
     def match(self, paper: Paper) -> bool:
-        """Return True if paper passes all active filters."""
+        """Return True if paper passes all active filters.
+
+        Papers with an unknown year pass the year filter unless
+        ``require_year`` is set.
+        """
+        if paper.year is None and self.require_year and self.has_year_filter:
+            return False
         if paper.year is not None:
             if self.years is not None:
                 if paper.year not in self.years:

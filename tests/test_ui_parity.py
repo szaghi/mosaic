@@ -516,3 +516,10 @@ class TestLayoutAndA11y:
         html = client.post("/search", data={"query": "Closed", "mode": "cached"}).data
         assert b'<span class="sr-only">not open access</span>' in html
         assert b"data-announce" in html
+
+    def test_require_year_checkbox_filters_cached_search(self, client, app):
+        _cache(app).save(_paper(title="Undated paper", doi="10.1/u", year=None))
+        base = {"query": "Undated", "mode": "cached", "year": "2020"}
+        assert b"Undated paper" in client.post("/search", data=base).data
+        strict = client.post("/search", data={**base, "require_year": "on"}).data
+        assert b"Undated paper" not in strict

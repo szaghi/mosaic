@@ -79,6 +79,7 @@ def form_filters(form) -> tuple[SearchFilters | None, str | None]:
         journal=form.get("journal", "").strip(),
         field=form.get("field", "all") or "all",
         raw_query=form.get("raw_query", "").strip(),
+        require_year=form.get("require_year") == "on",
     )
 
 

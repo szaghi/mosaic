@@ -11,6 +11,7 @@ def build_filters(
     journal: str = "",
     field: str = "all",
     raw_query: str = "",
+    require_year: bool = False,
 ) -> tuple[SearchFilters | None, str | None]:
     """Build a ``SearchFilters`` from user input.
 
@@ -20,6 +21,7 @@ def build_filters(
         journal: Journal name substring.
         field: ``"title"``, ``"abstract"``, or ``"all"``.
         raw_query: Raw query override.
+        require_year: With a year filter, exclude papers whose year is unknown.
 
     Returns:
         A tuple ``(filters_or_None, warning_or_None)``.  The warning is set
@@ -34,7 +36,13 @@ def build_filters(
     if not any([year, authors, journal, field != "all", raw_query]):
         return None, None
 
-    filters = SearchFilters(authors=authors, journal=journal, field=field, raw_query=raw_query)
+    filters = SearchFilters(
+        authors=authors,
+        journal=journal,
+        field=field,
+        raw_query=raw_query,
+        require_year=require_year,
+    )
     warning: str | None = None
 
     if year:

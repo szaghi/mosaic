@@ -239,3 +239,21 @@ class TestUiCommand:
         result, create_app = self._run("--host", "0.0.0.0", "--no-auth")
         assert create_app.call_args.kwargs["access_token"] is None
         assert "--no-auth" in result.output
+
+
+class TestRequireYearAndDefaults:
+    def test_cached_search_require_year(self):
+        _seed(
+            Paper(title="Graph dated", doi="10.1/d", year=2020, source="s"),
+            Paper(title="Graph undated", doi="10.1/u", source="s"),
+        )
+        lenient = json.loads(
+            runner.invoke(app, ["search", "Graph", "--cached", "--json", "--year", "2020"]).output
+        )
+        strict = json.loads(
+            runner.invoke(
+                app, ["search", "Graph", "--cached", "--json", "--year", "2020", "--require-year"]
+            ).output
+        )
+        assert {p["title"] for p in lenient["papers"]} == {"Graph dated", "Graph undated"}
+        assert [p["title"] for p in strict["papers"]] == ["Graph dated"]

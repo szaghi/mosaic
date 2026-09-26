@@ -80,6 +80,13 @@ def search(
             help="Raw query sent directly to source APIs, bypassing all field transforms",
         ),
     ] = "",
+    require_year: Annotated[
+        bool,
+        typer.Option(
+            "--require-year",
+            help="With --year, drop papers whose publication year is unknown (kept by default)",
+        ),
+    ] = False,
     output: Annotated[
         list[Path],
         typer.Option(
@@ -179,6 +186,7 @@ def search(
         journal=journal,
         field=field,
         raw_query=raw_query,
+        require_year=require_year,
     )
     if year_warning:
         rprint(f"[red]{year_warning}[/red]")
