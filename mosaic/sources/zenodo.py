@@ -18,6 +18,11 @@ from mosaic.sources.base import (
 _BASE = "https://zenodo.org/api/records"
 
 
+_MAX_RESULTS = 100
+_PAGE_SIZE_ANON = 25
+_PAGE_SIZE_AUTH = 100
+
+
 class ZenodoSource(BaseSource):
     """Search source for Zenodo, CERN's open-access research repository.
 
@@ -66,7 +71,8 @@ class ZenodoSource(BaseSource):
 
         Args:
             query: Free-text search query.
-            max_results: Maximum number of results to request (capped at 100).
+            max_results: Maximum number of results to request (capped at 100;
+                fetched in pages of 25 without a token, 100 with one).
             filters: Optional filters for field scoping, authors, journal, and
                 year range or specific years. ``raw_query`` overrides the
                 default mapping if set.
@@ -88,21 +94,33 @@ class ZenodoSource(BaseSource):
             if filters.journal:
                 q += f" AND journal.title:{lucene_phrase(filters.journal)}"
 
-        params: dict = {
-            "q": q,
-            "size": min(max_results, 100),
-            "type": "publication",
-            "sort": "bestmatch",
-        }
+        wanted = min(max_results, _MAX_RESULTS)
+        # Anonymous requests are limited to 25 records per page (larger sizes
+        # get HTTP 400); authenticated ones to 100.
+        page_size = min(wanted, _PAGE_SIZE_AUTH if self._token else _PAGE_SIZE_ANON)
         # Send the token as a header, never in the URL: httpx error messages
         # embed the full URL and would otherwise leak it.
         headers = {"Authorization": f"Bearer {self._token}"} if self._token else {}
 
+        hits: list[dict] = []
         with httpx.Client(timeout=30, headers=headers) as client:
-            resp = with_retry(lambda: client.get(_BASE, params=params))
-            resp.raise_for_status()
-            hits = resp.json().get("hits", {}).get("hits", [])
-        return [self._parse(hit) for hit in hits]
+            page = 1
+            while len(hits) < wanted:
+                params: dict = {
+                    "q": q,
+                    "size": page_size,
+                    "page": page,
+                    "type": "publication",
+                    "sort": "bestmatch",
+                }
+                resp = with_retry(lambda params=params: client.get(_BASE, params=params))
+                resp.raise_for_status()
+                batch = resp.json().get("hits", {}).get("hits", [])
+                hits.extend(batch)
+                if len(batch) < page_size:
+                    break
+                page += 1
+        return [self._parse(hit) for hit in hits[:wanted]]
 
     def _parse(self, hit: dict) -> Paper:
         """Parse a single Zenodo record dict into a Paper.

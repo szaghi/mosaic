@@ -6,6 +6,8 @@ import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import httpx
+
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import redact_secrets
 from mosaic.services import merge_papers
@@ -33,7 +35,14 @@ def _record_failure(
     progress_callback: Callable[[str, str], None] | None,
 ) -> None:
     """Log a source failure and surface it with credentials redacted."""
-    message = redact_secrets(str(exc))
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(exc, httpx.HTTPStatusError) and status == 429:
+        message = (
+            "rate limited by the API (HTTP 429) — try again later, "
+            "or configure an API key for this source if it supports one"
+        )
+    else:
+        message = redact_secrets(str(exc))
     log.warning("Source %s failed: %s", source_name, message)
     if errors is not None:
         errors.append(f"{source_name}: {message}")

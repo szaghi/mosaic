@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import httpx
 
 from mosaic.models import Paper, SearchFilters
@@ -70,8 +72,10 @@ class PubMedSource(BaseSource):
 
         if filters:
             if filters.authors:
+                # Unquoted on purpose: "Jumper"[au] is an exact-name match (0 hits),
+                # Jumper[au] matches "Jumper J", "Jumper JM", …; strip query syntax.
                 pm_query += " AND " + any_of(
-                    (a.replace('"', "") for a in filters.authors), '"{}"[au]'
+                    (re.sub(r'["()\[\]]', "", a).strip() for a in filters.authors), "{}[au]"
                 )
             if filters.journal:
                 journal = filters.journal.replace('"', "")

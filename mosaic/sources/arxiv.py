@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from urllib.parse import urlencode
 
 import httpx
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import normalise_doi
 from mosaic.sources.base import (
@@ -16,10 +18,12 @@ from mosaic.sources.base import (
     build_field_query,
     extract_year_range,
     phrase_if_needed,
+    user_agent,
     with_retry,
 )
 
 _BASE = "https://export.arxiv.org/api/query"
+_ARXIV_RETRY_STATUSES = frozenset({406, 429, 503})
 _NS = {
     "atom": "http://www.w3.org/2005/Atom",
     "arxiv": "http://arxiv.org/schemas/atom",
@@ -71,10 +75,25 @@ class ArxivSource(BaseSource):
                 d_to = f"{y_to or '9999'}12312359"
                 search_query += f" AND submittedDate:[{d_from} TO {d_to}]"
 
-        params = {"search_query": search_query, "start": 0, "max_results": max_results}
+        # Keep ":" literal as in the API documentation: the arXiv gateway has
+        # been observed answering 406 to field prefixes encoded as "%3A".
+        query_string = urlencode(
+            {"search_query": search_query, "start": 0, "max_results": max_results}, safe=":"
+        )
         _THROTTLE.wait(self._delay)
-        with httpx.Client(timeout=30) as client:
-            resp = with_retry(lambda: client.get(_BASE, params=params))
+        with httpx.Client(timeout=30, headers={"User-Agent": user_agent()}) as client:
+            # The gateway also answers 406 while throttling bursts: retry after
+            # at least the documented 3-second interval.
+            resp = with_retry(
+                lambda: client.get(f"{_BASE}?{query_string}"),
+                statuses=_ARXIV_RETRY_STATUSES,
+                min_wait=max(self._delay, 3.0),
+            )
+        if resp.status_code == 406:
+            raise SourceError(
+                "arXiv is throttling requests from this address (HTTP 406); "
+                "wait a few minutes before searching arXiv again"
+            )
         resp.raise_for_status()
 
         root = ET.fromstring(resp.text)

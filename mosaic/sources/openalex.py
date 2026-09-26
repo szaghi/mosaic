@@ -63,6 +63,11 @@ class OpenAlexSource(BaseSource):
                 y_from = filters.year_from or filters.year_to
                 y_to = filters.year_to or filters.year_from
                 filter_parts.append(f"publication_year:{y_from}-{y_to}")
+            # OR across authors ("|"); commas would start a new filter clause.
+            # OpenAlex has no venue-name filter, so journals stay post-filtered.
+            names = [n for n in (_author_value(a) for a in filters.authors or []) if n]
+            if names:
+                filter_parts.append(f"raw_author_name.search:{'|'.join(names)}")
         if filter_parts:
             # Merge with any existing filter (e.g. title.search set above)
             existing = params.get("filter", "")
@@ -137,6 +142,11 @@ class OpenAlexSource(BaseSource):
             citation_count=item.get("cited_by_count"),
             openalex_id=openalex_id,
         )
+
+
+def _author_value(name: str) -> str:
+    """Make an author name safe inside an OpenAlex ``filter`` value."""
+    return " ".join(name.replace(",", " ").replace("|", " ").split())
 
 
 def _filter_value(text: str) -> str:

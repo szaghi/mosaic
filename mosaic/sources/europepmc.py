@@ -39,15 +39,25 @@ class EuropePMCSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``resultList.result`` array.
         """
+        epmc_query = self.build_query(query, filters)
+        return [self._parse(item) for item in self.fetch(epmc_query, max_results)]
+
+    @staticmethod
+    def build_query(query: str, filters: SearchFilters | None, *, journal: bool = True) -> str:
+        """Europe PMC query string for *query* and *filters* (``journal=False`` skips it)."""
         epmc_query = build_field_query(query, filters, 'TITLE:"{}"', 'ABSTRACT:"{}"')
         if filters:
             if filters.authors:
                 epmc_query += " AND " + any_of(map(lucene_phrase, filters.authors), "AUTH:{}")
-            if filters.journal:
+            if journal and filters.journal:
                 epmc_query += f" AND JOURNAL:{lucene_phrase(filters.journal)}"
             y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 epmc_query += f" AND PUB_YEAR:[{y_from or y_to} TO {y_to or y_from}]"
+        return epmc_query
+
+    def fetch(self, epmc_query: str, max_results: int) -> list[dict]:
+        """Run a raw Europe PMC query and return the ``core`` result records."""
         params = {
             "query": epmc_query,
             "pageSize": min(max_results, 100),
@@ -58,7 +68,7 @@ class EuropePMCSource(BaseSource):
             resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             data = resp.json()
-        return [self._parse(item) for item in data.get("resultList", {}).get("result", [])]
+        return data.get("resultList", {}).get("result", [])
 
     def _parse(self, item: dict) -> Paper:
         """Parse a single Europe PMC result dict into a Paper.

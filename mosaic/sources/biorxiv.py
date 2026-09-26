@@ -18,9 +18,10 @@ log = logging.getLogger(__name__)
 _BASE_API = "https://api.biorxiv.org/details"
 # Extract DOI (without version suffix) from href="/content/10.1101/...".
 # Date-style DOIs (10.1101/2023.01.15.524150) date from Dec 2019; older
-# preprints use a bare serial number (10.1101/052928).
+# preprints use a bare serial number (10.1101/052928).  Recent medRxiv
+# preprints use the 10.64898 prefix.
 _DOI_HREF_RE = re.compile(
-    r'href="/content/(10\.1101/(?:\d{4}\.\d{2}\.\d{2}\.)?\d+)(?:v\d+)?(?:\.[a-z-]+)?"'
+    r'href="/content/(10\.(?:1101|64898)/(?:\d{4}\.\d{2}\.\d{2}\.)?\d+)(?:v\d+)?(?:\.[a-z-]+)?"'
 )
 
 
@@ -68,15 +69,24 @@ class BioRxivSource(BaseSource):
         search_query = self._build_query(query, filters)
         papers: list[Paper] = []
         failures: list[str] = []
+        dois_found = 0
         with httpx.Client(timeout=30) as client:
             for server in ("biorxiv", "medrxiv"):
                 try:
-                    papers.extend(self._search_server(client, server, search_query, max_results))
+                    found, n_dois = self._search_server(client, server, search_query, max_results)
+                    papers.extend(found)
+                    dois_found += n_dois
                 except Exception as e:
                     log.warning("%s search failed: %s", server, e)
                     failures.append(f"{server}: {e}")
-        if len(failures) == 2:
-            raise SourceError("; ".join(failures))
+        # The site search sits behind a bot check (HTTP 403 for scripted
+        # clients) and the details API intermittently returns empty bodies:
+        # fall back to the preprints Europe PMC indexes for both servers.
+        if not papers and (len(failures) == 2 or dois_found):
+            try:
+                papers = self._search_europepmc(query, filters, max_results)
+            except Exception as e:
+                raise SourceError("; ".join([*failures, f"Europe PMC fallback: {e}"])) from e
         # Post-process: author / journal filters (not supported natively)
         if filters:
             papers = [p for p in papers if filters.match(p)]
@@ -123,7 +133,7 @@ class BioRxivSource(BaseSource):
             lambda: client.get(url, headers={"User-Agent": "MOSAIC/1.0"}, follow_redirects=True)
         )
         if resp.status_code == 404:
-            return []
+            return [], 0
         if resp.status_code != 200:
             raise SourceError(f"search page returned HTTP {resp.status_code}")
 
@@ -143,6 +153,35 @@ class BioRxivSource(BaseSource):
             paper = self._fetch_paper(client, server, doi)
             if paper is not None:
                 papers.append(paper)
+        return papers, len(dois)
+
+    def _search_europepmc(
+        self, query: str, filters: SearchFilters | None, max_results: int
+    ) -> list[Paper]:
+        """bioRxiv/medRxiv preprints matching *query*, as indexed by Europe PMC."""
+        from mosaic.sources.europepmc import EuropePMCSource
+
+        epmc = EuropePMCSource()
+        if filters and filters.raw_query:
+            base_query = f"({filters.raw_query})"
+        else:
+            base_query = f"({epmc.build_query(query, filters, journal=False)})"
+        epmc_query = f'{base_query} AND SRC:PPR AND (PUBLISHER:"bioRxiv" OR PUBLISHER:"medRxiv")'
+        papers = []
+        for item in epmc.fetch(epmc_query, max_results):
+            paper = epmc._parse(item)
+            details = item.get("bookOrReportDetails")
+            publisher = details.get("publisher", "") if isinstance(details, dict) else ""
+            server = "medrxiv" if publisher.lower() == "medrxiv" else "biorxiv"
+            paper.source = self.name
+            paper.journal = server.capitalize()
+            paper.is_open_access = True
+            if paper.doi:
+                paper.url = f"https://www.{server}.org/content/{paper.doi}"
+                paper.pdf_url = (
+                    paper.pdf_url or f"https://www.{server}.org/content/{paper.doi}.full.pdf"
+                )
+            papers.append(paper)
         return papers
 
     def _fetch_paper(self, client: httpx.Client, server: str, doi: str) -> Paper | None:

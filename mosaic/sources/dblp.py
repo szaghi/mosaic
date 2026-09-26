@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import normalise_doi
 from mosaic.sources.base import BaseSource, build_field_query, with_retry
@@ -79,7 +80,15 @@ class DBLPSource(BaseSource):
         with httpx.Client(timeout=30) as client:
             resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
-            hits = resp.json().get("result", {}).get("hits", {})
+            try:
+                data = resp.json()
+            except ValueError:
+                # dblp.org fronts the API with an anti-bot challenge page at times
+                raise SourceError(
+                    "DBLP returned an HTML page instead of JSON (its anti-bot check is "
+                    "blocking scripted access); try again later"
+                ) from None
+            hits = data.get("result", {}).get("hits", {})
             raw_hits = hits.get("hit", [])
         if not raw_hits:
             return []

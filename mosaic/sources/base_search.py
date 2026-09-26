@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import extract_first, normalise_doi, parse_year
 from mosaic.sources.base import BaseSource, any_of, build_field_query, lucene_phrase, with_retry
@@ -57,7 +58,15 @@ class BASESource(BaseSource):
         with httpx.Client(timeout=30) as client:
             resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
-            docs = resp.json().get("response", {}).get("docs", [])
+            data = resp.json()
+        if "error" in data:
+            # BASE answers HTTP 200 with {"error": "Access denied for IP address …"}
+            # unless the caller's IP is registered; don't echo the IP back.
+            raise SourceError(
+                "BASE denied access: its API only answers registered IP addresses "
+                "(request access from BASE, or run `mosaic config --disable-source base`)"
+            )
+        docs = data.get("response", {}).get("docs", [])
         return [self._parse(doc) for doc in docs]
 
     def _parse(self, doc: dict) -> Paper:

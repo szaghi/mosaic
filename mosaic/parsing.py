@@ -6,6 +6,7 @@ year extraction, author normalisation, HTML stripping, and safe accessors.
 
 from __future__ import annotations
 
+import html
 import re
 from urllib.parse import unquote
 
@@ -77,21 +78,25 @@ def extract_first(value: str | list | None) -> str | None:
     return value
 
 
-def strip_html(text: str | None) -> str | None:
+def strip_html(text: str | None, *, sep: str = " ") -> str | None:
     """Remove HTML/XML tags and collapse whitespace.
 
     Returns ``None`` when the result is empty or the input is ``None``.
 
     >>> strip_html("<jats:p>Hello <b>world</b></jats:p>")
     'Hello world'
+    >>> strip_html("H<sub>2</sub>O &amp; CO<sub>2</sub>", sep="")
+    'H2O & CO2'
     >>> strip_html("")
     >>> strip_html(None)
     """
     if not text:
         return None
-    cleaned = re.sub(r"<[^>]+>", " ", text).strip()
+    cleaned = re.sub(r"<[^>]+>", sep, text)
+    # Decode entities after removing tags so "&lt;b&gt;" stays literal text
+    cleaned = html.unescape(cleaned)
     # Collapse multiple spaces
-    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned or None
 
 

@@ -213,6 +213,13 @@ _MAX_RETRIES = 2
 _MAX_RETRY_WAIT = 10.0
 
 
+def user_agent() -> str:
+    """Descriptive User-Agent for API requests (several providers ask clients to identify)."""
+    from mosaic import __version__
+
+    return f"mosaic-search/{__version__} (+https://github.com/szaghi/mosaic)"
+
+
 class Throttle:
     """Process-wide minimum interval between requests (thread-safe).
 
@@ -235,9 +242,9 @@ class Throttle:
             self._last = time.monotonic()
 
 
-def _retry_after_seconds(resp: httpx.Response, attempt: int) -> float:
+def _retry_after_seconds(resp: httpx.Response, attempt: int, min_wait: float = 0.0) -> float:
     """Seconds to wait before retrying *resp* (``Retry-After`` or exponential backoff)."""
-    fallback = 2.0**attempt
+    fallback = max(2.0**attempt, min_wait)
     try:
         raw = resp.headers.get("Retry-After")
     except Exception:
@@ -253,21 +260,29 @@ def _retry_after_seconds(resp: httpx.Response, attempt: int) -> float:
         except (TypeError, ValueError):
             return fallback
         seconds = when.timestamp() - time.time()
-    return max(0.0, min(seconds, _MAX_RETRY_WAIT))
+    return max(min_wait, min(seconds, _MAX_RETRY_WAIT))
 
 
-def with_retry(send: Callable[[], httpx.Response], retries: int = _MAX_RETRIES) -> httpx.Response:
-    """Call *send* and retry (bounded) while the server answers 429 or 503.
+def with_retry(
+    send: Callable[[], httpx.Response],
+    retries: int = _MAX_RETRIES,
+    *,
+    statuses: frozenset[int] = _RETRY_STATUSES,
+    min_wait: float = 0.0,
+) -> httpx.Response:
+    """Call *send* and retry (bounded) while the server answers one of *statuses*.
 
     *send* is a zero-argument callable performing the request, e.g.
     ``lambda: client.get(url, params=params)``.  The last response is
     returned unchanged, so callers keep using ``raise_for_status()``.
+    *min_wait* is a floor for the pause between attempts (e.g. a provider's
+    documented minimum request interval).
     """
     for attempt in range(retries + 1):
         resp = send()
-        if resp.status_code not in _RETRY_STATUSES or attempt == retries:
+        if resp.status_code not in statuses or attempt == retries:
             return resp
-        wait = _retry_after_seconds(resp, attempt)
+        wait = _retry_after_seconds(resp, attempt, min_wait)
         log.debug("HTTP %s — retrying in %.1fs", resp.status_code, wait)
         time.sleep(wait)
     return resp  # pragma: no cover — loop always returns

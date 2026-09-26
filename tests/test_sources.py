@@ -149,6 +149,14 @@ def _mock_client(get_return=None, post_return=None, get_side_effect=None):
 # ── arXiv ────────────────────────────────────────────────────────────────────
 
 
+def _arxiv_query(mock_client) -> str:
+    """The search_query sent to arXiv (encoded into the request URL)."""
+    from urllib.parse import parse_qs, urlsplit
+
+    url = mock_client.get.call_args.args[0]
+    return parse_qs(urlsplit(url).query)["search_query"][0]
+
+
 class TestArxivSource:
     def _source(self):
         from mosaic.sources.arxiv import ArxivSource
@@ -174,7 +182,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert "submittedDate" in query
         assert "20170101" in query
 
@@ -183,7 +191,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert "au:Vaswani" in query
 
     def test_journal_filter_appended_to_query(self):
@@ -191,7 +199,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert "jr:NeurIPS" in query
 
     def test_doi_fallback_to_arxiv_doi(self):
@@ -206,7 +214,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert query.startswith("ti:attention")
 
     def test_field_abstract_uses_abs_prefix(self):
@@ -214,7 +222,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert query.startswith("abs:attention")
 
     def test_raw_query_overrides_field_transform(self):
@@ -222,7 +230,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert query == "ti:transformers AND au:Vaswani"
 
 
@@ -1678,7 +1686,7 @@ class TestPubMedSource:
         with patch("httpx.Client", cls):
             self._source().search("CRISPR", filters=f)
         term = mc.get.call_args.kwargs["params"]["term"]
-        assert '"Doudna"[au]' in term
+        assert "Doudna[au]" in term
 
     def test_journal_filter_appended_to_query(self):
         f = SearchFilters(journal="Nature")
@@ -1870,7 +1878,7 @@ class TestPMCSource:
         cls, mc = _mock_client(get_return=_mock_get(json_data=esearch))
         with patch("httpx.Client", cls):
             self._source().search("RNA", filters=f)
-        assert '"Smith"[au]' in mc.get.call_args.kwargs["params"]["term"]
+        assert "Smith[au]" in mc.get.call_args.kwargs["params"]["term"]
 
     def test_journal_filter_appended_to_query(self):
         f = SearchFilters(journal="Nature")

@@ -125,7 +125,8 @@ class CrossrefSource(BaseSource):
             (those point at paywalled full text for TDM subscribers).
         """
         # title is a list; take the first element
-        title = extract_first(item.get("title")) or ""
+        # Crossref titles carry inline markup (<i>, <sub>) and HTML entities
+        title = strip_html(extract_first(item.get("title")), sep="") or ""
 
         # authors: list of {given, family} dicts → "Family, Given"
         authors = parse_authors_given_family(item.get("author") or [])
@@ -142,7 +143,7 @@ class CrossrefSource(BaseSource):
         abstract = strip_html(item.get("abstract"))
 
         # journal: container-title is a list; take the first element
-        journal = extract_first(item.get("container-title"))
+        journal = strip_html(extract_first(item.get("container-title")), sep="")
 
         # URL: canonical DOI URL
         url = item.get("URL") or None

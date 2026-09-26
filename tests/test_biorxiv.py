@@ -72,6 +72,10 @@ class TestDoiHrefRegex:
         html = '<a href="/content/10.1101/2023.01.15.524150v1.full">'
         assert _DOI_HREF_RE.search(html).group(1) == "10.1101/2023.01.15.524150"
 
+    def test_matches_new_medrxiv_prefix(self):
+        html = '<a href="/content/10.64898/2026.08.20.26360874v1">'
+        assert _DOI_HREF_RE.search(html).group(1) == "10.64898/2026.08.20.26360874"
+
     def test_no_match_on_unrelated_href(self):
         html = '<a href="/about/biorxiv">'
         assert _DOI_HREF_RE.search(html) is None
@@ -360,17 +364,55 @@ class TestSearch:
 
         assert any("medRxiv Paper" in p.title for p in papers)
 
-    def test_all_search_pages_fail_raises_source_error(self):
-        # Both servers failing is a real error, not "no results".
+    @staticmethod
+    def _client_for(side_effect):
         mock_client = MagicMock()
-        mock_client.get.return_value = _make_resp(status=500)
+        mock_client.get.side_effect = side_effect
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=mock_client)
         ctx.__exit__ = MagicMock(return_value=False)
-        client_cls = MagicMock(return_value=ctx)
+        return MagicMock(return_value=ctx), mock_client
 
+    def test_all_search_pages_fail_and_fallback_fails_raises_source_error(self):
+        # Both servers and the Europe PMC fallback failing is a real error.
+        def side_effect(url, **kwargs):
+            resp = _make_resp(status=500)
+            resp.raise_for_status.side_effect = RuntimeError("Europe PMC HTTP 500")
+            return resp
+
+        client_cls, _ = self._client_for(side_effect)
         with patch("httpx.Client", client_cls), pytest.raises(SourceError, match="HTTP 500"):
             self.src.search("deep learning", max_results=5)
+
+    def test_blocked_site_search_falls_back_to_europepmc(self):
+        epmc = {
+            "resultList": {
+                "result": [
+                    {
+                        "doi": "10.64898/2026.08.20.26360874",
+                        "title": "A medRxiv preprint",
+                        "authorString": "Rossi M, Bianchi L.",
+                        "pubYear": "2026",
+                        "bookOrReportDetails": {"publisher": "medRxiv"},
+                    }
+                ]
+            }
+        }
+
+        def side_effect(url, **kwargs):
+            if "/search/" in url:
+                return _make_resp(status=403)
+            assert "europepmc" in url
+            assert 'PUBLISHER:"medRxiv"' in kwargs["params"]["query"]
+            return _make_resp(json_data=epmc)
+
+        client_cls, _ = self._client_for(side_effect)
+        with patch("httpx.Client", client_cls):
+            papers = self.src.search("long covid", max_results=5)
+        assert len(papers) == 1
+        p = papers[0]
+        assert (p.source, p.journal, p.is_open_access) == ("bioRxiv/medRxiv", "Medrxiv", True)
+        assert p.url == "https://www.medrxiv.org/content/10.64898/2026.08.20.26360874"
 
     def test_not_found_search_page_returns_empty(self):
         mock_client = MagicMock()

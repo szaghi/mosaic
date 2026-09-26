@@ -146,7 +146,44 @@ class TestArxivFixes:
         cls, mc = _client(get=_resp(text="<feed xmlns='http://www.w3.org/2005/Atom'/>"))
         with patch("httpx.Client", cls):
             ArxivSource(delay=0).search(query, filters=SearchFilters(**kw) if kw else None)
-        return mc.get.call_args.kwargs["params"]["search_query"]
+        from urllib.parse import parse_qs, urlsplit
+
+        return parse_qs(urlsplit(mc.get.call_args.args[0]).query)["search_query"][0]
+
+    def test_colon_sent_literally_and_client_identified(self):
+        from mosaic.sources.arxiv import ArxivSource
+
+        cls, mc = _client(get=_resp(text="<feed xmlns='http://www.w3.org/2005/Atom'/>"))
+        with patch("httpx.Client", cls):
+            ArxivSource(delay=0).search("attention")
+        assert "search_query=all:attention" in mc.get.call_args.args[0]
+        assert cls.call_args.kwargs["headers"]["User-Agent"].startswith("mosaic-search/")
+
+    def test_406_is_retried(self):
+        from mosaic.sources.arxiv import ArxivSource
+
+        feed = "<feed xmlns='http://www.w3.org/2005/Atom'/>"
+        cls, mc = _client(get=_resp(text=feed))
+        mc.get.side_effect = [_resp(status=406, text=""), _resp(text=feed)]
+        with patch("httpx.Client", cls), patch("mosaic.sources.base.time.sleep") as sleep:
+            assert ArxivSource(delay=0).search("attention") == []
+        assert mc.get.call_count == 2
+        assert sleep.call_args.args[0] >= 3.0
+
+    def test_persistent_406_is_explained(self):
+        import pytest
+
+        from mosaic.errors import SourceError
+        from mosaic.sources.arxiv import ArxivSource
+
+        cls, mc = _client(get=_resp(status=406, text=""))
+        with (
+            patch("httpx.Client", cls),
+            patch("mosaic.sources.base.time.sleep"),
+            pytest.raises(SourceError, match="throttling"),
+        ):
+            ArxivSource(delay=0).search("attention")
+        assert mc.get.call_count == 3  # first attempt + 2 retries
 
     def test_authors_ored(self):
         q = self._query(authors=["Geoffrey Hinton", "LeCun"])
@@ -230,13 +267,13 @@ class TestAuthorsOred:
         from mosaic.sources.pubmed import PubMedSource
 
         call = self._params(PubMedSource(), {"esearchresult": {"idlist": []}})
-        assert '("Ada Lovelace"[au] OR "Alan Turing"[au])' in call.kwargs["params"]["term"]
+        assert "(Ada Lovelace[au] OR Alan Turing[au])" in call.kwargs["params"]["term"]
 
     def test_pmc(self):
         from mosaic.sources.pmc import PMCSource
 
         call = self._params(PMCSource(), {"esearchresult": {"idlist": []}})
-        assert '("Ada Lovelace"[au] OR "Alan Turing"[au])' in call.kwargs["params"]["term"]
+        assert "(Ada Lovelace[au] OR Alan Turing[au])" in call.kwargs["params"]["term"]
 
     def test_quotes_in_author_escaped(self):
         from mosaic.sources.europepmc import EuropePMCSource
@@ -552,3 +589,110 @@ class TestHttpErrorsPropagate:
         assert len(errors) == 1
         assert "403" in errors[0]
         assert "SECRET" not in errors[0]
+
+
+class TestDblpBotCheck:
+    def test_html_challenge_raises_clear_error(self):
+        import pytest
+
+        from mosaic.errors import SourceError
+        from mosaic.sources.dblp import DBLPSource
+
+        page = _resp(text="<!doctype html><title>Making sure you're not a bot!</title>")
+        page.json.side_effect = ValueError("Expecting value")
+        cls, _ = _client(get=page)
+        with patch("httpx.Client", cls), pytest.raises(SourceError, match="anti-bot"):
+            DBLPSource().search("graph neural networks")
+
+
+class TestCrossrefMarkup:
+    def test_title_and_journal_markup_and_entities_removed(self):
+        from mosaic.sources.crossref import CrossrefSource
+
+        item = {
+            "title": ["Deep learning &amp; <i>convolutional</i> networks for H<sub>2</sub>O"],
+            "container-title": ["Journal of Physics &amp; Chemistry"],
+            "DOI": "10.1/x",
+        }
+        paper = CrossrefSource()._parse(item)
+        assert paper.title == "Deep learning & convolutional networks for H2O"
+        assert paper.journal == "Journal of Physics & Chemistry"
+
+
+class TestOpenAlexAuthorFilter:
+    def test_authors_ored_in_native_filter(self):
+        from mosaic.sources.openalex import OpenAlexSource
+
+        cls, mc = _client(get=_resp(json_data={"results": []}))
+        with patch("httpx.Client", cls):
+            OpenAlexSource().search(
+                "deep learning",
+                filters=SearchFilters(
+                    authors=["Hinton, Geoffrey", "Yann LeCun"], year_from=2015, year_to=2020
+                ),
+            )
+        flt = mc.get.call_args.kwargs["params"]["filter"]
+        assert "publication_year:2015-2020" in flt
+        assert "raw_author_name.search:Hinton Geoffrey|Yann LeCun" in flt
+
+
+class TestZenodoPaging:
+    def _hits(self, n, start=0):
+        return {"hits": {"hits": [{"metadata": {"title": f"R{start + i}"}} for i in range(n)]}}
+
+    def test_anonymous_pages_of_25(self):
+        from mosaic.sources.zenodo import ZenodoSource
+
+        cls, mc = _client()
+        mc.get.side_effect = [_resp(json_data=self._hits(25)), _resp(json_data=self._hits(15, 25))]
+        with patch("httpx.Client", cls):
+            papers = ZenodoSource().search("climate", max_results=40)
+        sizes = [c.kwargs["params"]["size"] for c in mc.get.call_args_list]
+        pages = [c.kwargs["params"]["page"] for c in mc.get.call_args_list]
+        assert sizes == [25, 25] and pages == [1, 2]
+        assert len(papers) == 40
+
+    def test_token_allows_100_per_page(self):
+        from mosaic.sources.zenodo import ZenodoSource
+
+        cls, mc = _client(get=_resp(json_data=self._hits(3)))
+        with patch("httpx.Client", cls):
+            ZenodoSource(api_key="T").search("climate", max_results=60)
+        assert mc.get.call_args.kwargs["params"]["size"] == 60
+
+
+class TestBaseAccessDenied:
+    def test_error_payload_raises_without_echoing_ip(self):
+        import pytest
+
+        from mosaic.errors import SourceError
+        from mosaic.sources.base_search import BASESource
+
+        denied = _resp(
+            json_data={"error": "Access denied for IP address 203.0.113.7 and user agent x."}
+        )
+        cls, _ = _client(get=denied)
+        with patch("httpx.Client", cls), pytest.raises(SourceError) as exc:
+            BASESource().search("deep learning")
+        assert "registered IP" in str(exc.value)
+        assert "203.0.113.7" not in str(exc.value)
+
+
+class TestRateLimitMessage:
+    def test_429_is_explained(self):
+        from mosaic.search import search_all
+
+        request = httpx.Request("GET", "https://api.example.org/search?q=x")
+        err = httpx.HTTPStatusError(
+            "Client error '429 '", request=request, response=httpx.Response(429, request=request)
+        )
+        src = MagicMock()
+        src.name = "Semantic Scholar"
+        src.available.return_value = True
+        src.search.side_effect = err
+        errors: list[str] = []
+        search_all([src], "q", errors=errors)
+        assert errors == [
+            "Semantic Scholar: rate limited by the API (HTTP 429) — try again later, "
+            "or configure an API key for this source if it supports one"
+        ]
