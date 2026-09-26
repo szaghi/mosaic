@@ -50,24 +50,26 @@ mosaic config --show
 ### Data flow
 
 1. `cli.py` loads config, instantiates enabled sources via `source_registry.py:build_sources()`, calls `search_all()`.
-2. `search.py:search_all()` iterates sources sequentially, merges duplicates by `Paper.uid` (preferring richer data), applies `SearchFilters` as a post-processing safety net.
-3. Results are saved to a SQLite cache (`db.py:Cache`) and optionally downloaded via `downloader.py`.
+2. `search.py:search_all()` queries sources in parallel (thread pool), merges duplicates by `Paper.uid` (`services.merge_papers`, same field rules as the SQLite upsert), applies `SearchFilters` as a post-processing safety net.
+3. `workflows.finalize_search()` applies prefer-cache / OA / PDF / sort, saves results to the SQLite cache (`db.py:Cache`) and logs the search; PDFs are downloaded via `workflows.download_papers()` → `downloader.py`.
+
+The web UI (`mosaic/ui/`) must stay a thin layer over the same `services.py` / `workflows.py` / `rag.py` functions as the CLI — add shared logic there, not in `cli.py` or `ui/routes.py`.
 
 ### Key modules
 
 - **`models.py`** — `Paper` dataclass (central data model) and `SearchFilters` (year/author/journal filtering). `Paper.uid` is the deduplication key: prefers DOI > arxiv_id > pii > title slug.
 - **`sources/base.py`** — `BaseSource` ABC with `search()` and `available()`. All sources in `sources/` implement this interface.
 - **`sources/`** — 21 sources: `arxiv`, `semantic_scholar`, `sciencedirect` (API key or browser session), `sciencedirect_browser`, `springer_browser` (Playwright, shorthand `sp`), `springer_api` (free API key, shorthand `springer`), `doaj`, `europepmc`, `openalex`, `base_search`, `core` (free API key), `nasa_ads` (free API token), `ieee` (free API key, shorthand `ieee`), `zenodo` (no auth required), `crossref` (no auth required), `dblp` (no auth required), `hal` (no auth required), `pubmed` (no auth required, API key optional), `pmc` (PubMed Central, always OA + direct PDF, API key optional; same NCBI key as pubmed), `biorxiv` (bioRxiv + medRxiv, shorthand `rxiv`; searches both servers via website search, fetches metadata from `api.biorxiv.org`; always OA), `pedro` (physiotherapy evidence, shorthand `pedro`; requires `acknowledge_fair_use` config flag), `scopus` (Elsevier, shorthand `scopus`; API key or browser session). `unpaywall.py` is a helper (not a search source) used by the downloader.
-- **`source_registry.py`** — Source factory registry, shorthand maps (`SRC_MAP`, `SHORTHAND_TO_CFG_KEY`), and `build_sources(cfg)` which instantiates all enabled sources from config.
-- **`services.py`** — Shared business logic: `build_filters()` (construct `SearchFilters` from user input), `filter_papers()` (OA/PDF/sort post-processing), `merge_papers()` (deduplication by `Paper.uid`).
-- **`workflows.py`** — Multi-step orchestration: `download_papers()`, `push_to_zotero()`, `push_to_obsidian()`. Used by both CLI and web UI.
+- **`source_registry.py`** — Source factory registry, shorthand maps (`SRC_MAP`, `SHORTHAND_TO_CFG_KEY`), `build_sources(cfg)` which instantiates all enabled sources from config, and `source_choices(cfg)` (selector key → source name, including custom sources) used by `--source` and the web UI source checkboxes.
+- **`services.py`** — Shared business logic: `build_filters()` (construct `SearchFilters` from user input), `filter_papers()` / `post_process()` (OA/PDF/sort incl. relevance), `merge_papers()` (deduplication by `Paper.uid`), `select_cached_papers()` / `subset_uids()` (the `--query`/`--from`/`--year` selection used by index/ask/chat/compare; `None` = whole library, `[]` = nothing matched), `papers_for_dois()`, `format_answer()`, `analyse_network()`.
+- **`workflows.py`** — Multi-step orchestration: `finalize_search()`, `download_papers()` (returns a `DownloadReport`), `bulk_get()`, `auto_index()` (returns a warning instead of failing silently), `push_to_zotero()` (discovers the Zotero user ID when missing), `configure_zotero_key()`, `push_to_obsidian()`. Used by both CLI and web UI.
 - **`parsing.py`** — Shared parsing utilities: `parse_year()`, `normalise_doi()`, `strip_html()`, `parse_authors_name_key()`, `parse_authors_given_family()`, `split_authors()`, `extract_first()`.
 - **`errors.py`** — Custom exception hierarchy (`MosaicError` → `SourceError`, `DownloadError`, `ConfigError`) and central logging setup.
 - **`similar.py`** — `find_similar(identifier, max_results, *, oa_email, ss_api_key)` fans out to OpenAlex `related_works` (always) and Semantic Scholar recommendations (when API key configured), deduplicates by `Paper.uid`, and returns `(seed_title, papers)`. Used by `mosaic similar` CLI command.
 - **`bulk.py`** — `read_dois(path)` extracts DOIs from `.bib` (regex) or `.csv` (DictReader) files. Used by `mosaic get --from`.
 - **`zotero.py`** — `ZoteroClient` class supporting both local API (`http://localhost:23119`) and web API (`https://api.zotero.org`). Auto-detects mode from config (`zotero.api_key`). Key methods: `is_reachable()`, `discover_user_id()`, `ensure_collection(name)`, `add_papers(papers)`, `attach_pdf(item_key, path)`. PDF attachment is local-only (linked_file); web mode is metadata-only in v1.
 - **`gui_launcher.py`** — Entry point for standalone desktop app (PyInstaller). Opens web UI in a Chromium `--app` window.
-- **`db.py`** — SQLite with two tables: `papers` (upsert on uid, updates pdf_url/abstract/is_open_access) and `downloads` (tracks local file paths and status).
+- **`db.py`** — SQLite cache: `papers` (upsert on uid with field-level merge rules — longer abstract, OA OR, fill missing fields incl. year; an existing `pdf_url` is never overwritten), `downloads` (local file paths and status), `searches`, `exports`, citation edges and the RAG chunk/vector tables. Schema migrations run in `_init()` and must work on caches created by older releases. Background jobs open their own connection with `with Cache(path) as cache:` so it is closed when the job ends.
 - **`config.py`** — Reads/writes `~/.config/mosaic/config.toml`; deep-merges user config over defaults. DB lives at `~/.local/share/mosaic/cache.db`, downloads at `~/mosaic-papers/`. Zotero config under `[zotero]` section (`api_key`, `user_id`).
 
 ### Adding a new source
@@ -79,7 +81,7 @@ mosaic config --show
 
 ### Tests
 
-Tests use `unittest.mock` to patch `httpx` calls — no real network requests. `conftest.py` provides `tmp_cache` (in-memory SQLite) and `paper` fixtures, and a `make_response()` helper for building mock httpx responses. Coverage JSON is written to `docs/public/` after each test run.
+Tests use `unittest.mock` to patch `httpx` calls — no real network requests. `conftest.py` provides `tmp_cache` (in-memory SQLite) and `paper` fixtures, a `make_response()` helper for building mock httpx responses, and an autouse fixture that redirects the config file, default DB and download dir to a temp dir (tests must never touch `~/.config/mosaic` or `~/.local/share/mosaic`). CLI tests use Typer's `CliRunner` (`tests/test_cli.py`). Coverage JSON is written to `docs/public/` after each test run (skipped with `--no-cov`).
 
 ### Docs
 

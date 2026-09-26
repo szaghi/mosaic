@@ -4,9 +4,11 @@ description: >
   Expert knowledge of MOSAIC (Multi-source Scientific Article Indexer and Collector) — a CLI tool
   for searching, downloading, and managing scientific papers from 21 sources with a single command.
   Use this skill whenever the user asks about: building a bibliography programmatically, searching
-  for papers across multiple sources, downloading OA PDFs, exporting to BibTeX/Zotero/Obsidian,
-  interpreting mosaic --json output in AI agent or CI workflows, RAG over a paper library, finding
-  similar papers, or any task that involves mosaic search/get/similar/ask/chat/index/skill commands.
+  for papers across multiple sources, downloading OA PDFs, formatting citation strings (BibTeX/APA/
+  MLA/Chicago), exporting to BibTeX/Zotero/Obsidian, interpreting mosaic --json output in AI agent
+  or CI workflows, RAG over a paper library, semantic search over a local paper library, finding
+  similar papers, analysing citation networks, comparing papers across structured dimensions, or any
+  task that involves mosaic search/get/cite/similar/ask/chat/index/network/compare/skill commands.
   When in doubt, trigger this skill — it is better to consult it unnecessarily than to miss it.
 ---
 
@@ -21,7 +23,10 @@ AI agent and CI workflows.
 ```bash
 mosaic search "query"           # search all enabled sources
 mosaic get <doi>                # fetch metadata + download PDF by DOI
+mosaic cite <doi>               # format citation string (BibTeX/APA/MLA/Chicago/…)
 mosaic similar <doi|arxiv_id>   # find related papers via OpenAlex + Semantic Scholar
+mosaic network                  # explore citation network, identify hubs and clusters
+mosaic compare                  # structured comparison table across cached papers (LLM or metadata)
 mosaic index                    # build/update vector index for RAG
 mosaic ask "question"           # RAG Q&A over cached papers
 mosaic chat                     # interactive multi-turn RAG session
@@ -29,6 +34,7 @@ mosaic config --show            # view or edit configuration
 mosaic cache list               # inspect local SQLite cache
 mosaic cache stats              # cache statistics
 mosaic notebook create "topic"  # create a Google NotebookLM notebook
+mosaic ui                       # local web UI with the same features (http://127.0.0.1:5555)
 mosaic auth login elsevier      # browser session for authenticated PDF access
 mosaic skill install            # install this Claude Code skill to the current project
 mosaic skill install --global   # install to ~/.claude/skills/ (available in all projects)
@@ -41,7 +47,9 @@ mosaic skill show               # print skill content to stdout
 
 Add `--json` to `search` or `similar` for machine-readable stdout. All rich table output is
 suppressed; results are written to stdout as a single JSON object. Papers are still saved to the
-local cache so subsequent `--cached` queries work immediately.
+local cache so subsequent `--cached` queries work immediately. `--oa-only`, `--pdf-only`, `--sort`
+and `--output` apply in JSON mode too (including `--cached` / `--semantic`); stdout stays pure JSON.
+Source errors in the `errors` array have API keys redacted.
 
 ```bash
 mosaic search "attention mechanism" --max 20 --oa-only --json
@@ -158,6 +166,8 @@ mosaic search "query" [OPTIONS]
 | `--download`, `-d` | off | Download available PDFs after search |
 | `--output`, `-o` | — | Save results to file (`.md`, `.csv`, `.json`, `.bib`, `.ris`); repeatable |
 | `--cached` | off | Search only the local cache — no network requests |
+| `--semantic` | off | Search local vector index by meaning (requires `mosaic index` + embedding model); shows **Sim.** column |
+| `--downloaded-only` | off | Restrict to papers with a locally downloaded PDF (only with `--cached` or `--semantic`) |
 | `--prefer-cache` | off | Prefer richer cached records over freshly fetched data |
 | `--stats` | off | Print per-source counts and deduplication stats |
 | `--zotero` | off | Export results to Zotero |
@@ -193,6 +203,10 @@ mosaic search "query" [OPTIONS]
 | `pedro` | PEDro | Physiotherapy evidence | Fair-use ack |
 | `scopus` | Scopus | 90 M+ Elsevier citations | API key or browser |
 
+Custom sources configured under `[[custom_sources]]` are selectable with `--source` by their
+lower-cased, hyphenated name (prefixed with `custom-` if it clashes with a built-in shorthand).
+Several `--author` values match papers by **any** of the authors.
+
 ---
 
 ## get Command
@@ -204,6 +218,27 @@ mosaic get --from library.csv   # bulk-download from CSV file (must have 'doi' c
 ```
 
 Options: `--oa-only`, `--download-dir`, `--zotero`, `--zotero-collection`, `--obsidian`.
+
+## cite Command
+
+Format and print a citation string for a paper by DOI. Checks the local cache first; falls back
+to Crossref on a cache miss. BibTeX is rendered locally; all other styles use Crossref content
+negotiation (network required).
+
+```bash
+mosaic cite <doi>                        # BibTeX (default) — no network if cached
+mosaic cite <doi> --style apa            # APA via doi.org content negotiation
+mosaic cite <doi> --style mla
+mosaic cite <doi> --style chicago
+mosaic cite <doi> --style harvard
+mosaic cite <doi> --style vancouver
+mosaic cite <doi> --style apa --copy     # copy to clipboard (pbcopy/xclip/clip fallback)
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--style`, `-s` | `bibtex` | Citation style; tab-completes: `bibtex apa mla chicago harvard vancouver` |
+| `--copy`, `-c` | off | Copy result to clipboard |
 
 ## similar Command
 
@@ -235,24 +270,152 @@ mosaic search "deep learning" --output refs.bib --output summary.md
 
 ---
 
+## network Command
+
+Explore the local citation graph built by `mosaic index --enrich-citations`.
+
+```bash
+mosaic network [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--query`, `-q` | — | Seed graph from cached papers matching this query (BFS subgraph) |
+| `--depth` | 2 | Citation hops to follow from seed papers |
+| `--min-connections` | 1 | Exclude papers with fewer edges than this |
+| `--cluster` | off | Group papers into topic clusters (Louvain if `networkx` installed, else connected components) |
+| `--output`, `-o` | — | Write graph to file: `.json` (D3/Gephi node-link), `.gv` (Graphviz DOT), `.md` (Mermaid) |
+| `--top` | 5 | Most-connected papers to show per cluster in terminal output |
+
+**Requires** citation edges — run `mosaic index --enrich-citations` first.
+**Louvain clustering** requires `networkx`: `pipx inject mosaic-search networkx`.
+
+```bash
+# Most-connected papers in the full graph
+mosaic network --top 10
+
+# Topic subgraph with community clusters
+mosaic network --query "transformer attention" --depth 2 --cluster --top 5
+
+# Export for downstream tools
+mosaic network --output graph.json   # D3.js / Gephi / NetworkX
+mosaic network --output graph.gv     # Graphviz: dot -Tpng graph.gv -o graph.png
+mosaic network --output graph.md     # Mermaid diagram for README / Obsidian
+
+# Combine: topic subgraph → cluster report → save Mermaid
+mosaic network --query "diffusion models" --cluster --top 5 --output diffusion.md
+```
+
+### JSON node-link schema
+
+```json
+{
+  "nodes": [
+    {
+      "id": "doi:10.48550/arxiv.1706.03762",
+      "title": "Attention Is All You Need",
+      "year": 2017,
+      "authors": "Vaswani et al.",
+      "citation_count": 85000,
+      "cluster": 0
+    }
+  ],
+  "links": [
+    { "source": "doi:10.48550/...", "target": "doi:10.18653/..." }
+  ]
+}
+```
+
+`cluster` is `null` when `--cluster` is not used.
+
+---
+
+## compare Command
+
+Generate a structured comparison table across cached papers. With a configured LLM, extracts
+dimensions from each paper's title + abstract. Without one, populates only metadata fields and
+prints a notice — never fails silently.
+
+```bash
+mosaic compare [OPTIONS]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--query`, `-q` | — | Filter papers from cache by title/abstract |
+| `--from` | — | Load papers from a `.bib` or `.csv` file |
+| `--max`, `-n` | 20 | Maximum number of papers to compare |
+| `--dimensions` | `method,dataset,metric,result` | Comma-separated comparison axes |
+| `--output`, `-o` | — | Write table to file: `.md`, `.csv`, `.json` |
+| `--sort` | — | Pre-sort papers: `citations` (most cited first) or `year` (newest first) |
+
+```bash
+# Compare top-cited cached papers on a topic (LLM fills in method/dataset/metric/result)
+mosaic compare --query "diffusion models" --sort citations -n 15
+
+# Save as Markdown
+mosaic compare --query "transformer attention" --output comparison.md
+
+# Custom dimensions from a BibTeX file
+mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
+
+# Export as CSV for Excel / Google Sheets
+mosaic compare --query "GNN" -n 20 --output gnn-comparison.csv
+
+# Export as JSON for scripting
+mosaic compare --query "protein folding" --output folding.json
+```
+
+**Metadata-only dimensions** (no LLM needed): `year`, `source`, `journal`, `doi`, `authors`,
+`citations`. All other dimension names require an LLM and return `–` without one.
+
+**LLM setup** (same config as RAG):
+
+```bash
+mosaic config --llm-provider openai --llm-api-key YOUR_KEY
+# or Anthropic:
+mosaic config --llm-provider anthropic --llm-api-key YOUR_KEY
+# or local Ollama:
+mosaic config --llm-provider openai --llm-base-url http://localhost:11434/v1 --llm-api-key ollama
+```
+
+---
+
 ## RAG Commands
 
 ```bash
 # 1. Build/update the vector index (incremental — already-indexed papers are skipped)
 mosaic index
 
-# 2. Single-shot analysis
+# 2. Semantic search — retrieve by meaning, no LLM needed at query time
+mosaic search "methods that learn without labels" --semantic          # ranked paper list + Sim. column
+mosaic search "attention mechanism" --semantic --downloaded-only      # only papers on disk
+mosaic search "diffusion model" --semantic -n 20 --sort citations     # sort by citations after retrieval
+
+# 3. Single-shot analysis (LLM required)
 mosaic ask "What FDTD schemes achieve high-order accuracy in time?" --mode synthesis
 mosaic ask "What open problems remain in discontinuous Galerkin methods?" --mode gaps
 mosaic ask "Compare DDPM, DDIM, and score SDE" --mode compare --output report.md
 mosaic ask "Extract all methods with accuracy claims" --mode extract
 
-# 3. Interactive session
+# Restrict retrieval: --query, --from and --year combine (a paper must match all of them).
+# If nothing matches, the answer says "No indexed papers match the selected subset."
+mosaic ask "Main limitations?" -q "diffusion" --from refs.bib --year 2021-2024 --output gaps.json
+
+# 4. Interactive session (the last turns are sent to the LLM as context)
 mosaic chat
+mosaic chat -q "protein folding" --year 2020-2024 --mode gaps
 ```
 
-**Modes**: `synthesis` (state of the art), `gaps` (open problems), `compare` (side-by-side
-methods), `extract` (structured per-paper data extraction).
+Papers with a downloaded PDF are indexed from their full text (requires `pymupdf`); a paper indexed
+from metadata only is re-indexed from its PDF on the next `mosaic index` after the PDF is
+downloaded. After changing the embedding model run `mosaic index --reindex`.
+
+**`--semantic`**: embeds the query and retrieves top-k papers from the vector index. Shows a **Sim.**
+column (0–1). No LLM needed at query time. Requires `mosaic index` + embedding model.
+
+**Modes for `mosaic ask`**: `synthesis` (state of the art), `gaps` (open problems), `compare`
+(side-by-side methods), `extract` (structured per-paper data extraction).
 
 Requires `sqlite-vec` (`pipx inject mosaic-search sqlite-vec`) and a configured embedding model
 + LLM. See `mosaic config --embedding-model ...` / `--llm-provider ...`.
@@ -280,6 +443,12 @@ mosaic config \
   --llm-provider openai \
   --llm-api-key YOUR_KEY \
   --llm-model gpt-4o-mini
+
+# RAG tuning
+mosaic config --chunk-size 512 --chunk-overlap 50   # tokens; overlap < chunk size
+mosaic config --full-text-index                      # index PDF full text (needs pymupdf)
+mosaic config --rag-citations                        # citation-graph boosting (index --enrich-citations)
+mosaic config --embedding-provider openai            # empty = inherit from the LLM provider
 
 # Ollama (local LLM — no data leaves your machine)
 mosaic config \
@@ -354,10 +523,18 @@ for p in unique:
     if p["pdf_url"] and p.get("doi"):
         subprocess.run(["mosaic", "get", p["doi"]])
 
-# --- Step 6: Index and ask ---
-subprocess.run(["mosaic", "index"])
+# --- Step 6: Index, enrich citations, and ask ---
+subprocess.run(["mosaic", "index", "--enrich-citations"])
 subprocess.run(["mosaic", "ask", "Summarise the evolution of attention mechanisms",
                 "--mode", "synthesis", "--output", "synthesis.md"])
+
+# --- Step 7: Explore the citation network ---
+subprocess.run(["mosaic", "network", "--query", "attention mechanism",
+                "--cluster", "--top", "5", "--output", "network.md"])
+
+# --- Step 8: Compare methods across top-cited papers ---
+subprocess.run(["mosaic", "compare", "--query", "attention mechanism",
+                "--sort", "citations", "-n", "20", "--output", "comparison.md"])
 ```
 
 ---
@@ -374,10 +551,13 @@ mosaic search "protein folding" --oa-only --download --zotero --zotero-collectio
 # Bulk-download an existing .bib file and send to Zotero
 mosaic get --from refs.bib --zotero --zotero-collection "Imported"
 
-# Web API (no Zotero app needed)
+# Web API (no Zotero app needed) — the Zotero user ID is discovered from the key
 mosaic config --zotero-key YOUR_WEB_API_KEY
 mosaic search "FDTD" --zotero
 ```
+
+Zotero's local API (desktop app, no key) may reject writes; MOSAIC then reports the error and
+suggests configuring a web API key.
 
 ## Obsidian Integration
 
@@ -416,6 +596,8 @@ https://szaghi.github.io/mosaic/
 - [Usage guide](https://szaghi.github.io/mosaic/guide/usage)
 - [Sources reference](https://szaghi.github.io/mosaic/guide/sources)
 - [RAG guide](https://szaghi.github.io/mosaic/guide/rag)
+- [Citation Network guide](https://szaghi.github.io/mosaic/guide/network)
+- [Compare Papers guide](https://szaghi.github.io/mosaic/guide/compare)
 - [Zotero integration](https://szaghi.github.io/mosaic/guide/zotero)
 - [Obsidian integration](https://szaghi.github.io/mosaic/guide/obsidian)
 - [Web UI guide](https://szaghi.github.io/mosaic/guide/web-ui)

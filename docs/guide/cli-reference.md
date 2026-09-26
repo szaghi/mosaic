@@ -452,6 +452,9 @@ mosaic chat [OPTIONS]
 | `--query` | `-q` | str | | Narrow retrieval to papers matching this query |
 | `--from` | | path | | Narrow retrieval to papers from a `.bib`/`.csv` |
 | `--mode` | | str | `synthesis` | Default prompt mode for the session |
+| `--year` | `-y` | str | | Narrow retrieval to a year or range (e.g. `2020-2024`) |
+
+`--query`, `--from` and `--year` combine: a paper must match all of them. The last turns of the conversation are sent to the LLM with each question.
 
 **In-session commands:**
 
@@ -631,6 +634,11 @@ mosaic config [OPTIONS]
 | `--embedding-api-key TEXT` | str | API key for the embedding server (any string for local servers) |
 | `--rag-top-k INT` | int | Number of papers retrieved per RAG query (default: 10) |
 | `--rag-auto-index / --no-rag-auto-index` | bool | Auto-index new papers after each search/get run |
+| `--embedding-provider TEXT` | str | `openai` or `custom` (empty = inherit from the LLM provider) |
+| `--chunk-size INT` | int | Max tokens per text chunk (default: 512) |
+| `--chunk-overlap INT` | int | Token overlap between consecutive chunks (default: 50; must be smaller than the chunk size) |
+| `--full-text-index / --no-full-text-index` | bool | Index full PDF text when available (requires pymupdf) |
+| `--rag-citations / --no-rag-citations` | bool | Boost retrieval with the citation graph (needs `mosaic index --enrich-citations`) |
 
 **`--filename-pattern` placeholders:**
 
