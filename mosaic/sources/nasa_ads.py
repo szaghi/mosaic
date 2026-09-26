@@ -5,11 +5,19 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import extract_first, parse_year
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.parsing import extract_first, normalise_doi, parse_year
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, with_retry
 
 _BASE = "https://api.adsabs.harvard.edu/v1/search/query"
 _FIELDS = "title,author,year,doi,abstract,bibcode,identifier,pub,property"
+
+# Specific open-access flag → link_gateway PDF type, in order of preference.
+_OA_PDF_LINKS = (
+    ("PUB_OPENACCESS", "PUB_PDF"),
+    ("EPRINT_OPENACCESS", "EPRINT_PDF"),
+    ("AUTHOR_OPENACCESS", "AUTHOR_PDF"),
+    ("ADS_OPENACCESS", "ADS_PDF"),
+)
 
 
 class NASAADSSource(BaseSource):
@@ -67,23 +75,21 @@ class NASAADSSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``response.docs`` array.
         """
-        ads_query = build_field_query(query, filters, "title:{}", "abstract:{}")
+        ads_query = build_field_query(query, filters, "title:{}", "abstract:{}", phrase=True)
 
         if filters:
             y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 ads_query += f" year:{y_from or y_to}-{y_to or y_from}"
 
+        params = {
+            "q": ads_query,
+            "fl": _FIELDS,
+            "rows": min(max_results, 200),
+            "sort": "score desc",
+        }
         with httpx.Client(timeout=30, headers=self._headers) as client:
-            resp = client.get(
-                _BASE,
-                params={
-                    "q": ads_query,
-                    "fl": _FIELDS,
-                    "rows": min(max_results, 200),
-                    "sort": "score desc",
-                },
-            )
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             docs = resp.json().get("response", {}).get("docs", [])
         return [self._parse(doc) for doc in docs]
@@ -109,7 +115,7 @@ class NASAADSSource(BaseSource):
 
         year = parse_year(doc.get("year"))
 
-        doi = extract_first(doc.get("doi"))
+        doi = normalise_doi(extract_first(doc.get("doi")))
 
         abstract = doc.get("abstract") or None
 
@@ -128,9 +134,16 @@ class NASAADSSource(BaseSource):
         property_list = doc.get("property") or []
         is_oa = "OPENACCESS" in property_list
 
+        # Pick the gateway link matching the *kind* of open access: an
+        # arXiv-only OA record (EPRINT_OPENACCESS) must not point at the
+        # publisher PDF, which is usually paywalled.
         pdf_url: str | None = None
         if bibcode and is_oa:
-            pdf_url = f"https://ui.adsabs.harvard.edu/link_gateway/{bibcode}/PUB_PDF"
+            # Legacy records carry only the generic OPENACCESS flag.
+            link_type = next(
+                (link for flag, link in _OA_PDF_LINKS if flag in property_list), "PUB_PDF"
+            )
+            pdf_url = f"https://ui.adsabs.harvard.edu/link_gateway/{bibcode}/{link_type}"
 
         return Paper(
             title=title,

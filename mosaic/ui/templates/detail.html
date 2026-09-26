@@ -8,11 +8,11 @@
 </hgroup>
 
 <div class="action-bar">
-  {% if paper.pdf_url %}
-  <a href="{{ paper.pdf_url }}" target="_blank" role="button" class="outline">Open PDF</a>
+  {% if paper.pdf_url | safe_url %}
+  <a href="{{ paper.pdf_url | safe_url }}" target="_blank" rel="noopener" role="button" class="outline">Open PDF</a>
   {% endif %}
-  {% if paper.url %}
-  <a href="{{ paper.url }}" target="_blank" role="button" class="outline secondary">Open URL</a>
+  {% if paper.url | safe_url %}
+  <a href="{{ paper.url | safe_url }}" target="_blank" rel="noopener" role="button" class="outline secondary">Open URL</a>
   {% endif %}
   {% if paper.doi %}
   <a href="https://doi.org/{{ paper.doi }}" target="_blank" role="button" class="outline secondary">DOI Link</a>
@@ -32,7 +32,10 @@
   {% endif %}
 
   <form style="display:inline-flex;gap:.3rem;align-items:center;margin:0;" onsubmit="return false;">
-    <input type="text" name="zotero_collection" placeholder="Collection (optional)" style="width:150px;">
+    <input type="text" name="zotero_collection" placeholder="Zotero collection" aria-label="Zotero collection (optional)" style="width:11rem;">
+    <label title="Use the Zotero desktop local API even when a web API key is configured">
+      <input type="checkbox" name="zotero_local"> local API
+    </label>
     <button hx-post="{{ url_for('ui.zotero_export_paper', uid=quote(paper.uid, safe='')) }}"
             hx-include="closest form"
             hx-target="#zotero-status"
@@ -40,9 +43,29 @@
       Send to Zotero
     </button>
   </form>
+
+  <button hx-post="{{ url_for('ui.obsidian_export_paper', uid=quote(paper.uid, safe='')) }}"
+          hx-target="#obsidian-status"
+          class="outline">
+    Export to Obsidian
+  </button>
+
+  <form style="display:inline-flex;gap:.3rem;align-items:center;margin:0;" onsubmit="return false;">
+    <select name="style" aria-label="Citation style" style="width:auto;">
+      {% for s in cite_styles %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+    <button hx-get="{{ url_for('ui.cite_paper', uid=quote(paper.uid, safe='')) }}"
+            hx-include="closest form"
+            hx-target="#cite-output"
+            class="outline secondary">
+      Cite
+    </button>
+  </form>
 </div>
 
 <div id="zotero-status"></div>
+<div id="obsidian-status"></div>
+<div id="cite-output"></div>
 
 <div id="download-status">
   {% if download_status and download_status.status == 'ok' %}
@@ -89,7 +112,7 @@
 
   {% if paper.url %}
   <dt>URL</dt>
-  <dd><a href="{{ paper.url }}" target="_blank">{{ paper.url[:80] }}{% if paper.url | length > 80 %}&hellip;{% endif %}</a></dd>
+  <dd>{% if paper.url | safe_url %}<a href="{{ paper.url | safe_url }}" target="_blank" rel="noopener">{{ paper.url[:80] }}{% if paper.url | length > 80 %}&hellip;{% endif %}</a>{% else %}{{ paper.url[:80] }}{% endif %}</dd>
   {% endif %}
 </dl>
 

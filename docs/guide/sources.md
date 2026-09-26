@@ -48,6 +48,8 @@ flowchart TD
 
 arXiv is the best source for recent preprints and CS/physics papers. Because everything on arXiv is open access, `--oa-only` has no effect on arXiv results.
 
+MOSAIC waits at least 3 seconds between arXiv requests. arXiv's API gateway answers **HTTP 406** while it throttles a client; MOSAIC retries with a pause and then reports "arXiv is throttling requests from this address" — wait a few minutes before searching arXiv again.
+
 **Search fields supported:** `all:`, `ti:` (title), `au:` (author), `abs:` (abstract), `cat:` (category), `jr:` (journal ref)
 
 ```bash
@@ -201,13 +203,17 @@ mosaic search "transformer" --source oa
 
 | Property | Value |
 |----------|-------|
-| Auth | None |
+| Auth | Registered IP address (request access from BASE) |
 | Content | 300 million+ documents from 10 000+ content providers |
 | PDF | Direct PDF link when source format is `application/pdf` and OA |
 | Rate limit | No documented hard limit — use responsibly |
 | Base URL | `https://api.base-search.net/cgi-bin/BaseHttpSearchInterface.fcgi` |
 
 BASE aggregates metadata from institutional repositories, open-access journals, and digital libraries worldwide. It is particularly strong for grey literature, theses, and documents not indexed by journal-centric databases.
+
+::: warning Access restricted by IP
+BASE's HTTP API only answers IP addresses that BASE has registered; other clients get an "access denied" reply. MOSAIC reports it as a BASE error. If you have not requested access, disable the source: `mosaic config --disable-source base`.
+:::
 
 Search queries support Lucene syntax. Filters for author (`dccreator`), journal (`dcsource`), and year (`dcyear`) are appended natively.
 
@@ -289,6 +295,7 @@ mosaic search "gravitational waves" --source ads
 | Content | 3 M+ open research outputs — papers, datasets, software, posters, theses |
 | PDF | Direct download link when a PDF file is attached to the record |
 | Rate limit | 60 req/min (anonymous) · higher with access token |
+| Page size | 25 records per request anonymously, 100 with a token (MOSAIC pages automatically) |
 | Base URL | `https://zenodo.org/api/records` |
 
 Zenodo is CERN's open-access repository, hosting research outputs from CERN and EU-funded projects across all disciplines. Every record in Zenodo is open access by definition. It is particularly strong for datasets, software, grey literature, and research outputs that are not published in traditional journals.
@@ -406,7 +413,9 @@ mosaic search "deep learning hardware" --source ieee --field title --year 2020-2
 
 DBLP (Digital Bibliography & Library Project) is the reference bibliography for computer science, maintained by Schloss Dagstuhl. It covers all major CS venues including IEEE, ACM, Springer LNCS, and arXiv CS preprints. DBLP provides no abstracts — results include title, authors, venue, year, DOI, and an electronic edition link (`ee`) that often points to an arXiv copy or an open publisher page.
 
-Field scoping: `--field title` appends a `$` to the query string (DBLP title-only search convention). Year, author, and journal filters are applied as post-processing only.
+Field scoping, year, author, and journal filters are applied as post-processing only.
+
+dblp.org sometimes puts an anti-bot check in front of its API; scripted requests then receive an HTML page instead of JSON, and MOSAIC reports "DBLP returned an HTML page instead of JSON". Try again later.
 
 ::: info No abstract field
 DBLP does not expose abstracts through its search API. The `abstract` field is always `None` for DBLP results. For CS papers with abstracts, combine with arXiv or Semantic Scholar — duplicates are merged by DOI.
@@ -479,6 +488,17 @@ mosaic config --ncbi-key YOUR_KEY
 mosaic search "RNA splicing mechanisms" --source pmc --year 2020-2024
 ```
 :::
+
+## bioRxiv / medRxiv — shorthand `rxiv`
+
+| Property | Value |
+|----------|-------|
+| Auth | None |
+| Content | Life-science (bioRxiv) and health-science (medRxiv) preprints |
+| PDF | Always open access |
+| Base URL | `https://www.biorxiv.org/search/`, `https://api.biorxiv.org/details` |
+
+MOSAIC first uses the bioRxiv / medRxiv site search and fetches metadata from the official `api.biorxiv.org` content API. The site search blocks many scripted clients (HTTP 403) and the content API intermittently returns empty responses, so MOSAIC then falls back to the bioRxiv/medRxiv preprints indexed by **Europe PMC** (`SRC:PPR`), with the same year and author filters.
 
 ## PEDro (Physiotherapy Evidence Database)
 

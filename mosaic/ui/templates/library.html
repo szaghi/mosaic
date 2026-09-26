@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Library &mdash; MOSAIC{% endblock %}
+
+{% block head %}
+<style>
+  .library-filter { display: flex; gap: .5rem; align-items: stretch; margin-bottom: 1rem; }
+  .library-filter input { flex: 1; margin: 0; }
+  .library-filter button { width: auto; margin: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Library</h2>
+<p>Papers stored in your local cache (same data as <code>mosaic cache</code>).</p>
+
+<div class="stat-grid">
+  {% for label, value in [
+    ('Papers', stats.papers), ('With abstract', stats.with_abstract),
+    ('Open access', stats.open_access), ('With PDF URL', stats.with_pdf_url),
+    ('Downloaded', stats.downloaded), ('Searches logged', stats.searches),
+    ('Exports tracked', stats.exports), ('DB size', '%.2f MB' | format(stats.db_bytes / 1048576)),
+  ] %}
+  <div class="stat"><small>{{ label }}</small><strong>{{ value }}</strong></div>
+  {% endfor %}
+</div>
+
+<div class="action-bar">
+  <button hx-post="{{ url_for('ui.library_verify') }}" hx-target="#library-status" class="outline">
+    Verify downloads
+  </button>
+  <button hx-post="{{ url_for('ui.library_clean') }}" hx-target="#library-status" class="outline">
+    Clean stale records
+  </button>
+  <form style="display:inline-flex;gap:.3rem;align-items:center;margin:0;" onsubmit="return false;">
+    <label style="margin:0;font-size:.85em;"><input type="checkbox" name="confirm"> I understand</label>
+    <button hx-post="{{ url_for('ui.library_clear') }}" hx-include="closest form"
+            hx-target="#library-status" class="outline secondary"
+            hx-confirm="Permanently delete every cached paper, download record and search?">
+      Clear cache
+    </button>
+  </form>
+</div>
+<div id="library-status"></div>
+
+<form method="get" action="{{ url_for('ui.library_page') }}" class="library-filter">
+  <input type="search" name="q" value="{{ query }}" placeholder="Filter by title / abstract" aria-label="Filter by title or abstract">
+  <button type="submit" class="outline">Filter</button>
+</form>
+
+{% if papers %}
+<div class="export-bar">
+  <strong>Export {{ total }} paper(s):</strong>
+  {% for fmt, label in [('csv', 'CSV'), ('json', 'JSON'), ('bib', 'BibTeX'), ('ris', 'RIS'), ('md', 'Markdown'), ('markdown', 'Markdown + abstracts')] %}
+  <a href="{{ url_for('ui.library_export', format=fmt, q=query) }}" role="button" class="outline secondary">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<figure>
+<table role="grid">
+  <thead>
+    <tr><th>#</th><th>Title</th><th>Authors</th><th>Year</th><th>Source</th><th>OA</th><th>PDF</th><th>Abstr.</th></tr>
+  </thead>
+  <tbody>
+    {% for p in papers %}
+    <tr>
+      <td>{{ offset + loop.index }}</td>
+      <td><a href="{{ url_for('ui.paper_detail', uid=p.uid) }}">{{ p.title[:80] }}{% if p.title | length > 80 %}&hellip;{% endif %}</a></td>
+      <td>{{ p.short_authors }}</td>
+      <td>{{ p.year or '' }}</td>
+      <td>{{ p.source }}</td>
+      <td>{% if p.is_open_access %}<span class="badge-oa">&#10003;</span>{% else %}<span class="badge-closed">&ndash;</span>{% endif %}</td>
+      <td>{% if p.pdf_url %}<span class="badge-oa">&#10003;</span>{% else %}&ndash;{% endif %}</td>
+      <td>{% if p.abstract %}<span class="badge-oa">&#10003;</span>{% else %}&ndash;{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</figure>
+
+<nav style="display:flex;gap:.5rem;align-items:center;justify-content:center;">
+  {% if page > 1 %}<a href="{{ url_for('ui.library_page', q=query, page=page - 1) }}" role="button" class="outline secondary">&larr; Prev</a>{% endif %}
+  <small>Page {{ page }} of {{ pages }} &middot; {{ total }} paper(s)</small>
+  {% if page < pages %}<a href="{{ url_for('ui.library_page', q=query, page=page + 1) }}" role="button" class="outline secondary">Next &rarr;</a>{% endif %}
+</nav>
+{% else %}
+<p>No papers{% if query %} matching <strong>{{ query }}</strong>{% endif %} in the cache.</p>
+{% endif %}
+{% endblock %}

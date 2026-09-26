@@ -2,6 +2,9 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from mosaic.errors import SourceError
 from mosaic.models import SearchFilters
 from mosaic.sources.biorxiv import _DOI_HREF_RE, BioRxivSource
 
@@ -59,6 +62,19 @@ class TestDoiHrefRegex:
     def test_matches_unversioned_href(self):
         html = '<a href="/content/10.1101/2022.06.10.495673">'
         assert _DOI_HREF_RE.search(html).group(1) == "10.1101/2022.06.10.495673"
+
+    def test_matches_legacy_serial_doi(self):
+        # Pre-Dec-2019 bioRxiv DOIs are bare serial numbers.
+        html = '<a href="/content/10.1101/052928v2">'
+        assert _DOI_HREF_RE.search(html).group(1) == "10.1101/052928"
+
+    def test_matches_href_with_full_suffix(self):
+        html = '<a href="/content/10.1101/2023.01.15.524150v1.full">'
+        assert _DOI_HREF_RE.search(html).group(1) == "10.1101/2023.01.15.524150"
+
+    def test_matches_new_medrxiv_prefix(self):
+        html = '<a href="/content/10.64898/2026.08.20.26360874v1">'
+        assert _DOI_HREF_RE.search(html).group(1) == "10.64898/2026.08.20.26360874"
 
     def test_no_match_on_unrelated_href(self):
         html = '<a href="/about/biorxiv">'
@@ -194,10 +210,16 @@ class TestBuildQuery:
         assert "before:2023-01-01" in q
 
     def test_author_appended(self):
-        f = SearchFilters(authors=["Smith", "Jones"])
+        f = SearchFilters(authors=["John Smith"])
         q = BioRxivSource._build_query("protein", f)
         assert "author1:Smith" in q
-        assert "author1:Jones" in q
+
+    def test_multiple_authors_not_sent_natively(self):
+        # The site search would require *all* author operators; "-a A -a B"
+        # means "any of", so several authors are left to the post-filter.
+        f = SearchFilters(authors=["Smith", "Jones"])
+        q = BioRxivSource._build_query("protein", f)
+        assert "author1:" not in q
 
     def test_raw_query_overrides(self):
         f = SearchFilters(raw_query="my raw query")
@@ -336,22 +358,72 @@ class TestSearch:
         ctx.__exit__ = MagicMock(return_value=False)
         client_cls = MagicMock(return_value=ctx)
 
-        with patch("httpx.Client", client_cls):
+        # 503 is retried with backoff — skip the real sleeps
+        with patch("httpx.Client", client_cls), patch("mosaic.sources.base.time.sleep"):
             papers = self.src.search("covid", max_results=5)
 
         assert any("medRxiv Paper" in p.title for p in papers)
 
-    def test_all_search_pages_fail_returns_empty(self):
+    @staticmethod
+    def _client_for(side_effect):
         mock_client = MagicMock()
-        mock_client.get.return_value = _make_resp(status=500)
+        mock_client.get.side_effect = side_effect
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=mock_client)
+        ctx.__exit__ = MagicMock(return_value=False)
+        return MagicMock(return_value=ctx), mock_client
+
+    def test_all_search_pages_fail_and_fallback_fails_raises_source_error(self):
+        # Both servers and the Europe PMC fallback failing is a real error.
+        def side_effect(url, **kwargs):
+            resp = _make_resp(status=500)
+            resp.raise_for_status.side_effect = RuntimeError("Europe PMC HTTP 500")
+            return resp
+
+        client_cls, _ = self._client_for(side_effect)
+        with patch("httpx.Client", client_cls), pytest.raises(SourceError, match="HTTP 500"):
+            self.src.search("deep learning", max_results=5)
+
+    def test_blocked_site_search_falls_back_to_europepmc(self):
+        epmc = {
+            "resultList": {
+                "result": [
+                    {
+                        "doi": "10.64898/2026.08.20.26360874",
+                        "title": "A medRxiv preprint",
+                        "authorString": "Rossi M, Bianchi L.",
+                        "pubYear": "2026",
+                        "bookOrReportDetails": {"publisher": "medRxiv"},
+                    }
+                ]
+            }
+        }
+
+        def side_effect(url, **kwargs):
+            if "/search/" in url:
+                return _make_resp(status=403)
+            assert "europepmc" in url
+            assert 'PUBLISHER:"medRxiv"' in kwargs["params"]["query"]
+            return _make_resp(json_data=epmc)
+
+        client_cls, _ = self._client_for(side_effect)
+        with patch("httpx.Client", client_cls):
+            papers = self.src.search("long covid", max_results=5)
+        assert len(papers) == 1
+        p = papers[0]
+        assert (p.source, p.journal, p.is_open_access) == ("bioRxiv/medRxiv", "Medrxiv", True)
+        assert p.url == "https://www.medrxiv.org/content/10.64898/2026.08.20.26360874"
+
+    def test_not_found_search_page_returns_empty(self):
+        mock_client = MagicMock()
+        mock_client.get.return_value = _make_resp(status=404)
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=mock_client)
         ctx.__exit__ = MagicMock(return_value=False)
         client_cls = MagicMock(return_value=ctx)
 
         with patch("httpx.Client", client_cls):
-            papers = self.src.search("deep learning", max_results=5)
-        assert papers == []
+            assert self.src.search("deep learning", max_results=5) == []
 
     def test_year_filter_applied_to_query_url(self):
         filters = SearchFilters(year_from=2022, year_to=2023)

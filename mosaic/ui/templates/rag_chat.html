@@ -3,48 +3,66 @@
 
 {% block head %}
 <style>
-  .chat-thread { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem; }
-  .chat-msg { padding: .75rem 1rem; border-radius: 6px; max-width: 90%; }
-  .chat-user { background: var(--pico-primary-background); align-self: flex-end; font-style: italic; }
-  .chat-assistant { background: var(--pico-secondary-background); align-self: flex-start; }
-  .chat-assistant p { margin-bottom: .5rem; }
-  #chat-input-area { display: flex; gap: .5rem; align-items: flex-end; }
-  #chat-input-area textarea { flex: 1; resize: vertical; min-height: 3rem; }
+  .chat-toolbar { display: flex; gap: .75rem; align-items: flex-end; flex-wrap: wrap; margin: 1rem 0; }
+  .chat-toolbar label { display: flex; flex-direction: column; gap: .25rem; margin: 0;
+                        font-size: .8em; color: var(--pico-muted-color); }
+  .chat-toolbar select, .chat-toolbar input, .chat-toolbar button {
+    margin: 0; height: 2.4rem; padding: .3rem .7rem; font-size: .9rem; }
+  .chat-toolbar select { width: 10rem; }
+  .chat-toolbar input { width: 16rem; }
+  .chat-toolbar .spacer { flex: 1; }
+
+  .chat-thread { display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1.25rem; }
+  .chat-msg { padding: .7rem 1rem; border-radius: 14px; max-width: min(85%, 48rem); line-height: 1.55; }
+  .chat-user { align-self: flex-end; background: var(--pico-primary-background);
+               color: var(--pico-primary-inverse); border-bottom-right-radius: 4px; }
+  .chat-assistant { align-self: flex-start; background: var(--pico-code-background-color);
+                    color: var(--pico-color); border: 1px solid var(--pico-muted-border-color);
+                    border-bottom-left-radius: 4px; }
+  .chat-error { border-left: 3px solid var(--pico-del-color); color: var(--pico-muted-color); }
+  .chat-md > :last-child { margin-bottom: 0; }
+  .chat-md p { margin-bottom: .5rem; }
+  .chat-sources { margin: .6rem 0 0; padding-top: .5rem; border-top: 1px solid var(--pico-muted-border-color);
+                  font-size: .85em; }
+  .chat-sources summary { color: var(--pico-muted-color); }
+  .chat-sources ol { margin: .4rem 0 0; }
+
+  #chat-input-area { display: flex; gap: .5rem; align-items: stretch; }
+  #chat-input-area textarea { flex: 1; resize: vertical; min-height: 3.2rem; margin: 0; }
+  #chat-input-area button { margin: 0; align-self: flex-end; }
+  .chat-hint { display: block; margin-top: .35rem; color: var(--pico-muted-color); }
 </style>
 {% endblock %}
 
 {% block content %}
 <h2>AI &mdash; Chat</h2>
 
-<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;">
-  <p style="margin:0;">Multi-turn conversation with your indexed papers.
-  Requires <a href="{{ url_for('ui.rag_index_page') }}">indexed papers</a> and a
-  <a href="{{ url_for('ui.config_page') }}">configured LLM</a>.</p>
-  <div style="display:flex;gap:.5rem;align-items:center;">
-    <label style="margin:0;font-size:.9em;">
-      Mode
-      <select id="chat-mode" style="margin:0;padding:.2rem .4rem;height:auto;font-size:.9em;">
-        <option value="synthesis">Synthesis</option>
-        <option value="gaps">Gaps</option>
-        <option value="compare">Compare</option>
-        <option value="extract">Extract</option>
-      </select>
-    </label>
-    <button class="outline secondary" style="padding:.2rem .6rem;font-size:.85em;"
-            hx-post="{{ url_for('ui.rag_chat_clear') }}"
-            hx-target="#chat-thread"
-            hx-swap="innerHTML">
-      Clear
-    </button>
-  </div>
+<p>Multi-turn conversation with your indexed papers (the last turns are sent as context).
+Requires <a href="{{ url_for('ui.rag_index_page') }}">indexed papers</a> and a
+<a href="{{ url_for('ui.config_page') }}">configured LLM</a>.</p>
+
+<div class="chat-toolbar">
+  <label>
+    Mode
+    <select id="chat-mode">
+      {% for m in modes %}<option value="{{ m }}">{{ m | capitalize }}</option>{% endfor %}
+    </select>
+  </label>
+  <label title="Narrow the retrieval pool to papers whose title/abstract contains this text">
+    Only papers matching
+    <input type="text" id="chat-subset" placeholder="all papers">
+  </label>
+  <span class="spacer"></span>
+  <button class="outline secondary"
+          hx-post="{{ url_for('ui.rag_chat_clear') }}"
+          hx-target="#chat-thread"
+          hx-swap="innerHTML">
+    Clear conversation
+  </button>
 </div>
 
 <div id="chat-thread" class="chat-thread">
-  {% for msg in history %}
-  <div class="chat-msg chat-{{ msg.role }}">{{ msg.content }}</div>
-  {% else %}
-  <p class="stats-line"><em>No messages yet. Ask your first question below.</em></p>
-  {% endfor %}
+  {{ thread_html | safe }}
 </div>
 
 {# Poll trigger lives OUTSIDE #chat-thread so HTMX never destroys it during swaps #}
@@ -54,6 +72,7 @@
 <form id="chat-form" style="display:none;">
   <input type="hidden" id="chat-query-hidden" name="query" value="">
   <input type="hidden" id="chat-mode-hidden" name="mode" value="synthesis">
+  <input type="hidden" id="chat-subset-hidden" name="subset_query" value="">
 </form>
 
 <div id="chat-input-area">
@@ -68,9 +87,10 @@
   </button>
   <span id="chat-spinner" class="htmx-indicator" aria-busy="true"></span>
 </div>
-<small style="color:var(--pico-muted-color);">Ctrl+Enter to send</small>
+<small class="chat-hint">Ctrl+Enter to send</small>
 
 <script src="{{ url_for('static', filename='marked.min.js') }}"></script>
+<script src="{{ url_for('static', filename='markdown.js') }}"></script>
 <script>
 function sendChat() {
   var q = document.getElementById('chat-q').value.trim();
@@ -78,6 +98,7 @@ function sendChat() {
   // Populate hidden form before HTMX reads it
   document.getElementById('chat-query-hidden').value = q;
   document.getElementById('chat-mode-hidden').value = document.getElementById('chat-mode').value;
+  document.getElementById('chat-subset-hidden').value = document.getElementById('chat-subset').value.trim();
   // Clear visible textarea now that value is safely copied
   document.getElementById('chat-q').value = '';
   document.getElementById('chat-send').click();
@@ -101,15 +122,14 @@ document.getElementById('chat-send').addEventListener('click', function(e) {
   }
 }, true);  // capture phase so we run before HTMX
 
-// Render markdown in assistant messages after each update
+// Render (sanitised) markdown in assistant messages — on load and after each update
+function renderChat() {
+  document.querySelectorAll('#chat-thread .chat-md:not([data-rendered])').forEach(mosaicRenderMarkdown);
+}
+renderChat();
 document.body.addEventListener('htmx:afterSwap', function(e) {
   if (e.detail.target.id === 'chat-thread') {
-    document.querySelectorAll('#chat-thread .chat-assistant').forEach(function(el) {
-      if (!el.dataset.rendered) {
-        el.innerHTML = marked.parse(el.textContent);
-        el.dataset.rendered = '1';
-      }
-    });
+    renderChat();
     e.detail.target.scrollIntoView({block: 'end', behavior: 'smooth'});
   }
 });

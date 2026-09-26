@@ -12,8 +12,8 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key, parse_year
-from mosaic.sources.base import BaseSource, build_scopus_query
+from mosaic.parsing import normalise_doi, parse_authors_name_key, parse_year
+from mosaic.sources.base import BaseSource, build_scopus_query, with_retry
 
 _BASE = "https://api.elsevier.com/content/search/scopus"
 
@@ -92,12 +92,8 @@ class ScopusAPISource(BaseSource):
         if self._inst_token:
             headers["X-ELS-Insttoken"] = self._inst_token
 
-        resp = httpx.get(
-            _BASE,
-            params={"query": scopus_query, "count": min(max_results, 200), "field": _FIELDS},
-            headers=headers,
-            timeout=30,
-        )
+        params = {"query": scopus_query, "count": min(max_results, 200), "field": _FIELDS}
+        resp = with_retry(lambda: httpx.get(_BASE, params=params, headers=headers, timeout=30))
         resp.raise_for_status()
         entries = resp.json().get("search-results", {}).get("entry", []) or []
         return [self._parse(e) for e in entries if isinstance(e, dict) and "dc:title" in e]
@@ -137,7 +133,7 @@ class ScopusAPISource(BaseSource):
 
         year = parse_year(item.get("prism:coverDate"))
 
-        doi = item.get("prism:doi") or None
+        doi = normalise_doi(item.get("prism:doi"))
         abstract = item.get("dc:description") or None
         journal = item.get("prism:publicationName") or None
         volume = item.get("prism:volume") or None

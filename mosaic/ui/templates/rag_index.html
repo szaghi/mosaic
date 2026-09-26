@@ -3,28 +3,42 @@
 
 {% block content %}
 <h2>AI &mdash; Index Management</h2>
+{% for warning in health %}
+<article class="alert-warning">&#9888; {{ warning }}</article>
+{% endfor %}
 
 <p>The vector index lets MOSAIC answer questions about your cached papers using semantic search.
 Before using <a href="{{ url_for('ui.rag_ask_page') }}">Ask</a> or
 <a href="{{ url_for('ui.rag_chat_page') }}">Chat</a>, you need an
 <a href="{{ url_for('ui.config_page') }}">embedding model configured</a>.</p>
 
-<div id="index-status">
-  <article>
-    <dl class="paper-meta">
-      <dt>Papers in cache</dt><dd>{{ total_papers }}</dd>
-      <dt>Papers indexed</dt><dd>{{ indexed_count }}</dd>
-      {% if embedding_model %}
-      <dt>Embedding model</dt><dd><code>{{ embedding_model }}</code></dd>
-      {% else %}
-      <dt>Embedding model</dt><dd><em>Not configured &mdash; set it in <a href="{{ url_for('ui.config_page') }}">Config</a></em></dd>
-      {% endif %}
-    </dl>
-  </article>
+<div id="index-status" class="stat-grid">
+  <div class="stat"><small>Papers in cache</small><strong>{{ total_papers }}</strong></div>
+  <div class="stat"><small>Papers indexed</small><strong>{{ indexed_count }}</strong></div>
+  <div class="stat"><small>Embedding model</small>
+    {% if embedding_model %}<strong><code>{{ embedding_model }}</code></strong>
+    {% else %}<strong><em>Not configured</em></strong><small><a href="{{ url_for('ui.config_page') }}">Set it in Config</a></small>{% endif %}
+  </div>
+  {% if indexed_model and indexed_model != embedding_model %}
+  <div class="stat"><small>Index built with</small><strong><code>{{ indexed_model }}</code></strong></div>
+  {% endif %}
 </div>
 
 <div class="action-bar">
-  <form onsubmit="return false">
+  <form onsubmit="return false" enctype="multipart/form-data">
+    <details style="margin-bottom:.5rem;">
+      <summary>Index only a subset <small>(default: the whole library)</small></summary>
+      <div class="filter-grid" style="margin-top:.5rem;">
+        <label>
+          Papers matching <small>(title/abstract)</small>
+          <input type="text" name="query" placeholder="e.g. transformer">
+        </label>
+        <label>
+          Papers from a .bib / .csv file
+          <input type="file" name="file" accept=".bib,.csv">
+        </label>
+      </div>
+    </details>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
       <label style="margin:0;">
         Batch size
@@ -34,8 +48,13 @@ Before using <a href="{{ url_for('ui.rag_ask_page') }}">Ask</a> or
         <input type="checkbox" name="reindex" id="reindex-chk">
         Rebuild from scratch
       </label>
+      <label style="margin:0;display:flex;align-items:center;gap:.3rem;">
+        <input type="checkbox" name="enrich_citations">
+        Enrich citation graph
+      </label>
       <button hx-post="{{ url_for('ui.rag_index_submit') }}"
               hx-include="closest form"
+              hx-encoding="multipart/form-data"
               hx-target="#index-job"
               hx-swap="innerHTML"
               hx-indicator="#index-spinner">

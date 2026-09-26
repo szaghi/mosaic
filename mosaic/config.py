@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
+import tempfile
 import tomllib
 from pathlib import Path
 
 import tomli_w
 
-from mosaic.errors import ConfigError  # noqa: F401 — available for future use
+from mosaic.errors import ConfigError
 
 _log = logging.getLogger(__name__)
 
@@ -162,13 +164,24 @@ def validate(cfg: dict) -> list[str]:
 
 
 def load() -> dict:
+    """Return the user config deep-merged over the defaults.
+
+    The result never shares nested dicts/lists with ``_DEFAULTS``, so callers
+    may mutate it freely.
+
+    Raises:
+        ConfigError: If the config file exists but is not valid TOML.
+    """
     if _CONFIG_PATH.exists():
-        with open(_CONFIG_PATH, "rb") as f:
-            data = tomllib.load(f)
+        try:
+            with open(_CONFIG_PATH, "rb") as f:
+                data = tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            raise ConfigError(f"Could not parse config file {_CONFIG_PATH}: {e}") from e
         # merge missing keys from defaults
         cfg = _merge(_DEFAULTS, data)
     else:
-        cfg = dict(_DEFAULTS)
+        cfg = copy.deepcopy(_DEFAULTS)
 
     for msg in validate(cfg):
         _log.warning("config: %s", msg)
@@ -177,11 +190,29 @@ def load() -> dict:
 
 
 def save(cfg: dict) -> None:
+    """Write *cfg* atomically with owner-only permissions.
+
+    The TOML is written to a temporary file in the same directory and moved
+    into place with ``os.replace``, so a failure never leaves a truncated
+    config behind and concurrent readers see either the old or the new file.
+    """
     _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    # 0o600: config contains API keys — restrict to owner only, set atomically
-    raw_fd = os.open(str(_CONFIG_PATH), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(raw_fd, "wb") as f:
-        tomli_w.dump(cfg, f)
+    # mkstemp creates the file with 0o600: config contains API keys
+    fd, tmp_name = tempfile.mkstemp(
+        dir=_CONFIG_PATH.parent, prefix=f".{_CONFIG_PATH.name}.", suffix=".tmp"
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            tomli_w.dump(cfg, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, _CONFIG_PATH)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    # Tighten an existing file that was created with looser permissions
+    os.chmod(_CONFIG_PATH, 0o600)
 
 
 # ---------------------------------------------------------------------------
@@ -227,22 +258,32 @@ def apply_api_keys(cfg: dict, updates: dict[str, str]) -> bool:
 
 
 def get_embedding_cfg(cfg: dict) -> dict:
-    """Return resolved embedding config, falling back to [llm] values where unset."""
+    """Return resolved embedding config, falling back to [llm] values where unset.
+
+    The LLM key and base URL are only inherited when the LLM endpoint is
+    OpenAI-compatible (``provider = "openai"`` or a custom ``base_url``):
+    embeddings always go to an OpenAI-compatible endpoint, so e.g. an
+    Anthropic key must never be sent to api.openai.com.
+    """
     rag = cfg.get("rag", {})
     llm = cfg.get("llm", {})
+    llm_base_url = llm.get("base_url", "")
+    llm_openai_compatible = (llm.get("provider") or "").lower() == "openai" or bool(llm_base_url)
+    inherited_key = llm.get("api_key", "") if llm_openai_compatible else ""
     return {
         "provider": rag.get("embedding_provider") or llm.get("provider", ""),
         "model": rag.get("embedding_model", ""),
-        "base_url": rag.get("embedding_base_url") or llm.get("base_url", ""),
-        "api_key": rag.get("embedding_api_key") or llm.get("api_key", ""),
+        "base_url": rag.get("embedding_base_url") or llm_base_url,
+        "api_key": rag.get("embedding_api_key") or inherited_key,
     }
 
 
 def _merge(defaults: dict, overrides: dict) -> dict:
-    result = dict(defaults)
+    """Deep-merge *overrides* over *defaults* without sharing any mutable values."""
+    result = copy.deepcopy(defaults)
     for k, v in overrides.items():
         if isinstance(v, dict) and isinstance(result.get(k), dict):
             result[k] = _merge(result[k], v)
         else:
-            result[k] = v
+            result[k] = copy.deepcopy(v)
     return result

@@ -1,0 +1,38 @@
+{% if not llm %}
+<p class="stats-line">No LLM configured &mdash; only metadata fields are populated.
+Configure one in <a href="{{ url_for('ui.config_page') }}">Config</a> to extract the dimensions.</p>
+{% endif %}
+{% for err in errors %}
+<article class="alert-warning">&#9888; {{ err }}</article>
+{% endfor %}
+
+<div class="export-bar">
+  <strong>Export:</strong>
+  <a href="{{ url_for('ui.compare_export', job_id=job_id, format='md') }}" role="button" class="outline secondary">Markdown</a>
+  <a href="{{ url_for('ui.compare_export', job_id=job_id, format='csv') }}" role="button" class="outline secondary">CSV</a>
+  <a href="{{ url_for('ui.compare_export', job_id=job_id, format='json') }}" role="button" class="outline secondary">JSON</a>
+</div>
+
+<figure>
+<table role="grid">
+  <thead>
+    <tr>
+      <th>#</th><th>Title</th><th>Year</th><th>Authors</th>
+      {% for d in dims %}<th>{{ d | title }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in papers %}
+    {% set row = rows[loop.index0] if loop.index0 < rows | length else {} %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td><a href="{{ url_for('ui.paper_detail', uid=p.uid) }}">{{ p.title[:70] }}</a></td>
+      <td>{% if p.year %}{{ p.year }}{% else %}&ndash;{% endif %}</td>
+      <td>{{ p.short_authors }}</td>
+      {% for d in dims %}<td>{{ row.get(d, '–') }}</td>{% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</figure>
+<p class="stats-line">{{ papers | length }} paper(s) compared</p>

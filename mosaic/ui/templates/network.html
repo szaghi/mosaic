@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Citation Network &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Analysis &mdash; Citation Network</h2>
+<p>Explore the local citation graph built by <a href="{{ url_for('ui.rag_index_page') }}">indexing with
+citation enrichment</a>. Leave the query empty to analyse the whole graph.</p>
+
+<form id="network-form" onsubmit="return false">
+  <div class="filter-grid">
+    <label>
+      Seed papers matching
+      <input type="text" name="query" placeholder="e.g. graph neural networks">
+    </label>
+    <label>
+      Depth <small>(citation hops from the seeds)</small>
+      <input type="number" name="depth" value="2" min="1" max="5">
+    </label>
+    <label>
+      Min. connections
+      <input type="number" name="min_connections" value="1" min="0">
+    </label>
+    <label>
+      Papers to show <small>(per cluster)</small>
+      <input type="number" name="top" value="10" min="1" max="200">
+    </label>
+  </div>
+  <label><input type="checkbox" name="cluster" role="switch"> Group into topic clusters</label>
+  <button type="submit"
+          hx-post="{{ url_for('ui.network_submit') }}"
+          hx-include="#network-form"
+          hx-target="#network-result"
+          hx-indicator="#network-spinner">
+    Analyse
+  </button>
+  <span id="network-spinner" class="htmx-indicator" aria-busy="true">Working&hellip;</span>
+</form>
+
+<div id="network-result" style="margin-top:1.5rem;"></div>
+{% endblock %}

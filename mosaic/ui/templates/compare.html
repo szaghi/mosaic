@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Compare &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Analysis &mdash; Compare</h2>
+<p>Compare cached papers across structured dimensions. Leave the filters empty to use the whole library.</p>
+
+<form id="compare-form" onsubmit="return false" enctype="multipart/form-data">
+  <div class="grid">
+    <label>
+      Papers matching <small>(title/abstract)</small>
+      <input type="text" name="query" placeholder="e.g. diffusion models">
+    </label>
+    <label>
+      Papers from a .bib / .csv file
+      <input type="file" name="file" accept=".bib,.csv">
+    </label>
+  </div>
+  <div class="grid">
+    <label>
+      Max papers
+      <input type="number" name="n" value="20" min="1" max="100">
+    </label>
+    <label>
+      Pre-sort by
+      <select name="sort">
+        <option value="">&mdash;</option>
+        <option value="citations">Citations</option>
+        <option value="year">Year (newest)</option>
+      </select>
+    </label>
+  </div>
+  <label>
+    Dimensions <small>(comma-separated)</small>
+    <input type="text" name="dimensions" value="{{ default_dims }}">
+  </label>
+  <button type="submit"
+          hx-post="{{ url_for('ui.compare_submit') }}"
+          hx-include="#compare-form"
+          hx-encoding="multipart/form-data"
+          hx-target="#compare-result"
+          hx-indicator="#compare-spinner">
+    Compare
+  </button>
+  <span id="compare-spinner" class="htmx-indicator" aria-busy="true">Working&hellip;</span>
+</form>
+
+<div id="compare-result" style="margin-top:1.5rem;"></div>
+{% endblock %}

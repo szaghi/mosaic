@@ -89,7 +89,7 @@ class TestEmbedTextsBatching:
             embed_texts(["text"], {"model": "", "api_key": "key", "base_url": ""})
 
     def test_uses_base_url_when_provided(self):
-        """When base_url is set, the request should go to base_url/v1/embeddings."""
+        """A bare host base_url (no version segment) gets /v1/embeddings appended."""
         from mosaic.embeddings import embed_texts
 
         with patch("httpx.post", return_value=_make_embedding_response([[0.1]])) as mock_post:
@@ -100,6 +100,53 @@ class TestEmbedTextsBatching:
 
         called_url = mock_post.call_args[0][0]
         assert called_url == "http://localhost:11434/v1/embeddings"
+
+    @pytest.mark.parametrize(
+        ("base_url", "expected"),
+        [
+            # Documented form (docs/guide/rag.md): the base already ends in /v1
+            ("http://localhost:11434/v1", "http://localhost:11434/v1/embeddings"),
+            ("http://localhost:11434/v1/", "http://localhost:11434/v1/embeddings"),
+            ("http://localhost:1234/api/v2", "http://localhost:1234/api/v2/embeddings"),
+            ("http://host/v1/embeddings", "http://host/v1/embeddings"),
+            ("http://localhost:11434", "http://localhost:11434/v1/embeddings"),
+            ("", "https://api.openai.com/v1/embeddings"),
+        ],
+    )
+    def test_embeddings_url_forms(self, base_url, expected):
+        from mosaic.embeddings import embeddings_url
+
+        assert embeddings_url(base_url) == expected
+
+    def test_batch_size_controls_calls(self):
+        from mosaic.embeddings import embed_texts
+
+        responses = [_make_embedding_response([[0.0]] * 2), _make_embedding_response([[0.0]])]
+        with patch("httpx.post", side_effect=responses) as mock_post:
+            result = embed_texts(["a", "b", "c"], {"model": "m", "base_url": ""}, batch_size=2)
+
+        assert mock_post.call_count == 2
+        assert len(result) == 3
+
+    def test_http_error_raises_runtime_error_with_url(self):
+        import httpx
+
+        from mosaic.embeddings import embed_texts
+
+        request = httpx.Request("POST", "http://localhost:11434/v1/embeddings")
+        response = httpx.Response(404, request=request)
+        with patch("httpx.post", return_value=response):
+            with pytest.raises(RuntimeError, match=r"HTTP 404 from http://localhost:11434/v1/"):
+                embed_texts(["x"], {"model": "m", "base_url": "http://localhost:11434/v1"})
+
+    def test_connection_error_raises_runtime_error(self):
+        import httpx
+
+        from mosaic.embeddings import embed_texts
+
+        with patch("httpx.post", side_effect=httpx.ConnectError("refused")):
+            with pytest.raises(RuntimeError, match="could not reach"):
+                embed_texts(["x"], {"model": "m", "base_url": "http://localhost:9/v1"})
 
     def test_uses_openai_when_no_base_url(self):
         """Without a base_url the request should go to the official OpenAI endpoint."""
@@ -299,13 +346,35 @@ class TestRetrieveOrder:
         }
 
         query_vec = [0.5, 0.5]
-        # vector_search returns both, but pre_filter only allows p1
+        # With a pre_filter the legacy index is searched exactly over the subset
         with patch("mosaic.embeddings.embed_texts", return_value=[query_vec]):
-            with patch.object(tmp_cache, "vector_search", return_value=[p1.uid, p2.uid]):
+            with (
+                patch.object(tmp_cache, "vector_search") as mock_knn,
+                patch.object(
+                    tmp_cache, "nearest_papers_for_uids", return_value=[(p1.uid, 0.1)]
+                ) as mock_subset,
+            ):
                 papers = retrieve("some query", cfg, tmp_cache, pre_filter=[p1.uid])
 
         assert len(papers) == 1
         assert papers[0].uid == p1.uid
+        mock_knn.assert_not_called()
+        assert mock_subset.call_args[0][1] == {p1.uid}
+
+    def test_empty_pre_filter_returns_nothing(self, tmp_cache):
+        """pre_filter=[] (subset matched nothing) must not fall back to the whole library."""
+        from mosaic.rag import retrieve
+
+        p1 = _paper("Alpha", abstract="alpha text", uid_suffix="e")
+        tmp_cache.save(p1)
+        cfg = {"rag": {"embedding_model": "test-model", "top_k": 5}, "llm": {}}
+
+        with patch("mosaic.embeddings.embed_texts", return_value=[[0.5, 0.5]]) as mock_emb:
+            with patch.object(tmp_cache, "vector_search", return_value=[p1.uid]):
+                papers = retrieve("some query", cfg, tmp_cache, pre_filter=[])
+
+        assert papers == []
+        mock_emb.assert_not_called()
 
     def test_empty_vector_search_returns_empty(self, tmp_cache):
         """When vector_search returns nothing, retrieve should return an empty list."""
@@ -580,15 +649,20 @@ class TestIndexPapersChunks:
             patch("mosaic.pdf.extract_text", return_value=long_text),
             patch(
                 "mosaic.embeddings.embed_texts",
-                side_effect=lambda texts, cfg: [[0.1, 0.2]] * len(texts),
+                side_effect=lambda texts, cfg, **kw: [[0.1, 0.2]] * len(texts),
             ),
             patch("mosaic.db.Cache.get_rag_meta", return_value=None),
-            patch.object(tmp_cache, "upsert_chunks_batch"),
+            patch.object(tmp_cache, "upsert_chunks_batch") as mock_upsert,
         ):
             newly, skipped, ft = index_papers([paper], cfg, tmp_cache)
 
         assert newly == 1
         assert ft == 1
+        stored_rows = [row for call in mock_upsert.call_args_list for row in call.args[0]]
+        assert len(stored_rows) > 1
+        # Stored chunk text is the PDF passage only — no repeated metadata header
+        assert all(not row[3].startswith("Title:") for row in stored_rows)
+        assert mock_upsert.call_args.kwargs["text_sources"] == {paper.uid: "pdf"}
 
     def test_paper_without_pdf_stores_single_chunk(self, tmp_cache):
         from unittest.mock import patch

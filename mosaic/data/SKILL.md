@@ -34,6 +34,7 @@ mosaic config --show            # view or edit configuration
 mosaic cache list               # inspect local SQLite cache
 mosaic cache stats              # cache statistics
 mosaic notebook create "topic"  # create a Google NotebookLM notebook
+mosaic ui                       # local web UI with the same features (http://127.0.0.1:5555)
 mosaic auth login elsevier      # browser session for authenticated PDF access
 mosaic skill install            # install this Claude Code skill to the current project
 mosaic skill install --global   # install to ~/.claude/skills/ (available in all projects)
@@ -46,7 +47,9 @@ mosaic skill show               # print skill content to stdout
 
 Add `--json` to `search` or `similar` for machine-readable stdout. All rich table output is
 suppressed; results are written to stdout as a single JSON object. Papers are still saved to the
-local cache so subsequent `--cached` queries work immediately.
+local cache so subsequent `--cached` queries work immediately. `--oa-only`, `--pdf-only`, `--sort`
+and `--output` apply in JSON mode too (including `--cached` / `--semantic`); stdout stays pure JSON.
+Source errors in the `errors` array have API keys redacted.
 
 ```bash
 mosaic search "attention mechanism" --max 20 --oa-only --json
@@ -199,6 +202,10 @@ mosaic search "query" [OPTIONS]
 | `rxiv` | bioRxiv/medRxiv | Life science preprints | None |
 | `pedro` | PEDro | Physiotherapy evidence | Fair-use ack |
 | `scopus` | Scopus | 90 M+ Elsevier citations | API key or browser |
+
+Custom sources configured under `[[custom_sources]]` are selectable with `--source` by their
+lower-cased, hyphenated name (prefixed with `custom-` if it clashes with a built-in shorthand).
+Several `--author` values match papers by **any** of the authors.
 
 ---
 
@@ -391,9 +398,18 @@ mosaic ask "What open problems remain in discontinuous Galerkin methods?" --mode
 mosaic ask "Compare DDPM, DDIM, and score SDE" --mode compare --output report.md
 mosaic ask "Extract all methods with accuracy claims" --mode extract
 
-# 4. Interactive session
+# Restrict retrieval: --query, --from and --year combine (a paper must match all of them).
+# If nothing matches, the answer says "No indexed papers match the selected subset."
+mosaic ask "Main limitations?" -q "diffusion" --from refs.bib --year 2021-2024 --output gaps.json
+
+# 4. Interactive session (the last turns are sent to the LLM as context)
 mosaic chat
+mosaic chat -q "protein folding" --year 2020-2024 --mode gaps
 ```
+
+Papers with a downloaded PDF are indexed from their full text (requires `pymupdf`); a paper indexed
+from metadata only is re-indexed from its PDF on the next `mosaic index` after the PDF is
+downloaded. After changing the embedding model run `mosaic index --reindex`.
 
 **`--semantic`**: embeds the query and retrieves top-k papers from the vector index. Shows a **Sim.**
 column (0–1). No LLM needed at query time. Requires `mosaic index` + embedding model.
@@ -427,6 +443,12 @@ mosaic config \
   --llm-provider openai \
   --llm-api-key YOUR_KEY \
   --llm-model gpt-4o-mini
+
+# RAG tuning
+mosaic config --chunk-size 512 --chunk-overlap 50   # tokens; overlap < chunk size
+mosaic config --full-text-index                      # index PDF full text (needs pymupdf)
+mosaic config --rag-citations                        # citation-graph boosting (index --enrich-citations)
+mosaic config --embedding-provider openai            # empty = inherit from the LLM provider
 
 # Ollama (local LLM — no data leaves your machine)
 mosaic config \
@@ -529,10 +551,13 @@ mosaic search "protein folding" --oa-only --download --zotero --zotero-collectio
 # Bulk-download an existing .bib file and send to Zotero
 mosaic get --from refs.bib --zotero --zotero-collection "Imported"
 
-# Web API (no Zotero app needed)
+# Web API (no Zotero app needed) — the Zotero user ID is discovered from the key
 mosaic config --zotero-key YOUR_WEB_API_KEY
 mosaic search "FDTD" --zotero
 ```
+
+Zotero's local API (desktop app, no key) may reject writes; MOSAIC then reports the error and
+suggests configuring a web API key.
 
 ## Obsidian Integration
 

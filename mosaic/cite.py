@@ -55,11 +55,24 @@ def _parse_crossref_item(item: dict) -> Paper:
     issue = item.get("issue") or None
     pages = item.get("page") or None
 
-    pdf_url: str | None = None
+    # Crossref "link" entries include text-mining / similarity-checking URLs
+    # for paywalled content, so a PDF link alone does not mean open access:
+    # OA is derived from a Creative Commons licence instead.
+    is_oa = any(
+        "creativecommons.org" in (lic.get("URL") or "").lower() for lic in item.get("license") or []
+    )
+    open_links: list[str] = []
+    restricted_links: list[str] = []
     for link in item.get("link") or []:
-        if link.get("content-type") == "application/pdf":
-            pdf_url = link.get("URL") or None
-            break
+        if link.get("content-type") != "application/pdf" or not link.get("URL"):
+            continue
+        if link.get("intended-application") in ("text-mining", "similarity-checking"):
+            restricted_links.append(link["URL"])
+        else:
+            open_links.append(link["URL"])
+    # Text-mining links are only worth trying when the licence allows reuse
+    candidates = open_links + (restricted_links if is_oa else [])
+    pdf_url = candidates[0] if candidates else None
 
     return Paper(
         title=title,
@@ -74,7 +87,7 @@ def _parse_crossref_item(item: dict) -> Paper:
         url=url,
         pdf_url=pdf_url,
         source="Crossref",
-        is_open_access=pdf_url is not None,
+        is_open_access=is_oa,
     )
 
 
@@ -181,14 +194,20 @@ def fetch_formatted_citation(doi: str, style: str, email: str = "") -> str:
         resp = client.get(f"{_DOI_BASE}/{doi}", headers=headers)
         resp.raise_for_status()
 
-    content_type = resp.headers.get("content-type", "")
-    if "bibliography" not in content_type and not resp.text.strip():
+    content_type = resp.headers.get("content-type", "").lower()
+    text = resp.text.strip()
+    # A DOI whose registrar ignores content negotiation redirects to the
+    # publisher's HTML landing page: never hand that back as a "citation".
+    is_html = "html" in content_type or (
+        "bibliography" not in content_type and text.startswith("<")
+    )
+    if not text or is_html:
         raise ValueError(
             f"Unexpected response Content-Type '{content_type}' for style '{style}'. "
             "The DOI may not support this citation style."
         )
 
-    return resp.text.strip()
+    return text
 
 
 # ---------------------------------------------------------------------------

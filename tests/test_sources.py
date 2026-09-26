@@ -3,7 +3,17 @@
 import contextlib
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from mosaic.models import SearchFilters
+
+
+@pytest.fixture(autouse=True)
+def _no_ncbi_throttle():
+    """Skip the process-wide NCBI rate-limit sleeps (0.34 s per request)."""
+    with patch("mosaic.sources.pubmed.NCBI_THROTTLE.wait"):
+        yield
+
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +149,14 @@ def _mock_client(get_return=None, post_return=None, get_side_effect=None):
 # ── arXiv ────────────────────────────────────────────────────────────────────
 
 
+def _arxiv_query(mock_client) -> str:
+    """The search_query sent to arXiv (encoded into the request URL)."""
+    from urllib.parse import parse_qs, urlsplit
+
+    url = mock_client.get.call_args.args[0]
+    return parse_qs(urlsplit(url).query)["search_query"][0]
+
+
 class TestArxivSource:
     def _source(self):
         from mosaic.sources.arxiv import ArxivSource
@@ -164,7 +182,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert "submittedDate" in query
         assert "20170101" in query
 
@@ -173,7 +191,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert "au:Vaswani" in query
 
     def test_journal_filter_appended_to_query(self):
@@ -181,7 +199,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert "jr:NeurIPS" in query
 
     def test_doi_fallback_to_arxiv_doi(self):
@@ -196,7 +214,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert query.startswith("ti:attention")
 
     def test_field_abstract_uses_abs_prefix(self):
@@ -204,7 +222,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert query.startswith("abs:attention")
 
     def test_raw_query_overrides_field_transform(self):
@@ -212,7 +230,7 @@ class TestArxivSource:
         cls, mc = _mock_client(get_return=_mock_get(text="<feed/>"))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
-        query = mc.get.call_args.kwargs["params"]["search_query"]
+        query = _arxiv_query(mc)
         assert query == "ti:transformers AND au:Vaswani"
 
 
@@ -297,7 +315,23 @@ class TestScienceDirectSource:
         assert p.year == 2020
         assert p.journal == "Journal of AI"
         assert p.is_open_access is True
-        assert p.pdf_url is not None
+        assert p.volume == "10"
+        # The api.elsevier.com article endpoint needs the API-key header the
+        # generic downloader never sends, so it is not exposed as pdf_url.
+        assert p.pdf_url is None
+
+    def test_volume_issue_split(self):
+        from mosaic.sources.sciencedirect import _split_volume_issue
+
+        assert _split_volume_issue("Volume 12, Issue 3") == ("12", "3")
+        assert _split_volume_issue("Volume 45") == ("45", None)
+        assert _split_volume_issue(None) == (None, None)
+
+    def test_multiple_authors_not_joined_in_body(self):
+        f = SearchFilters(authors=["Smith", "Lee"])
+        with patch("httpx.put", return_value=_mock_get(json_data={"results": []})) as mock:
+            self._source().search("q", filters=f)
+        assert "authors" not in mock.call_args.kwargs["json"]
 
     def test_filters_added_to_body(self):
         f = SearchFilters(year_from=2020, year_to=2022, authors=["Smith"], journal="Nature")
@@ -1093,6 +1127,7 @@ _CROSSREF_JSON = {
                 "abstract": "<jats:p>We propose the Transformer.</jats:p>",
                 "container-title": ["Advances in Neural Information Processing Systems"],
                 "URL": "https://doi.org/10.48550/arxiv.1706.03762",
+                "license": [{"URL": "http://creativecommons.org/licenses/by/4.0/"}],
                 "link": [
                     {"URL": "https://arxiv.org/pdf/1706.03762", "content-type": "application/pdf"},
                 ],
@@ -1139,15 +1174,63 @@ class TestCrossrefSource:
         assert params["query.title"] == "attention"
         assert "query" not in params
 
-    def test_field_abstract_uses_query_bibliographic_param(self):
+    def test_field_abstract_falls_back_to_general_query(self):
+        # query.bibliographic does not cover abstracts — Crossref has no
+        # abstract-only field, so the general query is used.
         f = SearchFilters(field="abstract")
         cls, mc = _mock_client(get_return=_mock_get(json_data={"message": {"items": []}}))
         with patch("httpx.Client", cls):
             self._source().search("attention", filters=f)
         params = mc.get.call_args.kwargs["params"]
-        assert "query.bibliographic" in params
-        assert params["query.bibliographic"] == "attention"
-        assert "query" not in params
+        assert params["query"] == "attention"
+        assert "query.bibliographic" not in params
+
+    def test_native_filters_sent(self):
+        f = SearchFilters(
+            year_from=2020, year_to=2022, authors=["Hinton", "LeCun"], journal="Nature"
+        )
+        cls, mc = _mock_client(get_return=_mock_get(json_data={"message": {"items": []}}))
+        with patch("httpx.Client", cls):
+            self._source().search("deep learning", filters=f)
+        params = mc.get.call_args.kwargs["params"]
+        assert params["filter"] == "from-pub-date:2020-01-01,until-pub-date:2022-12-31"
+        assert params["query.author"] == "Hinton LeCun"
+        assert params["query.container-title"] == "Nature"
+
+    def test_pdf_link_without_license_is_not_open_access(self):
+        item = {**_CROSSREF_JSON["message"]["items"][0], "license": []}
+        data = {"message": {"items": [item]}}
+        cls, mc = _mock_client(get_return=_mock_get(json_data=data))
+        with patch("httpx.Client", cls):
+            papers = self._source().search("attention")
+        assert papers[0].is_open_access is False
+
+    def test_text_mining_link_ignored(self):
+        item = {
+            **_CROSSREF_JSON["message"]["items"][0],
+            "license": [{"URL": "https://www.springer.com/tdm"}],
+            "link": [
+                {
+                    "URL": "https://link.springer.com/content/pdf/10.1007/x.pdf",
+                    "content-type": "application/pdf",
+                    "intended-application": "text-mining",
+                },
+            ],
+        }
+        data = {"message": {"items": [item]}}
+        cls, mc = _mock_client(get_return=_mock_get(json_data=data))
+        with patch("httpx.Client", cls):
+            papers = self._source().search("attention")
+        assert papers[0].pdf_url is None
+        assert papers[0].is_open_access is False
+
+    def test_doi_normalised(self):
+        item = {**_CROSSREF_JSON["message"]["items"][0], "DOI": "https://doi.org/10.1234/ABC"}
+        data = {"message": {"items": [item]}}
+        cls, mc = _mock_client(get_return=_mock_get(json_data=data))
+        with patch("httpx.Client", cls):
+            papers = self._source().search("attention")
+        assert papers[0].doi == "10.1234/ABC"
 
     def test_no_pdf_when_no_pdf_link(self):
         item = {
@@ -1161,7 +1244,8 @@ class TestCrossrefSource:
         with patch("httpx.Client", cls):
             papers = self._source().search("attention")
         assert papers[0].pdf_url is None
-        assert papers[0].is_open_access is False
+        # OA status comes from the CC license, not from the presence of a PDF
+        assert papers[0].is_open_access is True
 
 
 # ── HAL ───────────────────────────────────────────────────────────────────────
@@ -1211,33 +1295,39 @@ class TestHALSource:
         assert p.source == "HAL"
         assert p.is_open_access is True
 
-    def test_field_title_uses_title_s_prefix(self):
-        f = SearchFilters(field="title")
+    def _query(self, query="transformer", **filter_kwargs):
+        f = SearchFilters(**filter_kwargs)
         cls, mc = _mock_client(get_return=_mock_get(json_data={"response": {"docs": []}}))
         with patch("httpx.Client", cls):
-            self._source().search("transformer", filters=f)
-        params = mc.get.call_args.kwargs["params"]
-        assert params["q"].startswith('title_s:"')
+            self._source().search(query, filters=f)
+        return mc.get.call_args.kwargs["params"]["q"]
 
-    def test_field_abstract_uses_abstract_s_prefix(self):
-        f = SearchFilters(field="abstract")
-        cls, mc = _mock_client(get_return=_mock_get(json_data={"response": {"docs": []}}))
-        with patch("httpx.Client", cls):
-            self._source().search("transformer", filters=f)
-        params = mc.get.call_args.kwargs["params"]
-        assert params["q"].startswith('abstract_s:"')
+    # The *_s fields are exact-match strings; searches must use the
+    # tokenised *_t fields (see HAL's search schema).
+    def test_field_title_uses_tokenised_title_field(self):
+        assert self._query("deep learning", field="title") == 'title_t:"deep learning"'
+
+    def test_field_abstract_uses_tokenised_abstract_field(self):
+        assert self._query("transformer", field="abstract") == "abstract_t:transformer"
 
     def test_year_filter_appended_to_query(self):
-        f = SearchFilters()
-        f.year_from = 2020
-        f.year_to = 2023
-        cls, mc = _mock_client(get_return=_mock_get(json_data={"response": {"docs": []}}))
-        with patch("httpx.Client", cls):
-            self._source().search("transformer", filters=f)
-        params = mc.get.call_args.kwargs["params"]
-        assert "producedDate_s:" in params["q"]
-        assert "2020-01-01T00:00:00Z" in params["q"]
-        assert "2023-12-31T23:59:59Z" in params["q"]
+        q = self._query(year_from=2020, year_to=2023)
+        assert "producedDateY_i:[2020 TO 2023]" in q
+        assert "producedDate_s" not in q
+
+    def test_one_sided_year_is_open_range(self):
+        assert "producedDateY_i:[2020 TO *]" in self._query(year_from=2020)
+        assert "producedDateY_i:[* TO 2020]" in self._query(year_to=2020)
+
+    def test_years_list_honoured(self):
+        assert "producedDateY_i:(2019 OR 2021)" in self._query(years=[2019, 2021])
+
+    def test_authors_ored_on_tokenised_field(self):
+        q = self._query(authors=["Ada Lovelace", "Alan Turing"])
+        assert 'AND (authFullName_t:"Ada Lovelace" OR authFullName_t:"Alan Turing")' in q
+
+    def test_journal_uses_tokenised_field(self):
+        assert 'journalTitle_t:"Nature"' in self._query(journal="Nature")
 
     def test_no_pdf_when_fileMain_absent(self):
         doc_no_pdf = dict(_HAL_JSON["response"]["docs"][0])
@@ -1413,14 +1503,15 @@ class TestDBLPSource:
             papers = self._source().search("test")
         assert papers[0].pdf_url == "https://arxiv.org/pdf/2001.00001"
 
-    def test_field_title_appends_dollar(self):
+    def test_field_title_leaves_query_unchanged(self):
+        # DBLP's "$" suffix means "exact word", not "title" — it must not be
+        # used to emulate title scoping.
         f = SearchFilters(field="title")
         cls, mc = _mock_client(get_return=_mock_get(json_data={"result": {"hits": {}}}))
         with patch("httpx.Client", cls):
-            self._source().search("attention", filters=f)
+            self._source().search("attention model", filters=f)
         params = mc.get.call_args.kwargs["params"]
-        assert params["q"].endswith("$")
-        assert "attention" in params["q"]
+        assert params["q"] == "attention model"
 
     def test_empty_hits_returns_empty_list(self):
         data = {"result": {"hits": {}}}
@@ -1595,7 +1686,7 @@ class TestPubMedSource:
         with patch("httpx.Client", cls):
             self._source().search("CRISPR", filters=f)
         term = mc.get.call_args.kwargs["params"]["term"]
-        assert '"Doudna"[au]' in term
+        assert "Doudna[au]" in term
 
     def test_journal_filter_appended_to_query(self):
         f = SearchFilters(journal="Nature")
@@ -1787,7 +1878,7 @@ class TestPMCSource:
         cls, mc = _mock_client(get_return=_mock_get(json_data=esearch))
         with patch("httpx.Client", cls):
             self._source().search("RNA", filters=f)
-        assert '"Smith"[au]' in mc.get.call_args.kwargs["params"]["term"]
+        assert "Smith[au]" in mc.get.call_args.kwargs["params"]["term"]
 
     def test_journal_filter_appended_to_query(self):
         f = SearchFilters(journal="Nature")
@@ -1941,7 +2032,7 @@ class TestScopusAPISource:
         with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
             self._source().search("neural networks", filters=f)
         params = mock.call_args.kwargs["params"]
-        assert params["query"].startswith('TITLE("')
+        assert params["query"] == "TITLE(neural networks)"
 
     def test_field_abstract_uses_ABS_syntax(self):
         f = SearchFilters(field="abstract")
@@ -1949,14 +2040,31 @@ class TestScopusAPISource:
         with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
             self._source().search("neural networks", filters=f)
         params = mock.call_args.kwargs["params"]
-        assert params["query"].startswith('ABS("')
+        assert params["query"] == "ABS(neural networks)"
 
     def test_default_field_uses_TITLE_ABS_KEY(self):
+        # Unquoted: all terms must match (a quoted value would be a loose
+        # phrase, far narrower than every other source).
         empty = {"search-results": {"entry": []}}
         with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
             self._source().search("neural networks")
         params = mock.call_args.kwargs["params"]
-        assert params["query"].startswith('TITLE-ABS-KEY("')
+        assert params["query"] == "TITLE-ABS-KEY(neural networks)"
+
+    def test_user_quotes_kept_valid(self):
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search('"large language model" AND medicine')
+        params = mock.call_args.kwargs["params"]
+        assert params["query"] == 'TITLE-ABS-KEY("large language model" AND medicine)'
+
+    def test_multiple_authors_ored(self):
+        f = SearchFilters(authors=["Hinton", "LeCun"])
+        empty = {"search-results": {"entry": []}}
+        with patch("httpx.get", return_value=_mock_get(json_data=empty)) as mock:
+            self._source().search("deep learning", filters=f)
+        q = mock.call_args.kwargs["params"]["query"]
+        assert 'AND (AUTH("Hinton") OR AUTH("LeCun"))' in q
 
     def test_raw_query_overrides_field_transform(self):
         f = SearchFilters(raw_query="TITLE(foo) AND AUTH(bar)")
@@ -2076,27 +2184,48 @@ class TestScopusBrowserSource:
             result = self._source().search("test")
         assert result == []
 
-    def test_search_returns_empty_on_exception(self):
+    def test_search_without_session_returns_empty(self):
+        with patch("mosaic.auth.find_session_for_url", return_value=None):
+            assert self._source().search("test") == []
+
+    def test_search_raises_source_error_on_browser_failure(self):
+        from mosaic.errors import SourceError
+
+        def _boom(coro):
+            coro.close()
+            raise RuntimeError("Timeout 30000ms exceeded")
+
         with (
-            patch("mosaic.auth._require_playwright"),
-            patch("mosaic.auth.find_session_for_url", side_effect=ImportError),
+            patch("mosaic.auth.find_session_for_url", return_value="scopus"),
+            patch("mosaic.sources.scopus_browser.ensure_playwright"),
+            patch("mosaic.sources.scopus_browser.asyncio.run", side_effect=_boom),
+            pytest.raises(SourceError, match="Timeout"),
         ):
-            result = self._source().search("test")
-        assert result == []
+            self._source().search("test")
+
+    def test_search_raises_source_error_without_playwright(self):
+        from mosaic.errors import SourceError
+
+        with (
+            patch("mosaic.auth.find_session_for_url", return_value="scopus"),
+            patch.dict("sys.modules", {"playwright": None}),
+            pytest.raises(SourceError, match="Playwright"),
+        ):
+            self._source().search("test")
 
     def test_build_query_default(self):
         q = self._source()._build_query("machine learning", None)
-        assert q == 'TITLE-ABS-KEY("machine learning")'
+        assert q == "TITLE-ABS-KEY(machine learning)"
 
     def test_build_query_title_field(self):
         f = SearchFilters(field="title")
         q = self._source()._build_query("neural", f)
-        assert q == 'TITLE("neural")'
+        assert q == "TITLE(neural)"
 
     def test_build_query_abstract_field(self):
         f = SearchFilters(field="abstract")
         q = self._source()._build_query("neural", f)
-        assert q == 'ABS("neural")'
+        assert q == "ABS(neural)"
 
     def test_build_query_raw_overrides(self):
         f = SearchFilters(raw_query="TITLE(foo) AND AUTH(bar)")

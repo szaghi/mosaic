@@ -61,13 +61,14 @@ class TestMerging:
         results = search_all([src_a, src_b], "q")
         assert results[0].pdf_url == "https://example.com/paper.pdf"
 
-    def test_existing_abstract_not_overwritten(self):
-        p1 = _paper(doi="10.1/x", abstract="Original")
-        p2 = _paper(doi="10.1/x", abstract="Should not overwrite")
+    def test_longer_abstract_wins(self):
+        # Same rule as the SQLite upsert, independent of which source answers first
+        p1 = _paper(doi="10.1/x", abstract="A longer original abstract")
+        p2 = _paper(doi="10.1/x", abstract="Short")
         src_a = _make_source("A", [p1])
         src_b = _make_source("B", [p2])
         results = search_all([src_a, src_b], "q")
-        assert results[0].abstract == "Original"
+        assert results[0].abstract == "A longer original abstract"
 
 
 class TestErrorHandling:
@@ -224,3 +225,44 @@ class TestSearchStats:
         assert stats["raw_total"] == 0
         assert stats["unique"] == 0
         assert stats["merged"] == 0
+
+
+class TestErrorRedaction:
+    def _failing(self, name, exc):
+        src = _make_source(name, [])
+        src.search.side_effect = exc
+        return src
+
+    def test_api_key_masked_in_errors(self):
+        exc = Exception(
+            "Client error '429 Too Many Requests' for url "
+            "'https://ieeexploreapi.ieee.org/api/v1/search/articles?querytext=x&apikey=SECRET123'"
+        )
+        errors: list[str] = []
+        search_all([self._failing("IEEE Xplore", exc)], "q", errors=errors)
+        assert len(errors) == 1
+        assert "SECRET123" not in errors[0]
+        assert "apikey=***" in errors[0]
+
+    def test_api_key_masked_in_parallel_mode(self):
+        exc = Exception("for url 'https://api.x.org/s?api_key=SECRET&q=1'")
+        errors: list[str] = []
+        ok = _make_source("OK", [_paper()])
+        search_all([self._failing("X", exc), ok], "q", errors=errors, parallel=True)
+        assert errors and "SECRET" not in errors[0]
+
+    def test_api_key_masked_in_log(self, caplog):
+        exc = Exception("for url 'https://api.x.org/s?access_token=SECRET'")
+        with caplog.at_level("WARNING", logger="mosaic.search"):
+            search_all([self._failing("X", exc)], "q", errors=[], parallel=False)
+        assert "SECRET" not in caplog.text
+
+
+class TestAuthorSanitising:
+    def test_none_author_does_not_abort_filtered_search(self):
+        bad = Paper(title="T", doi="10.1/x", authors=[None, "Ada Lovelace", ""])
+        src = _make_source("A", [bad])
+        f = SearchFilters(authors=["Lovelace"])
+        results = search_all([src], "q", filters=f)
+        assert len(results) == 1
+        assert results[0].authors == ["Ada Lovelace"]

@@ -107,16 +107,16 @@ class TestVectorSearchScored:
         assert dist >= 0.0
 
     def test_empty_index_returns_empty(self, tmp_cache):
+        import sqlite3
+
+        import pytest
+
         try:
             import sqlite_vec  # noqa: F401
         except ImportError:
-            import pytest
-
             pytest.skip("sqlite-vec not installed")
 
         # No embeddings inserted — vec_papers table does not exist yet.
-        import sqlite3
-
         with pytest.raises((RuntimeError, sqlite3.OperationalError)):
             tmp_cache.vector_search_scored([0.1, 0.2], k=5)
 
@@ -260,3 +260,32 @@ class TestRebuildVecTableDropsChunks:
         tmp_cache.upsert_chunks_batch([(f"{p.uid}::0", p.uid, 0, "t", 0, 1, [1.0, 0.0])], 2)
         tmp_cache.rebuild_vec_table()
         assert p.uid not in tmp_cache.get_indexed_uids()
+
+
+class TestSchemaUpgrade:
+    def test_opens_db_created_before_openalex_id(self, tmp_path):
+        """A cache from an older release (no papers.openalex_id) must still open."""
+        import sqlite3
+
+        from mosaic.db import Cache
+
+        path = tmp_path / "old.db"
+        con = sqlite3.connect(path)
+        con.executescript(
+            """
+            CREATE TABLE papers (
+                uid TEXT PRIMARY KEY, title TEXT NOT NULL, authors TEXT, year INTEGER,
+                doi TEXT, arxiv_id TEXT, pii TEXT, abstract TEXT, journal TEXT, volume TEXT,
+                issue TEXT, pages TEXT, pdf_url TEXT, source TEXT,
+                is_open_access INTEGER DEFAULT 0, url TEXT, citation_count INTEGER
+            );
+            INSERT INTO papers (uid, title) VALUES ('doi:10.1/old', 'Old paper');
+            """
+        )
+        con.commit()
+        con.close()
+
+        cache = Cache(str(path))
+        assert cache.get_by_uid("doi:10.1/old").title == "Old paper"
+        cols = {r[1] for r in cache.con.execute("PRAGMA table_info(papers)")}
+        assert "openalex_id" in cols

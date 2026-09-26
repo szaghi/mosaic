@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 from mosaic.models import Paper
@@ -155,41 +156,46 @@ def _to_json(papers: list[Paper], path: Path) -> None:
 
 
 def _to_bibtex(papers: list[Paper], path: Path) -> None:
-    entries = [_bibtex_entry(p, i) for i, p in enumerate(papers, 1)]
+    used: set[str] = set()
+    entries = []
+    for i, p in enumerate(papers, 1):
+        key = _unique_key(_bibtex_key(p, i), used)
+        entries.append(_bibtex_entry(p, i, key=key))
     path.write_text("\n\n".join(entries) + "\n", encoding="utf-8")
 
 
-def _bibtex_entry(p: Paper, index: int) -> str:
+def _bibtex_entry(p: Paper, index: int, key: str | None = None) -> str:
     entry_type = "article" if p.journal else "misc"
-    key = _bibtex_key(p, index)
+    key = key or _bibtex_key(p, index)
 
-    fields: list[tuple[str, str]] = [("title", _brace(p.title))]
+    fields: list[tuple[str, str]] = [("title", _brace(_bib_text(p.title)))]
 
     if p.authors:
-        fields.append(("author", " and ".join(p.authors)))
+        fields.append(("author", " and ".join(_bib_text(a) for a in p.authors if a)))
     if p.year:
         fields.append(("year", str(p.year)))
     if p.journal:
-        fields.append(("journal", _brace(p.journal)))
+        fields.append(("journal", _brace(_bib_text(p.journal))))
     if p.volume:
-        fields.append(("volume", p.volume))
+        fields.append(("volume", _balance_braces(p.volume)))
     if p.issue:
-        fields.append(("number", p.issue))
+        fields.append(("number", _balance_braces(p.issue)))
     if p.pages:
-        fields.append(("pages", p.pages))
+        fields.append(("pages", _balance_braces(p.pages)))
+    # Identifiers and URLs are verbatim fields: only keep their braces balanced
     if p.doi:
-        fields.append(("doi", p.doi))
+        fields.append(("doi", _balance_braces(p.doi)))
     if p.arxiv_id:
-        fields.append(("eprint", p.arxiv_id))
+        fields.append(("eprint", _balance_braces(p.arxiv_id)))
         fields.append(("eprinttype", "arXiv"))
         if not p.journal:
-            fields.append(("howpublished", f"{{arXiv:{p.arxiv_id}}}"))
+            fields.append(("howpublished", f"{{arXiv:{_balance_braces(p.arxiv_id)}}}"))
     if p.abstract:
-        fields.append(("abstract", _brace(p.abstract)))
+        fields.append(("abstract", _brace(_bib_text(p.abstract))))
     if p.pdf_url:
-        fields.append(("pdf", p.pdf_url))
+        fields.append(("pdf", _balance_braces(p.pdf_url)))
     if p.url:
-        fields.append(("url", p.url))
+        fields.append(("url", _balance_braces(p.url)))
     if p.is_open_access:
         fields.append(("note", "Open Access"))
 
@@ -198,16 +204,83 @@ def _bibtex_entry(p: Paper, index: int) -> str:
 
 
 def _bibtex_key(p: Paper, index: int) -> str:
-    last = p.authors[0].split()[-1] if p.authors else "Unknown"
-    last = re.sub(r"[^A-Za-z]", "", last)
+    """``<Family><Year><FirstTitleWord>``, e.g. ``Vaswani2017Attention``."""
+    first = next((a.strip() for a in p.authors if a and a.strip()), "")
+    last = _ascii_letters(_family_name(first)) or "Unknown"
     year = str(p.year) if p.year else "XXXX"
-    word = re.sub(r"[^A-Za-z]", "", (p.title.split()[0] if p.title else ""))
+    word = _ascii_letters(p.title.split()[0] if p.title and p.title.split() else "")
     return f"{last}{year}{word}" or f"entry{index}"
+
+
+def _family_name(author: str) -> str:
+    """Family name of *author* in "Family, Given", "Given Family" or "Family GE" form."""
+    if "," in author:
+        return author.split(",", 1)[0].strip()
+    tokens = author.split()
+    if not tokens:
+        return ""
+    # PubMed style "Hinton GE": trailing run-together initials follow the family name
+    if len(tokens) > 1 and tokens[-1].isupper() and tokens[-1].isalpha() and len(tokens[-1]) <= 3:
+        return tokens[-2]
+    return tokens[-1]
+
+
+def _ascii_letters(s: str) -> str:
+    """Keep only ASCII letters, transliterating accents first (Müller → Muller)."""
+    folded = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return re.sub(r"[^A-Za-z]", "", folded)
+
+
+def _unique_key(key: str, used: set[str]) -> str:
+    """Return *key*, or *key* + a, b, … if it was already used in this export."""
+    candidate = key
+    n = 0
+    while candidate in used:
+        n += 1
+        candidate = key + (chr(ord("a") + n - 1) if n <= 26 else str(n))
+    used.add(candidate)
+    return candidate
 
 
 def _brace(s: str) -> str:
     """Wrap in extra braces to preserve capitalisation in BibTeX."""
     return f"{{{s}}}"
+
+
+def _balance_braces(s: str) -> str:
+    """Drop unmatched ``{``/``}`` — BibTeX aborts the whole entry on unbalanced braces."""
+    out: list[str] = []
+    opens: list[int] = []
+    for ch in s:
+        if ch == "{":
+            opens.append(len(out))
+        elif ch == "}":
+            if not opens:
+                continue
+            opens.pop()
+        out.append(ch)
+    for idx in reversed(opens):
+        del out[idx]
+    return "".join(out)
+
+
+def _bib_text(s: str) -> str:
+    """Make free text safe for a BibTeX field that LaTeX will typeset.
+
+    Escapes ``& % # _`` (and ``$`` when unpaired) outside math, leaves
+    ``$…$`` math segments untouched, and balances braces.
+    """
+    s = _balance_braces(s)
+    parts = re.split(r"(?<!\\)\$", s)
+    if len(parts) % 2 == 0:
+        # Odd number of "$": not math, just a dollar sign somewhere
+        return _escape_latex(s, dollars=True)
+    return "$".join(p if i % 2 else _escape_latex(p) for i, p in enumerate(parts))
+
+
+def _escape_latex(s: str, *, dollars: bool = False) -> str:
+    specials = r"[&%#_$]" if dollars else r"[&%#_]"
+    return re.sub(rf"(?<!\\)({specials})", r"\\\1", s)
 
 
 # ── RIS ───────────────────────────────────────────────────────────────────────

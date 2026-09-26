@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key, parse_year
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.parsing import normalise_doi, parse_authors_name_key, parse_year
+from mosaic.sources.base import BaseSource, any_of, build_field_query, lucene_phrase, with_retry
 
 _BASE = "https://doaj.org/api/v3/search/articles"
 
@@ -38,10 +40,11 @@ class DoajSource(BaseSource):
         )
         if filters:
             if filters.authors:
-                for author in filters.authors:
-                    doaj_query += f' AND bibjson.author.name:"{author}"'
+                doaj_query += " AND " + any_of(
+                    map(lucene_phrase, filters.authors), "bibjson.author.name:{}"
+                )
             if filters.journal:
-                doaj_query += f' AND bibjson.journal.title:"{filters.journal}"'
+                doaj_query += f" AND bibjson.journal.title:{lucene_phrase(filters.journal)}"
             if filters.years:
                 years_expr = " OR ".join(f"bibjson.year:{y}" for y in filters.years)
                 doaj_query += f" AND ({years_expr})"
@@ -50,12 +53,13 @@ class DoajSource(BaseSource):
                     doaj_query += f" AND bibjson.year:>={filters.year_from}"
                 if filters.year_to:
                     doaj_query += f" AND bibjson.year:<={filters.year_to}"
-        # DOAJ uses path-based query: /search/articles/{query}
+        # DOAJ uses path-based query: /search/articles/{query}.  The query must
+        # be fully percent-encoded: a raw "/" would split the path, "#" would
+        # truncate it and "?" would start a query string.
+        url = f"{_BASE}/{quote(doaj_query, safe='')}"
+        params = {"pageSize": min(max_results, 100)}
         with httpx.Client(timeout=30) as client:
-            resp = client.get(
-                f"https://doaj.org/api/v3/search/articles/{httpx.URL(doaj_query)}",
-                params={"pageSize": min(max_results, 100)},
-            )
+            resp = with_retry(lambda: client.get(url, params=params))
             resp.raise_for_status()
             data = resp.json()
         return [self._parse(item) for item in data.get("results", [])]
@@ -81,9 +85,11 @@ class DoajSource(BaseSource):
 
         year = parse_year(bib.get("year"))
 
+        # Only a link explicitly typed as PDF is a PDF — "fulltext" links are
+        # frequently HTML landing pages.
         pdf_url = None
         for link in bib.get("link", []):
-            if link.get("type") == "fulltext" or link.get("content_type") == "PDF":
+            if str(link.get("content_type") or "").upper() == "PDF" and link.get("url"):
                 pdf_url = link.get("url")
                 break
 
@@ -91,7 +97,7 @@ class DoajSource(BaseSource):
             title=bib.get("title") or "",
             authors=authors,
             year=year,
-            doi=identifiers.get("doi"),
+            doi=normalise_doi(identifiers.get("doi")),
             abstract=bib.get("abstract"),
             journal=journal.get("title"),
             volume=journal.get("volume"),

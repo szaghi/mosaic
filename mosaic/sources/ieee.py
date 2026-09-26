@@ -10,8 +10,8 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.parsing import normalise_doi, parse_authors_name_key, parse_year
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, with_retry
 
 _BASE = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
 
@@ -58,15 +58,16 @@ class IEEEXploreSource(BaseSource):
 
         Translates the query into IEEE Xplore query syntax, scoping to
         ``title:`` or ``abstract:`` when requested. Year constraints are
-        sent as native ``start_year`` / ``end_year`` parameters. Author
-        and journal filters are applied as post-processing by the framework.
+        sent as native ``start_year`` / ``end_year`` parameters, a single
+        author as ``author`` and the journal as ``publication_title``.
+        Several authors cannot be OR-ed through the ``author`` parameter, so
+        they are left to the framework's post-filter.
 
         Args:
             query: Free-text search query.
             max_results: Maximum number of results to request (capped at 200).
-            filters: Optional filters for field scoping and year range.
-                ``raw_query`` overrides the default mapping if set. Author
-                and journal filters are applied as post-processing.
+            filters: Optional filters for field scoping, year range, author,
+                and journal. ``raw_query`` overrides the default mapping if set.
 
         Returns:
             A list of Paper objects parsed from the ``articles`` array.
@@ -85,9 +86,13 @@ class IEEEXploreSource(BaseSource):
                 params["start_year"] = y_from
             if y_to:
                 params["end_year"] = y_to
+            if len(filters.authors) == 1:
+                params["author"] = filters.authors[0]
+            if filters.journal:
+                params["publication_title"] = filters.journal
 
         with httpx.Client(timeout=30) as client:
-            resp = client.get(_BASE, params=params)
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             articles = resp.json().get("articles", [])
         return [self._parse(item) for item in articles]
@@ -113,10 +118,9 @@ class IEEEXploreSource(BaseSource):
         authors_list = authors_wrapper.get("authors") or []
         authors = parse_authors_name_key(authors_list, key="full_name")
 
-        year_raw = item.get("publication_year")
-        year: int | None = int(year_raw) if year_raw else None
+        year = parse_year(item.get("publication_year"))
 
-        doi = item.get("doi") or None
+        doi = normalise_doi(item.get("doi"))
 
         abstract = item.get("abstract") or None
 

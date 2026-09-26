@@ -10,12 +10,17 @@ Uses Firefox headless (preferred via _HEADLESS_PREFERENCE).
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import re
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import normalise_doi
+from mosaic.sources.base import BaseSource, ensure_playwright
+
+log = logging.getLogger(__name__)
 
 _SP_BASE = "https://link.springer.com"
 _SEARCH_URL = f"{_SP_BASE}/search"
@@ -44,8 +49,7 @@ class SpringerBrowserSource(BaseSource):
         """Search Springer Nature via a headless browser.
 
         Fetches one or more paginated result pages (20 results per page) and
-        stops early when sufficient results are collected. Returns an empty
-        list on any error.
+        stops early when sufficient results are collected.
 
         Args:
             query: Free-text search query.
@@ -55,14 +59,18 @@ class SpringerBrowserSource(BaseSource):
 
         Returns:
             A list of Paper objects scraped from Springer search results.
-        """
-        try:
-            from mosaic.auth import _require_playwright
 
-            _require_playwright()
+        Raises:
+            SourceError: When Playwright is missing or the browser run fails
+                before any result was collected.
+        """
+        ensure_playwright()
+        try:
             return asyncio.run(self._browser_search(query, max_results, filters))
-        except Exception:
-            return []
+        except SourceError:
+            raise
+        except Exception as e:
+            raise SourceError(f"browser search failed: {e}") from e
 
     # ── async internals ───────────────────────────────────────────────────────
 
@@ -95,26 +103,28 @@ class SpringerBrowserSource(BaseSource):
             context = await browser.new_context()
             page = await context.new_page()
             try:
-                from rich import print as rprint
-
                 for page_num in range(1, pages_needed + 1):
                     url = self._build_url(query, filters, page_num)
-                    await page.goto(url, wait_until="networkidle", timeout=30_000)
+                    try:
+                        await page.goto(url, wait_until="networkidle", timeout=30_000)
+                    except Exception:
+                        if not papers:
+                            raise
+                        # Keep what the earlier pages returned.
+                        log.warning("Springer: page %d failed to load", page_num, exc_info=True)
+                        break
                     try:
                         await page.wait_for_selector("li.app-card-open", timeout=10_000)
                     except Exception:
                         if page_num == 1:
-                            rprint(
-                                "[yellow]Springer: result items not found — "
-                                "the page structure may have changed.[/yellow]"
-                            )
+                            # Either a query without results or a changed
+                            # page structure — indistinguishable here.
+                            log.info("Springer: no result items found on the first page")
                         break
                     batch = await self._extract_results(page, max_results - len(papers))
                     papers.extend(batch)
                     if len(batch) < _PAGE_SIZE or len(papers) >= max_results:
                         break
-            except Exception:
-                pass
             finally:
                 await browser.close()
         return papers
@@ -206,9 +216,9 @@ class SpringerBrowserSource(BaseSource):
 
         # ── DOI (encoded in the article path) ────────────────────────────────
         doi: str | None = None
-        m = re.search(r"10\.\d{4,}/\S+", href)
+        m = re.search(r"10\.\d{4,}/\S+", unquote(href))
         if m:
-            doi = m.group(0).rstrip(".,)")
+            doi = normalise_doi(m.group(0).rstrip(".,)"))
 
         # ── authors ───────────────────────────────────────────────────────────
         authors: list[str] = []

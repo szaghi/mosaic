@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import httpx
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.parsing import normalise_doi
+from mosaic.sources.base import BaseSource, build_field_query, with_retry
 
 _BASE = "https://dblp.org/search/publ/api"
 
@@ -50,8 +52,10 @@ class DBLPSource(BaseSource):
         """Search the DBLP publication search API.
 
         DBLP does not support native year, author, or journal filters; all
-        three are applied as post-processing by the framework. Field scoping
-        to title uses the DBLP ``$`` suffix convention (``q={query}$``).
+        three are applied as post-processing by the framework. DBLP has no
+        title-only query either (its ``$`` suffix means "exact word", not
+        "title"), so field scoping leaves the query unchanged — DBLP matches
+        mostly on titles anyway.
 
         Args:
             query: Free-text search query.
@@ -64,7 +68,7 @@ class DBLPSource(BaseSource):
             A list of Paper objects parsed from the ``result.hits.hit`` array.
             Returns an empty list when no hits are present in the response.
         """
-        q = build_field_query(query, filters, "{}$", "{}")
+        q = build_field_query(query, filters, "{}", "{}")
 
         params: dict = {
             "q": q,
@@ -74,9 +78,17 @@ class DBLPSource(BaseSource):
         }
 
         with httpx.Client(timeout=30) as client:
-            resp = client.get(_BASE, params=params)
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
-            hits = resp.json().get("result", {}).get("hits", {})
+            try:
+                data = resp.json()
+            except ValueError:
+                # dblp.org fronts the API with an anti-bot challenge page at times
+                raise SourceError(
+                    "DBLP returned an HTML page instead of JSON (its anti-bot check is "
+                    "blocking scripted access); try again later"
+                ) from None
+            hits = data.get("result", {}).get("hits", {})
             raw_hits = hits.get("hit", [])
         if not raw_hits:
             return []
@@ -105,7 +117,7 @@ class DBLPSource(BaseSource):
         if raw_author is None:
             authors: list[str] = []
         elif isinstance(raw_author, dict):
-            authors = [raw_author.get("text", "")]
+            authors = [raw_author["text"]] if raw_author.get("text") else []
         else:
             authors = [a.get("text", "") for a in raw_author if a.get("text")]
 
@@ -115,7 +127,7 @@ class DBLPSource(BaseSource):
         except (KeyError, TypeError, ValueError):
             year = None
 
-        doi = info.get("doi") or None
+        doi = normalise_doi(info.get("doi"))
 
         # venue → journal
         journal = info.get("venue") or None

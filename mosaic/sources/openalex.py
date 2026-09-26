@@ -5,7 +5,8 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import normalise_doi
+from mosaic.sources.base import BaseSource, with_retry
 
 _BASE = "https://api.openalex.org/works"
 _SELECT = (
@@ -48,9 +49,9 @@ class OpenAlexSource(BaseSource):
         if filters and filters.raw_query:
             params["search"] = filters.raw_query
         elif filters and filters.field == "title":
-            params["filter"] = f"title.search:{query}"
+            params["filter"] = f"title.search:{_filter_value(query)}"
         elif filters and filters.field == "abstract":
-            params["filter"] = f"abstract.search:{query}"
+            params["filter"] = f"abstract.search:{_filter_value(query)}"
         else:
             params["search"] = query
 
@@ -62,6 +63,11 @@ class OpenAlexSource(BaseSource):
                 y_from = filters.year_from or filters.year_to
                 y_to = filters.year_to or filters.year_from
                 filter_parts.append(f"publication_year:{y_from}-{y_to}")
+            # OR across authors ("|"); commas would start a new filter clause.
+            # OpenAlex has no venue-name filter, so journals stay post-filtered.
+            names = [n for n in (_author_value(a) for a in filters.authors or []) if n]
+            if names:
+                filter_parts.append(f"raw_author_name.search:{'|'.join(names)}")
         if filter_parts:
             # Merge with any existing filter (e.g. title.search set above)
             existing = params.get("filter", "")
@@ -70,7 +76,7 @@ class OpenAlexSource(BaseSource):
             )
 
         with httpx.Client(timeout=30) as client:
-            resp = client.get(_BASE, params=params)
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             results = resp.json().get("results", [])
         return [self._parse(item) for item in results]
@@ -91,10 +97,13 @@ class OpenAlexSource(BaseSource):
         Returns:
             A Paper populated with available bibliographic metadata.
         """
-        authors = [a.get("author", {}).get("display_name", "") for a in item.get("authorships", [])]
+        authors = [
+            name
+            for a in item.get("authorships") or []
+            if (name := ((a or {}).get("author") or {}).get("display_name"))
+        ]
 
-        doi_raw = item.get("doi") or ""
-        doi = doi_raw.removeprefix("https://doi.org/") or None
+        doi = normalise_doi(item.get("doi"))
 
         ids = item.get("ids") or {}
         arxiv_raw = ids.get("arxiv") or ""
@@ -133,6 +142,20 @@ class OpenAlexSource(BaseSource):
             citation_count=item.get("cited_by_count"),
             openalex_id=openalex_id,
         )
+
+
+def _author_value(name: str) -> str:
+    """Make an author name safe inside an OpenAlex ``filter`` value."""
+    return " ".join(name.replace(",", " ").replace("|", " ").split())
+
+
+def _filter_value(text: str) -> str:
+    """Make *text* safe inside an OpenAlex ``filter`` value.
+
+    Commas separate filters (``a:x,b:y``), so a comma inside the query would
+    split it into a bogus second filter and the API rejects the request.
+    """
+    return " ".join(text.replace(",", " ").split())
 
 
 def _reconstruct_abstract(inverted_index: dict | None) -> str | None:

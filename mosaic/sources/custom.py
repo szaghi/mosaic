@@ -7,7 +7,8 @@ import re
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import normalise_doi
+from mosaic.sources.base import BaseSource, with_retry
 
 
 def _get_nested(obj: dict, path: str):
@@ -109,12 +110,14 @@ class CustomSource(BaseSource):
             params: dict = {self._query_param: q}
             if self._max_results_param:
                 params[self._max_results_param] = limit
-            resp = httpx.get(self._url, params=params, headers=headers, timeout=30)
+            resp = with_retry(
+                lambda: httpx.get(self._url, params=params, headers=headers, timeout=30)
+            )
         else:
             body: dict = {self._query_param: q}
             if self._max_results_param:
                 body[self._max_results_param] = limit
-            resp = httpx.post(self._url, json=body, headers=headers, timeout=30)
+            resp = with_retry(lambda: httpx.post(self._url, json=body, headers=headers, timeout=30))
 
         resp.raise_for_status()
         data = resp.json()
@@ -146,18 +149,23 @@ class CustomSource(BaseSource):
 
         if self._authors_path and self._authors_field:
             raw = _get_nested(item, self._authors_path) or []
-            authors = [a.get(self._authors_field, "") for a in raw if isinstance(a, dict)]
+            authors = [
+                str(a[self._authors_field])
+                for a in raw
+                if isinstance(a, dict) and a.get(self._authors_field)
+            ]
         elif "authors" in self._fields:
             raw = _get_nested(item, self._fields["authors"]) or []
             authors = [str(a) for a in raw if a]
         else:
             authors = []
 
+        doi = field("doi")
         return Paper(
             title=str(field("title") or ""),
             authors=authors,
             year=_parse_year(field("year")),
-            doi=field("doi") or None,
+            doi=normalise_doi(str(doi)) if doi else None,
             abstract=field("abstract") or None,
             journal=field("journal") or None,
             pdf_url=field("pdf_url") or None,

@@ -20,6 +20,8 @@ that contains no template variables.
 
 from __future__ import annotations
 
+import hashlib
+import re
 from pathlib import Path
 
 from mosaic.models import Paper
@@ -80,6 +82,48 @@ def _frontmatter(data: dict) -> str:
     return "\n".join(lines)
 
 
+def _read_frontmatter(path: Path) -> dict[str, str]:
+    """Return the top-level scalar properties of a note's YAML frontmatter.
+
+    Only understands what :func:`_frontmatter` writes (bare or double-quoted
+    scalars); lists and nested values are ignored.  Unreadable files and notes
+    without frontmatter yield an empty dict.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    props: dict[str, str] = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        m = re.match(r"^([A-Za-z_][\w-]*):\s?(.*)$", line)
+        if not m:
+            continue
+        value = m.group(2).strip()
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            value = value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+        props[m.group(1)] = value
+    return props
+
+
+def _note_is_for(path: Path, paper: Paper) -> bool:
+    """True if the existing note at *path* describes *paper* (by DOI, arXiv ID or title)."""
+    props = _read_frontmatter(path)
+    if paper.doi and props.get("doi"):
+        return props["doi"].lower() == paper.doi.lower()
+    if paper.arxiv_id and props.get("arxiv_id"):
+        return props["arxiv_id"].lower() == paper.arxiv_id.lower()
+
+    def _norm(s: str) -> str:
+        return " ".join(s.lower().split())
+
+    return bool(props.get("title")) and _norm(props["title"]) == _norm(paper.title or "")
+
+
 # ── main class ────────────────────────────────────────────────────────────────
 
 
@@ -87,8 +131,10 @@ class ObsidianVault:
     """Write MOSAIC search results as Obsidian-compatible paper notes.
 
     Each paper becomes one ``.md`` file inside the vault.  Notes are never
-    overwritten — a note whose filename already exists is silently skipped,
-    preserving any manual edits the user may have made.
+    overwritten — a paper whose note already exists is silently skipped,
+    preserving any manual edits the user may have made.  If the filename is
+    taken by a *different* paper's note (or a note of the user's own), the new
+    note gets a short uid-derived suffix instead.
 
     The generated format is compatible with:
 
@@ -155,6 +201,10 @@ class ObsidianVault:
     def note_path(self, paper: Paper) -> Path:
         """Return the full path of the ``.md`` note for *paper*.
 
+        Normally ``<note_stem>.md``.  When that file already holds the note of
+        a *different* paper (two papers can slug to the same name), a
+        uid-suffixed name is used instead so neither note is lost.
+
         Args:
             paper: Target paper.
 
@@ -162,7 +212,7 @@ class ObsidianVault:
             Absolute :class:`~pathlib.Path` to the note file (which may or
             may not exist yet).
         """
-        return self.notes_dir / f"{self.note_stem(paper)}.md"
+        return self._resolve_note_path(paper, {})
 
     def note_exists(self, paper: Paper) -> bool:
         """Return ``True`` if the expected note file already exists on disk.
@@ -189,38 +239,68 @@ class ObsidianVault:
 
         Returns:
             A ``(added, skipped)`` tuple — the number of notes written and the
-            number skipped because the destination file already existed.
+            number skipped because the paper's note already existed.
         """
         self.notes_dir.mkdir(parents=True, exist_ok=True)
 
-        # Pre-compute stems once for wikilinks (batch-scoped only)
+        # Resolve every note path up front — papers in the same batch may slug
+        # to the same name — so wikilinks point at the files actually written.
+        claimed: dict[Path, Paper] = {}
+        paths: dict[int, Path] = {}
+        for p in papers:
+            path = self._resolve_note_path(p, claimed)
+            paths[id(p)] = path
+            claimed.setdefault(path, p)
+
         stems: dict[int, str] = (
-            {id(p): self.note_stem(p) for p in papers}
+            {id(p): paths[id(p)].stem for p in papers}
             if self._wikilinks and len(papers) > 1
             else {}
         )
 
         added = skipped = 0
         for paper in papers:
-            if self.note_exists(paper):
+            path = paths[id(paper)]
+            if path.exists():
                 skipped += 1
                 continue
             related = [stems[id(q)] for q in papers if q is not paper] if stems else []
-            self._write_note(paper, related)
+            self._write_note(paper, related, path)
             added += 1
         return added, skipped
 
     # ── internals ─────────────────────────────────────────────────────────────
 
-    def _write_note(self, paper: Paper, related_stems: list[str]) -> None:
+    def _resolve_note_path(self, paper: Paper, claimed: dict[Path, Paper]) -> Path:
+        """Pick the note path for *paper*: the plain name unless another paper owns it.
+
+        Args:
+            paper: Target paper.
+            claimed: Paths already assigned earlier in the current batch.
+        """
+        base = self.notes_dir / f"{self.note_stem(paper)}.md"
+        suffix = hashlib.sha256(paper.uid.encode("utf-8")).hexdigest()[:6]
+        alt = base.with_name(f"{base.stem}_{suffix}.md")
+        for candidate in (base, alt):
+            owner = claimed.get(candidate)
+            if owner is not None:
+                if owner.uid == paper.uid:
+                    return candidate
+                continue
+            if not candidate.exists() or _note_is_for(candidate, paper):
+                return candidate
+        return alt
+
+    def _write_note(self, paper: Paper, related_stems: list[str], path: Path) -> None:
         """Render *paper* and write the note file to disk.
 
         Args:
             paper: Paper to render.
             related_stems: Stems of other papers in the same batch, used to
                 generate ``[[wikilinks]]`` in the *See also* section.
+            path: Destination note file.
         """
-        self.note_path(paper).write_text(self._render(paper, related_stems), encoding="utf-8")
+        path.write_text(self._render(paper, related_stems), encoding="utf-8")
 
     def _render(self, paper: Paper, related_stems: list[str]) -> str:
         """Render a :class:`~mosaic.models.Paper` as an Obsidian Markdown string.

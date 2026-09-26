@@ -1,15 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Bulk Download &mdash; MOSAIC{% endblock %}
 
+{% block head %}
+<style>
+  .bulk-suboptions { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
+                     margin: .25rem 0 0 3.25rem; }
+  .bulk-suboptions input[type=text] { width: 16rem; margin: 0; padding: .3rem .6rem; height: 2.2rem; }
+  .bulk-suboptions label { margin: 0; font-size: .9em; }
+</style>
+{% endblock %}
+
 {% block content %}
 <h2>Bulk Download</h2>
-<p>Upload a <strong>.bib</strong> (BibTeX) or <strong>.csv</strong> file containing DOIs to download all papers at once.</p>
+<p>Upload a <strong>.bib</strong> (BibTeX) or <strong>.csv</strong> file containing DOIs to download all papers at once
+(same as <code>mosaic get --from</code>). Metadata already in your library is reused for file names and exports.</p>
 
 <form id="bulk-form" enctype="multipart/form-data" onsubmit="return false;">
   <label>
     Select file
     <input type="file" name="file" accept=".bib,.csv" required>
   </label>
+  <fieldset>
+    <label><input type="checkbox" name="oa_only" role="switch"> Report papers without an OA copy as skipped, not failed</label>
+    <label><input type="checkbox" name="obsidian" role="switch"> Export the papers to Obsidian afterwards</label>
+    <label><input type="checkbox" name="zotero" role="switch"> Send to Zotero afterwards (PDFs attached)</label>
+    <div class="bulk-suboptions">
+      <input type="text" name="zotero_collection" placeholder="Zotero collection (optional)"
+             aria-label="Zotero collection (optional)">
+      <label title="Use the Zotero desktop local API even when a web API key is configured">
+        <input type="checkbox" name="zotero_local"> local API
+      </label>
+    </div>
+  </fieldset>
   <button type="submit"
           hx-post="{{ url_for('ui.bulk_submit') }}"
           hx-target="#results"

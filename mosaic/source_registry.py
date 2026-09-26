@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 from mosaic.sources import (
@@ -110,14 +111,29 @@ def _email(cls: type[BaseSource]) -> _Factory:
 # ---------------------------------------------------------------------------
 
 
-def _make_arxiv(cfg: dict, _src: dict) -> BaseSource:
-    return ArxivSource(delay=cfg.get("rate_limit_delay", 3.0))
+_ARXIV_MIN_DELAY = 3.0  # arXiv API terms: at most one request every 3 seconds
 
 
-def _make_sciencedirect(_cfg: dict, src: dict) -> BaseSource | None:
+def _make_arxiv(cfg: dict, src: dict) -> BaseSource:
+    # An arXiv-specific delay wins; otherwise never go below arXiv's 3 s
+    # minimum even though the global rate_limit_delay defaults to 1 s.
+    delay = src.get("rate_limit_delay")
+    if delay is None:
+        delay = max(_ARXIV_MIN_DELAY, float(cfg.get("rate_limit_delay") or 0))
+    return ArxivSource(delay=delay)
+
+
+def _make_sciencedirect(cfg: dict, src: dict) -> BaseSource | None:
     api_key = src.get("api_key", "")
     if api_key:
-        return ScienceDirectSource(api_key=api_key, open_access_only=True)
+        # Elsevier institutional tokens are shared by ScienceDirect and
+        # Scopus; the config UI only exposes the Scopus one.
+        inst_token = (
+            src.get("inst_token")
+            or cfg.get("sources", {}).get("scopus", {}).get("inst_token")
+            or ""
+        )
+        return ScienceDirectSource(api_key=api_key, inst_token=inst_token, open_access_only=True)
     browser = ScienceDirectBrowserSource()
     return browser if browser.available() else None
 
@@ -172,6 +188,36 @@ _SOURCE_REGISTRY: list[tuple[str, _Factory]] = [
     ("springer", _make_springer_browser),
     ("scopus", _make_scopus),
 ]
+
+
+def custom_source_key(name: str) -> str:
+    """Stable selector key for a custom source (``--source`` / web UI checkbox).
+
+    The display name is slugified; a slug that collides with a built-in
+    shorthand gets a ``custom-`` prefix.
+
+    >>> custom_source_key("My Lab API")
+    'my-lab-api'
+    >>> custom_source_key("arXiv")
+    'custom-arxiv'
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "custom"
+    return f"custom-{slug}" if slug in SRC_MAP else slug
+
+
+def source_choices(cfg: dict) -> dict[str, str]:
+    """Map every selectable source key to its display name (``BaseSource.name``).
+
+    This is ``SRC_MAP`` plus one entry per enabled custom source defined in
+    ``cfg["custom_sources"]`` — the full set a user can pick from with
+    ``--source`` or the web UI source checkboxes.
+    """
+    choices = dict(SRC_MAP)
+    for custom_cfg in cfg.get("custom_sources", []):
+        name = custom_cfg.get("name")
+        if name and custom_cfg.get("enabled", True):
+            choices[custom_source_key(name)] = name
+    return choices
 
 
 def build_sources(cfg: dict) -> list[BaseSource]:

@@ -2,7 +2,81 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass, field
+
+
+def _name_tokens(name: str) -> list[str]:
+    """Lower-case, accent-free word tokens of a person name.
+
+    Run-together initials as PubMed writes them are split into single
+    letters: ``"Hinton GE"`` → ``["hinton", "g", "e"]``, and
+    ``"Hinton, G. E."`` gives the same tokens.
+    """
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    tokens: list[str] = []
+    for raw in re.split(r"[^\w]+", ascii_name):
+        if not raw:
+            continue
+        if 2 <= len(raw) <= 3 and raw.isalpha() and raw.isupper():
+            tokens.extend(raw.lower())
+        else:
+            tokens.append(raw.lower())
+    return tokens
+
+
+def _given_compatible(filter_token: str, author_token: str) -> bool:
+    """True if two given-name tokens can denote the same person (name or initial)."""
+    if filter_token == author_token:
+        return True
+    if len(filter_token) == 1 or len(author_token) == 1:
+        return filter_token[0] == author_token[0]
+    return False
+
+
+def _author_name_matches(filter_name: str, author: str) -> bool:
+    """Token-based match of one filter name against one author name.
+
+    One filter token must equal an author token (the surname); every other
+    filter token must be compatible with a distinct remaining author token.
+    Name order, commas, periods, case and accents are ignored, so
+    "Geoffrey Hinton" matches "Hinton GE", "Hinton, G. E." and
+    "Geoffrey E. Hinton".
+    """
+    f_tokens = _name_tokens(filter_name)
+    a_tokens = _name_tokens(author)
+    if not f_tokens or not a_tokens:
+        return False
+    for i, surname in enumerate(f_tokens):
+        if len(surname) < 2 or surname not in a_tokens:
+            continue
+        remaining = list(a_tokens)
+        remaining.remove(surname)
+        if not remaining:
+            return True  # author recorded by surname only
+        ok = True
+        for given in f_tokens[:i] + f_tokens[i + 1 :]:
+            match = next((t for t in remaining if _given_compatible(given, t)), None)
+            if match is None:
+                ok = False
+                break
+            remaining.remove(match)
+        if ok:
+            return True
+    return False
+
+
+def _author_matches(filter_name: str, authors: list[str]) -> bool:
+    """True if *filter_name* matches any of *authors*.
+
+    The historical case-insensitive substring match is kept (so partial names
+    such as "Hint" still work); token matching is tried on top of it.
+    """
+    needle = filter_name.lower()
+    if needle and needle in " ".join(authors).lower():
+        return True
+    return any(_author_name_matches(filter_name, a) for a in authors)
 
 
 @dataclass
@@ -31,8 +105,8 @@ class SearchFilters:
                 if self.year_to is not None and paper.year > self.year_to:
                     return False
         if self.authors:
-            combined = " ".join(paper.authors).lower()
-            if not any(a.lower() in combined for a in self.authors):
+            names = [a for a in paper.authors if a]
+            if not any(_author_matches(f, names) for f in self.authors):
                 return False
         return not (
             self.journal
@@ -119,15 +193,15 @@ class Paper:
         return f"{self.authors[0]} et al."
 
     def safe_filename(self, pattern: str = "{year}_{source}_{author}_{title}") -> str:
-        import re
-
         def _slug(text: str, max_len: int = 60) -> str:
             s = re.sub(r"[^\w\s-]", "", text)[:max_len].strip()
             return re.sub(r"\s+", "_", s)
 
         year = str(self.year) if self.year else "0000"
         source = _slug(self.source)
-        author = _slug(self.short_authors.split()[0] if self.authors else "Unknown")
+        # First word of the first non-blank author (blank names must not crash)
+        first_author = next((a.strip() for a in self.authors if a and a.strip()), "")
+        author = _slug(first_author.split()[0]) if first_author else "Unknown"
         title = _slug(self.title)
         doi = re.sub(r"[^\w.-]", "_", self.doi) if self.doi else "no_doi"
         journal = _slug(self.journal) if self.journal else "no_journal"

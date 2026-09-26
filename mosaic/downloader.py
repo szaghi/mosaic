@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 from pathlib import Path
 
 import httpx
@@ -12,6 +14,20 @@ from mosaic.models import Paper
 from mosaic.sources import unpaywall
 
 log = logging.getLogger(__name__)
+
+# PDF files start with "%PDF-"; the spec lets readers tolerate a little junk
+# before the header, so look for it within the first KiB.
+_PDF_MAGIC = b"%PDF-"
+_PDF_HEAD_BYTES = 1024
+
+
+class NotAPDFError(ValueError):
+    """Raised when a download succeeded at the HTTP level but is not a PDF."""
+
+
+def looks_like_pdf(head: bytes) -> bool:
+    """Return True if *head* (the first bytes of a file) contains the PDF header."""
+    return _PDF_MAGIC in head[:_PDF_HEAD_BYTES]
 
 
 def download(
@@ -31,7 +47,7 @@ def download(
 
     dest_dir = Path(download_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / paper.safe_filename(filename_pattern)
+    dest = _unique_dest(dest_dir / paper.safe_filename(filename_pattern), paper, cache)
 
     # ── step 1: known pdf_url ─────────────────────────────────────────────────
     pdf_url = paper.pdf_url
@@ -80,11 +96,39 @@ def download(
             if asyncio.run(_try_sessions()):
                 cache.set_download(paper.uid, str(dest), "ok")
                 return str(dest)
+        except ImportError:
+            # Playwright not installed — the browser path is simply unavailable
+            log.debug("Browser session download skipped: Playwright is not installed")
         except Exception:
             log.debug("Browser session download failed for %s", landing_url, exc_info=True)
 
     cache.set_download(paper.uid, "", "error: no pdf found")
     return None
+
+
+def _unique_dest(dest: Path, paper: Paper, cache: Cache) -> Path:
+    """Return *dest*, or a uid-suffixed variant if *dest* belongs to another paper.
+
+    Different papers can slug to the same filename (same year, source, first
+    author token and 60-char title prefix).  Without this check the second
+    download would overwrite the first, and the first paper's cache record
+    would then point at the wrong PDF.
+    """
+    owner = _path_owner(cache, dest)
+    if owner is None or owner == paper.uid:
+        return dest
+    suffix = hashlib.sha256(paper.uid.encode("utf-8")).hexdigest()[:6]
+    return dest.with_name(f"{dest.stem}_{suffix}{dest.suffix}")
+
+
+def _path_owner(cache: Cache, path: Path) -> str | None:
+    """Return the uid of the paper whose successful download lives at *path*."""
+    try:
+        uid = cache.get_download_owner(str(path))
+    except Exception:
+        log.debug("Could not look up the owner of %s", path, exc_info=True)
+        return None
+    return uid if isinstance(uid, str) else None
 
 
 def _resolve_redirect(url: str) -> str:
@@ -99,8 +143,31 @@ def _resolve_redirect(url: str) -> str:
 
 
 def _fetch(url: str, dest: str) -> None:
-    with httpx.stream("GET", url, timeout=120, follow_redirects=True) as r:
-        r.raise_for_status()
-        with open(dest, "wb") as f:
-            for chunk in r.iter_bytes(8192):
-                f.write(chunk)
+    """Stream *url* to *dest*, keeping it only if it is really a PDF.
+
+    The body is written to ``<dest>.part`` and moved into place on success, so
+    a failed or non-PDF download never truncates an existing good file and
+    never leaves a partial file behind.
+
+    Raises:
+        httpx.HTTPError: On network or HTTP status errors.
+        NotAPDFError: When the server returned something other than a PDF
+            (typically an HTML login or paywall page).
+    """
+    part = Path(dest + ".part")
+    try:
+        with httpx.stream("GET", url, timeout=120, follow_redirects=True) as r:
+            r.raise_for_status()
+            head = b""
+            with open(part, "wb") as f:
+                for chunk in r.iter_bytes(8192):
+                    if len(head) < _PDF_HEAD_BYTES:
+                        head += chunk[: _PDF_HEAD_BYTES - len(head)]
+                    f.write(chunk)
+            content_type = r.headers.get("content-type", "")
+        if not looks_like_pdf(head):
+            raise NotAPDFError(f"{url} did not return a PDF (Content-Type: {content_type or '?'})")
+        os.replace(part, dest)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise

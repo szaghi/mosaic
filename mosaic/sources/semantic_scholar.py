@@ -5,8 +5,8 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import normalise_doi, parse_authors_name_key
+from mosaic.sources.base import BaseSource, with_retry
 
 _BASE = "https://api.semanticscholar.org/graph/v1"
 _FIELDS = "title,authors,year,abstract,externalIds,openAccessPdf,publicationVenue,journal,isOpenAccess,citationCount"
@@ -47,10 +47,8 @@ class SemanticScholarSource(BaseSource):
                 y_to = filters.year_to or filters.year_from
                 params["year"] = f"{y_from}-{y_to}" if y_from != y_to else str(y_from)
         with httpx.Client(timeout=30, headers=self._headers) as client:
-            resp = client.get(
-                f"{_BASE}/paper/search",
-                params=params,
-            )
+            # Unauthenticated requests share a global pool and hit 429 often.
+            resp = with_retry(lambda: client.get(f"{_BASE}/paper/search", params=params))
             resp.raise_for_status()
             data = resp.json()
         return [self._parse(item) for item in data.get("data", [])]
@@ -78,7 +76,7 @@ class SemanticScholarSource(BaseSource):
             title=item.get("title") or "",
             authors=authors,
             year=item.get("year"),
-            doi=ext.get("DOI"),
+            doi=normalise_doi(ext.get("DOI")),
             arxiv_id=ext.get("ArXiv"),
             abstract=item.get("abstract"),
             journal=journal.get("name") or venue.get("name"),

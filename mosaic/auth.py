@@ -6,9 +6,10 @@ import asyncio
 import datetime
 import json
 import logging
+import os
 import time
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 log = logging.getLogger(__name__)
 
@@ -46,10 +47,8 @@ def _meta_path(name: str) -> Path:
 def _save_meta(name: str, login_url: str) -> None:
     meta = {"login_url": login_url, "domain": urlparse(login_url).netloc}
     # 0o600: meta file lives alongside session cookies — restrict to owner only
-    import os as _os
-
-    raw_fd = _os.open(str(_meta_path(name)), _os.O_WRONLY | _os.O_CREAT | _os.O_TRUNC, 0o600)
-    with _os.fdopen(raw_fd, "w") as f:
+    raw_fd = os.open(str(_meta_path(name)), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(raw_fd, "w") as f:
         json.dump(meta, f)
 
 
@@ -215,6 +214,8 @@ async def browser_download(landing_url: str, dest: str, session_name: str) -> bo
     _require_playwright()
     from playwright.async_api import async_playwright
 
+    from mosaic.downloader import looks_like_pdf
+
     async with async_playwright() as p:
         browser = await _launch_browser(p, headless=True)
         context = await browser.new_context(storage_state=str(state_file))
@@ -227,9 +228,21 @@ async def browser_download(landing_url: str, dest: str, session_name: str) -> bo
             response = await context.request.get(pdf_url, timeout=120_000)
             if not response.ok:
                 return False
-            Path(dest).parent.mkdir(parents=True, exist_ok=True)
-            with open(dest, "wb") as f:
-                f.write(await response.body())
+            body = await response.body()
+            if not looks_like_pdf(body):
+                # Typically an HTML login/paywall page: the session is not
+                # entitled to the PDF — let the caller try the next option.
+                log.debug("Browser download from %s did not return a PDF", pdf_url)
+                return False
+            dest_path = Path(dest)
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            part = dest_path.with_name(dest_path.name + ".part")
+            try:
+                part.write_bytes(body)
+                os.replace(part, dest_path)
+            except BaseException:
+                part.unlink(missing_ok=True)
+                raise
             return True
         except Exception:
             log.debug("Browser download failed for %s", landing_url, exc_info=True)
@@ -268,27 +281,25 @@ async def _find_pdf_url(page) -> str | None:
 
 
 def _absolutise(href: str, base_url: str) -> str:
-    """Convert a relative href to an absolute URL."""
-    if href.startswith("http"):
-        return href
-    parsed = urlparse(base_url)
-    if href.startswith("/"):
-        return f"{parsed.scheme}://{parsed.netloc}{href}"
-    return f"{parsed.scheme}://{parsed.netloc}/{href}"
+    """Resolve *href* against the page URL (relative, root-relative or protocol-relative)."""
+    return urljoin(base_url, href)
 
 
 def _require_playwright() -> None:
+    """Raise ImportError with install instructions if Playwright is missing.
+
+    Library code must not exit the process: the web UI runs downloads in
+    worker threads, and ``mosaic get --from`` must keep going with the next
+    DOI.  The CLI turns this into a friendly message.
+    """
     try:
         import playwright  # noqa: F401
     except ImportError:
-        from rich import print as rprint
-
-        rprint(
-            "[red]Playwright is not installed.[/red]\n"
-            "Install it with: [bold]pip install 'mosaic-search[browser]'[/bold]\n"
-            "Then run: [bold]playwright install chromium[/bold]"
-        )
-        raise SystemExit(1) from None
+        raise ImportError(
+            "Playwright is not installed.\n"
+            "Install it with: pip install 'mosaic-search[browser]'\n"
+            "Then run: playwright install chromium"
+        ) from None
 
 
 def has_browser() -> bool:
@@ -297,7 +308,6 @@ def has_browser() -> bool:
         import playwright  # noqa: F401
     except ImportError:
         return False
-    import os
     import sys
 
     pw_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")

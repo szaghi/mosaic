@@ -3,6 +3,9 @@
 
 {% block content %}
 <h2>AI Features</h2>
+{% for warning in health %}
+<article class="alert-warning">&#9888; {{ warning }}</article>
+{% endfor %}
 
 <p>MOSAIC includes a local RAG (Retrieval-Augmented Generation) pipeline that lets you
 query and chat with your cached papers using a semantic vector index and an LLM of your choice.</p>
@@ -31,6 +34,11 @@ query and chat with your cached papers using a semantic vector index and an LLM 
       <dt>Papers indexed</dt><dd>{{ indexed_count }}</dd>
       {% if embedding_model %}
       <dt>Embedding model</dt><dd><code>{{ embedding_model }}</code></dd>
+      {% else %}
+      <dt>Embedding model</dt><dd><em>Not configured &mdash; set it in <a href="{{ url_for('ui.config_page') }}">Config</a></em></dd>
+      {% endif %}
+      {% if indexed_model and indexed_model != embedding_model %}
+      <dt>Index built with</dt><dd><code>{{ indexed_model }}</code></dd>
       {% endif %}
     </dl>
     <a href="{{ url_for('ui.rag_index_page') }}" role="button">Go to Index &rarr;</a>

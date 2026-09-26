@@ -1,6 +1,7 @@
 """Shared fixtures and coverage reporting hook."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -12,19 +13,34 @@ _PUBLIC = Path(__file__).parent.parent / "docs" / "public"
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """After the test run: write coverage.json and coverage-badge.json to docs/public/."""
+    """After the test run: write coverage.json and coverage-badge.json to docs/public/.
+
+    Skipped when coverage is off (``--no-cov`` or pytest-cov missing) or there
+    is no data; the report is written to a temp file first so a failure never
+    deletes or truncates the committed coverage.json.
+    """
+    if getattr(
+        session.config.option, "no_cov", False
+    ) or not session.config.pluginmanager.hasplugin("_cov"):
+        return
     _PUBLIC.mkdir(parents=True, exist_ok=True)
+    out = _PUBLIC / "coverage.json"
+    tmp = _PUBLIC / "coverage.json.tmp"
     try:
         import coverage as coverage_lib
 
         cov = coverage_lib.Coverage()
         cov.load()
+        if not cov.get_data().measured_files():
+            return
         # Full coverage.py JSON report
-        cov.json_report(outfile=str(_PUBLIC / "coverage.json"), pretty_print=True)
+        cov.json_report(outfile=str(tmp), pretty_print=True)
         # Read total percentage from the generated file
-        data = json.loads((_PUBLIC / "coverage.json").read_text())
+        data = json.loads(tmp.read_text())
         pct = float(data["totals"]["percent_covered_display"])
+        os.replace(tmp, out)
     except Exception:
+        tmp.unlink(missing_ok=True)
         return
 
     # Shields.io endpoint format for the badge
@@ -48,9 +64,26 @@ def pytest_sessionfinish(session, exitstatus):
     (_PUBLIC / "coverage-badge.json").write_text(json.dumps(badge, indent=2))
 
 
+@pytest.fixture(autouse=True)
+def _isolated_user_files(tmp_path, monkeypatch):
+    """Never read or write the developer's real config, cache DB or download dir.
+
+    Code under test (e.g. the web UI config route) calls ``config.load()`` /
+    ``config.save()`` directly; without this, running the suite rewrote
+    ``~/.config/mosaic/config.toml`` and opened ``~/.local/share/mosaic/cache.db``.
+    """
+    import mosaic.config as cfg_mod
+
+    monkeypatch.setattr(cfg_mod, "_CONFIG_PATH", tmp_path / "user-config" / "config.toml")
+    monkeypatch.setitem(cfg_mod._DEFAULTS, "db_path", str(tmp_path / "user-data" / "cache.db"))
+    monkeypatch.setitem(cfg_mod._DEFAULTS, "download_dir", str(tmp_path / "user-papers"))
+
+
 @pytest.fixture
 def tmp_cache(tmp_path):
-    return Cache(str(tmp_path / "test.db"))
+    cache = Cache(str(tmp_path / "test.db"))
+    yield cache
+    cache.close()
 
 
 @pytest.fixture

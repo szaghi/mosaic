@@ -12,13 +12,13 @@ class TestIsAvailable:
         from mosaic.pdf import is_available
 
         mock_fitz = MagicMock()
-        with patch.dict("sys.modules", {"fitz": mock_fitz}):
+        with patch.dict("sys.modules", {"pymupdf": mock_fitz, "fitz": mock_fitz}):
             assert is_available() is True
 
     def test_returns_false_when_fitz_missing(self):
         from mosaic.pdf import is_available
 
-        with patch.dict("sys.modules", {"fitz": None}):
+        with patch.dict("sys.modules", {"pymupdf": None, "fitz": None}):
             assert is_available() is False
 
 
@@ -39,7 +39,7 @@ class TestExtractText:
         doc = self._make_mock_doc(["Page one text.", "Page two text."])
         mock_fitz = MagicMock()
         mock_fitz.open.return_value = doc
-        with patch.dict("sys.modules", {"fitz": mock_fitz}):
+        with patch.dict("sys.modules", {"pymupdf": mock_fitz, "fitz": mock_fitz}):
             result = extract_text("/some/file.pdf")
         assert "Page one text." in result
         assert "Page two text." in result
@@ -50,7 +50,7 @@ class TestExtractText:
         doc = self._make_mock_doc([], encrypted=True)
         mock_fitz = MagicMock()
         mock_fitz.open.return_value = doc
-        with patch.dict("sys.modules", {"fitz": mock_fitz}):
+        with patch.dict("sys.modules", {"pymupdf": mock_fitz, "fitz": mock_fitz}):
             result = extract_text("/encrypted.pdf")
         assert result == ""
 
@@ -59,13 +59,38 @@ class TestExtractText:
 
         mock_fitz = MagicMock()
         mock_fitz.open.side_effect = RuntimeError("corrupt PDF")
-        with patch.dict("sys.modules", {"fitz": mock_fitz}):
+        with patch.dict("sys.modules", {"pymupdf": mock_fitz, "fitz": mock_fitz}):
             result = extract_text("/corrupt.pdf")
         assert result == ""
+
+    def test_document_closed_on_every_path(self):
+        from mosaic.pdf import extract_text
+
+        encrypted = self._make_mock_doc([], encrypted=True)
+        broken = self._make_mock_doc([])
+        broken.__iter__ = MagicMock(side_effect=RuntimeError("bad page tree"))
+        ok = self._make_mock_doc(["text"])
+        for doc, expected in ((encrypted, ""), (broken, ""), (ok, "text")):
+            mock_fitz = MagicMock()
+            mock_fitz.open.return_value = doc
+            with patch.dict("sys.modules", {"pymupdf": mock_fitz, "fitz": mock_fitz}):
+                assert extract_text("/x.pdf") == expected
+            doc.close.assert_called_once()
+
+    def test_page_cap(self):
+        from mosaic.pdf import extract_text
+
+        doc = self._make_mock_doc([f"page{i}" for i in range(10)])
+        mock_fitz = MagicMock()
+        mock_fitz.open.return_value = doc
+        with patch.dict("sys.modules", {"pymupdf": mock_fitz, "fitz": mock_fitz}):
+            result = extract_text("/big.pdf", max_pages=3)
+        assert "page2" in result
+        assert "page3" not in result
 
     def test_missing_fitz_raises_import_error(self):
         from mosaic.pdf import extract_text
 
-        with patch.dict("sys.modules", {"fitz": None}):
+        with patch.dict("sys.modules", {"pymupdf": None, "fitz": None}):
             with pytest.raises(ImportError, match="pymupdf"):
                 extract_text("/some/file.pdf")
