@@ -488,9 +488,13 @@ mosaic config --scopus-inst-token YOUR_INST_TOKEN
 
 For browser-session setup see [Authenticated Access → Scopus](./authenticated-access#scopus). The full API key registration procedure is documented in [Sources → Scopus](./sources#scopus--shorthand-scopus).
 
-### arXiv, DOAJ, Europe PMC, BASE, DBLP, HAL
+### arXiv, DOAJ, Europe PMC, DBLP, HAL
 
 These sources require no credentials and are ready to use out of the box. DBLP is particularly useful for computer science conference and journal papers; note that it does not provide abstracts. HAL is the French national open archive, strong for French academic output and grey literature.
+
+### BASE — registered IP address required
+
+BASE's API only answers IP addresses registered with BASE, so the source is **disabled by default**. Once access has been granted for your address, enable it with `mosaic config --enable-source base`.
 
 ### PEDro — explicit fair-use opt-in required
 

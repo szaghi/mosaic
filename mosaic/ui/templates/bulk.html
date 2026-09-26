@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block content %}
-<h2>Bulk Download</h2>
+<h1>Bulk Download</h1>
 <p>Upload a <strong>.bib</strong> (BibTeX) or <strong>.csv</strong> file containing DOIs to download all papers at once
 (same as <code>mosaic get --from</code>). Metadata already in your library is reused for file names and exports.</p>
 
@@ -48,9 +48,9 @@
 
 <details style="margin-top:2rem;">
   <summary>File format help</summary>
-  <h4>BibTeX (.bib)</h4>
+  <h2>BibTeX (.bib)</h2>
   <p>Any standard BibTeX file with <code>doi = {10.xxxx/...}</code> entries.</p>
-  <h4>CSV (.csv)</h4>
+  <h2>CSV (.csv)</h2>
   <p>A CSV file with a <code>doi</code> column header. Example:</p>
   <pre>doi,title
 10.1038/s41586-020-2649-2,Some paper title

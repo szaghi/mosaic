@@ -125,7 +125,8 @@ def tmp_cache_with_citations(tmp_path):
     cache.save(p1)
     cache.save(p2)
     cache.upsert_citation_edges([(p1.uid, p2.uid, "openalex")])
-    return cache, p1, p2
+    yield cache, p1, p2
+    cache.close()
 
 
 def make_response(text="", json_data=None, status_code=200):

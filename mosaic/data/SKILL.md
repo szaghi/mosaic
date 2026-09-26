@@ -158,6 +158,7 @@ mosaic search "query" [OPTIONS]
 | `--oa-only` | off | Open-access papers only |
 | `--pdf-only` | off | Papers with downloadable PDF only |
 | `--year`, `-y` | — | Year filter: `"2020"`, `"2020-2024"`, or `"2020,2022,2024"` |
+| `--require-year` | off | With `--year`, drop papers whose year is unknown (kept by default) |
 | `--author`, `-a` | — | Author name filter (repeatable) |
 | `--journal`, `-j` | — | Journal name filter (substring match) |
 | `--field`, `-f` | `all` | Scope query to `"title"`, `"abstract"`, or `"all"` |
@@ -189,7 +190,7 @@ mosaic search "query" [OPTIONS]
 | `doaj` | DOAJ | 8 M+ fully OA articles | None |
 | `epmc` | Europe PMC | 45 M biomedical papers | None |
 | `oa` | OpenAlex | 250 M+ works | None |
-| `base` | BASE | 300 M+ from 10k+ repos | None |
+| `base` | BASE | 300 M+ from 10k+ repos | Registered IP; disabled by default |
 | `core` | CORE | 200 M+ OA full-text | Free API key |
 | `ads` | NASA ADS | Astronomy & astrophysics | Free API token |
 | `ieee` | IEEE Xplore | 5 M+ IEEE papers | Free API key |

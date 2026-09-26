@@ -9,7 +9,7 @@ from mosaic.parsing import normalise_doi, parse_authors_name_key
 from mosaic.sources.base import BaseSource, with_retry
 
 _BASE = "https://api.semanticscholar.org/graph/v1"
-_FIELDS = "title,authors,year,abstract,externalIds,openAccessPdf,publicationVenue,journal,isOpenAccess,citationCount"
+FIELDS = "title,authors,year,abstract,externalIds,openAccessPdf,publicationVenue,journal,isOpenAccess,citationCount"
 
 
 class SemanticScholarSource(BaseSource):
@@ -37,7 +37,7 @@ class SemanticScholarSource(BaseSource):
             A list of Paper objects from the ``data`` array in the response.
         """
         q = filters.raw_query if filters and filters.raw_query else query
-        params: dict = {"query": q, "limit": min(max_results, 100), "fields": _FIELDS}
+        params: dict = {"query": q, "limit": min(max_results, 100), "fields": FIELDS}
         if filters:
             # SS supports year=YYYY or year=YYYY-YYYY
             if filters.years:

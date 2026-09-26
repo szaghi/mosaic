@@ -8,7 +8,7 @@ import sys
 
 import httpx
 
-from mosaic.exporter import _bibtex_entry
+from mosaic.exporter import bibtex_entry
 from mosaic.models import Paper
 from mosaic.parsing import (
     extract_first,
@@ -162,7 +162,7 @@ def bibtex_citation(paper: Paper) -> str:
     Returns:
         A complete BibTeX entry string ready for stdout.
     """
-    return _bibtex_entry(paper, 1)
+    return bibtex_entry(paper, 1)
 
 
 def fetch_formatted_citation(doi: str, style: str, email: str = "") -> str:

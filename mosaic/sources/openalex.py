@@ -9,7 +9,7 @@ from mosaic.parsing import normalise_doi
 from mosaic.sources.base import BaseSource, with_retry
 
 _BASE = "https://api.openalex.org/works"
-_SELECT = (
+SELECT = (
     "id,title,authorships,publication_year,doi,ids,"
     "abstract_inverted_index,primary_location,best_oa_location,"
     "open_access,biblio,cited_by_count"
@@ -42,7 +42,7 @@ class OpenAlexSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``results`` array.
         """
-        params: dict = {"per_page": min(max_results, 200), "select": _SELECT}
+        params: dict = {"per_page": min(max_results, 200), "select": SELECT}
         if self._email:
             params["mailto"] = self._email
 
@@ -90,7 +90,7 @@ class OpenAlexSource(BaseSource):
 
         Args:
             item: A dict from the OpenAlex ``results`` array, containing
-                fields selected by ``_SELECT`` (title, authorships,
+                fields selected by ``SELECT`` (title, authorships,
                 publication_year, doi, ids, abstract_inverted_index,
                 primary_location, best_oa_location, open_access, biblio).
 

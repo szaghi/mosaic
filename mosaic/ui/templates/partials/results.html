@@ -1,3 +1,4 @@
+{% from "partials/macros.html" import flag %}
 {% if seed_title is defined and seed_title %}
 <p><strong>Similar to:</strong> {{ seed_title }}</p>
 {% endif %}
@@ -75,7 +76,7 @@
 {% set has_citations = papers | selectattr('citation_count') | list %}
 {% set show_score = score_label is defined and score_label %}
 <figure>
-<table role="grid" id="results-table">
+<table id="results-table">
   <thead>
     <tr>
       <th>#</th>
@@ -99,8 +100,8 @@
       <td>{% if p.year %}{{ p.year }}{% else %}&ndash;{% endif %}</td>
       <td>{% if p.doi %}<small><a href="https://doi.org/{{ p.doi }}" target="_blank" rel="noopener">{{ p.doi }}</a></small>{% else %}&ndash;{% endif %}</td>
       <td>{{ p.source }}</td>
-      <td>{% if p.is_open_access %}<span class="badge-oa">&#10003;</span>{% else %}<span class="badge-closed">&ndash;</span>{% endif %}</td>
-      <td>{% if p.pdf_url %}<span class="badge-oa">&#10003;</span>{% else %}&ndash;{% endif %}</td>
+      <td>{{ flag(p.is_open_access, "open access", "not open access") }}</td>
+      <td>{{ flag(p.pdf_url, "PDF available", "no PDF") }}</td>
       {% if has_citations %}
       <td>{% if p.citation_count is not none %}{{ p.citation_count }}{% else %}&ndash;{% endif %}</td>
       {% endif %}
@@ -148,7 +149,7 @@
 </script>
 {% endif %}
 
-<p class="stats-line">{{ papers | length }} result(s)</p>
+<p class="stats-line" data-announce>{{ papers | length }} result(s)</p>
 
 {% elif not errors %}
 <p>No results found.</p>

@@ -49,6 +49,8 @@ mosaic ui --debug                     # development mode (hot-reload)
 Every CLI workflow has a web counterpart; both call the same shared code
 (`services.py` / `workflows.py`), so results, filters and side effects match.
 
+The navigation groups pages into **Search** (search, similar papers, bulk download), **Library** (library, search history, browser sessions), **AI** (index, ask, chat) and **Analysis** (compare, citation network), plus NotebookLM and Config; on narrow screens they collapse into a single **Menu**.
+
 | Page | CLI equivalent |
 |------|----------------|
 | Search | `mosaic search` (incl. `--cached`, `--semantic`, `--downloaded-only`, `--prefer-cache`) |
@@ -149,6 +151,12 @@ On `127.0.0.1` (the default) the web UI has no login, like any local desktop too
 When `--host` is not a loopback address (e.g. `0.0.0.0` for LAN access), the UI requires an **access token**. `mosaic ui` generates a random one and prints the URL to open (`http://HOST:PORT/?token=…`); the browser keeps a session cookie afterwards and the token is removed from the address bar. Scripts can send `Authorization: Bearer <token>` instead. Use `--token` (or `MOSAIC_UI_TOKEN`) to choose the token, or `--no-auth` to disable it — only on a network you fully trust, since anyone who can reach the port can read your library and change your configuration.
 
 The Host check is disabled for wildcard bind addresses such as `0.0.0.0`. Traffic is plain HTTP; use an SSH tunnel or a reverse proxy with TLS if you need to reach the UI across untrusted networks.
+
+## Accessibility
+
+- A *Skip to content* link is the first focusable element; menus open with <kbd>Enter</kbd> and close with <kbd>Esc</kbd>.
+- Results of background jobs (searches, downloads, answers) are announced once to screen readers when they finish.
+- Status icons (open access, PDF, download outcome) carry text alternatives; wide tables scroll horizontally on small screens.
 
 ## Keyboard Shortcuts
 

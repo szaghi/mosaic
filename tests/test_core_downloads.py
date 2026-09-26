@@ -204,7 +204,7 @@ class TestBrowserDownloadValidation:
 
             with (
                 patch("mosaic.auth._require_playwright", return_value=None),
-                patch("mosaic.auth._launch_browser", AsyncMock(return_value=browser)),
+                patch("mosaic.auth.launch_browser", AsyncMock(return_value=browser)),
                 patch.dict(sys.modules, {"playwright.async_api": pw_module}),
             ):
                 return asyncio.run(

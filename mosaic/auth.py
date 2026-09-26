@@ -145,7 +145,7 @@ _BROWSER_PREFERENCE = ("firefox", "chromium", "webkit")
 _HEADLESS_PREFERENCE = ("firefox", "chromium", "webkit")
 
 
-async def _launch_browser(p, *, headless: bool = False):
+async def launch_browser(p, *, headless: bool = False):
     """Try browsers in order and return the first one that launches successfully."""
     from rich import print as rprint
 
@@ -183,7 +183,7 @@ async def login(name: str, url: str) -> None:
     rprint("[dim]Log in inside the browser window, then come back here and press Enter.[/dim]\n")
 
     async with async_playwright() as p:
-        browser = await _launch_browser(p, headless=False)
+        browser = await launch_browser(p, headless=False)
         context = await browser.new_context()
         page = await context.new_page()
         await page.goto(url)
@@ -217,7 +217,7 @@ async def browser_download(landing_url: str, dest: str, session_name: str) -> bo
     from mosaic.downloader import looks_like_pdf
 
     async with async_playwright() as p:
-        browser = await _launch_browser(p, headless=True)
+        browser = await launch_browser(p, headless=True)
         context = await browser.new_context(storage_state=str(state_file))
         page = await context.new_page()
         try:

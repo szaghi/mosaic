@@ -3,7 +3,7 @@
 
 {% block content %}
 <hgroup>
-  <h2>{{ paper.title }}</h2>
+  <h1>{{ paper.title }}</h1>
   <p>{{ paper.short_authors }}{% if paper.year %} ({{ paper.year }}){% endif %}</p>
 </hgroup>
 
@@ -117,7 +117,7 @@
 </dl>
 
 {% if paper.abstract %}
-<h3>Abstract</h3>
+<h2>Abstract</h2>
 <blockquote>{{ paper.abstract }}</blockquote>
 {% endif %}
 

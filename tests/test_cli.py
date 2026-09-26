@@ -61,9 +61,9 @@ class TestSearch:
         src = MagicMock()
         src.name = "My Repo"
         with (
-            patch("mosaic.cli.build_sources", return_value=[src]),
-            patch("mosaic.cli.source_choices", return_value={"myrepo": "My Repo"}),
-            patch("mosaic.cli.search_all", return_value=[]) as search,
+            patch("mosaic.cli.search.build_sources", return_value=[src]),
+            patch("mosaic.cli.search.source_choices", return_value={"myrepo": "My Repo"}),
+            patch("mosaic.cli.search.search_all", return_value=[]) as search,
         ):
             result = runner.invoke(app, ["search", "q", "--source", "myrepo", "--json"])
         assert result.exit_code == 0, result.output
@@ -71,8 +71,8 @@ class TestSearch:
 
     def test_search_is_logged_for_history(self):
         with (
-            patch("mosaic.cli.build_sources", return_value=[]),
-            patch("mosaic.cli.search_all", return_value=[Paper(title="T", doi="10.1/t")]),
+            patch("mosaic.cli.search.build_sources", return_value=[]),
+            patch("mosaic.cli.search.search_all", return_value=[Paper(title="T", doi="10.1/t")]),
         ):
             runner.invoke(app, ["search", "logged query", "--json", "--year", "2020"])
         with _cache() as cache:
@@ -239,3 +239,27 @@ class TestUiCommand:
         result, create_app = self._run("--host", "0.0.0.0", "--no-auth")
         assert create_app.call_args.kwargs["access_token"] is None
         assert "--no-auth" in result.output
+
+
+class TestRequireYearAndDefaults:
+    def test_cached_search_require_year(self):
+        _seed(
+            Paper(title="Graph dated", doi="10.1/d", year=2020, source="s"),
+            Paper(title="Graph undated", doi="10.1/u", source="s"),
+        )
+        lenient = json.loads(
+            runner.invoke(app, ["search", "Graph", "--cached", "--json", "--year", "2020"]).output
+        )
+        strict = json.loads(
+            runner.invoke(
+                app, ["search", "Graph", "--cached", "--json", "--year", "2020", "--require-year"]
+            ).output
+        )
+        assert {p["title"] for p in lenient["papers"]} == {"Graph dated", "Graph undated"}
+        assert [p["title"] for p in strict["papers"]] == ["Graph dated"]
+
+    def test_base_disabled_by_default(self):
+        from mosaic.source_registry import build_sources
+
+        names = {s.name for s in build_sources(cfg_mod.load())}
+        assert "BASE" not in names and "arXiv" in names

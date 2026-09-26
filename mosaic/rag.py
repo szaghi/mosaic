@@ -336,7 +336,7 @@ def index_papers(
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
 
     from mosaic import pdf as _pdf
-    from mosaic.config import _DEFAULTS, get_embedding_cfg
+    from mosaic.config import default_value, get_embedding_cfg
     from mosaic.embeddings import embed_texts
 
     emb_cfg = get_embedding_cfg(cfg)
@@ -347,8 +347,8 @@ def index_papers(
         )
 
     rag_cfg = cfg.get("rag", {})
-    chunk_size = int(rag_cfg.get("chunk_size", _DEFAULTS["rag"]["chunk_size"]))
-    chunk_overlap = int(rag_cfg.get("chunk_overlap", _DEFAULTS["rag"]["chunk_overlap"]))
+    chunk_size = int(rag_cfg.get("chunk_size", default_value("rag", "chunk_size")))
+    chunk_overlap = int(rag_cfg.get("chunk_overlap", default_value("rag", "chunk_overlap")))
     if chunk_size <= 0:
         raise ValueError(f"rag.chunk_size must be a positive number of tokens (got {chunk_size}).")
     if not 0 <= chunk_overlap < chunk_size:

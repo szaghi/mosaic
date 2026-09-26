@@ -45,32 +45,104 @@
             background: var(--pico-code-background-color); display: flex; flex-direction: column; min-width: 0; }
     .stat small { color: var(--pico-muted-color); font-size: .8em; }
     .stat strong { font-size: 1.3em; overflow-wrap: anywhere; }
+    /* One <h1> per page (the page title), sized like the former <h2> titles */
+    main h1 { font-size: 1.75rem; }
+    /* Section headings inside a page (h2 keeps the heading order sequential) */
+    main h2 { font-size: 1.2rem; margin-top: 1.5rem; }
+    /* Accessibility helpers */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+               clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .skip-link { position: absolute; left: -999px; top: .5rem; z-index: 100; padding: .4rem .8rem;
+                 background: var(--pico-primary-background); color: var(--pico-primary-inverse); border-radius: 6px; }
+    .skip-link:focus { left: .5rem; }
+    /* Navigation: grouped dropdowns on wide screens, a single menu on narrow ones */
+    .main-nav a.brand, .main-nav a.brand:hover { font-weight: 700; --pico-color: var(--pico-h1-color);
+                                                 color: var(--pico-h1-color); text-decoration: none; }
+    /* Pico v2 no longer makes <figure> scroll: keep wide tables inside the viewport */
+    figure { overflow-x: auto; position: relative; }  /* relative: contains .sr-only spans */
+    main code { overflow-wrap: anywhere; }  /* long paths / commands must not widen the page */
+    main pre { overflow-x: auto; }
+    .main-nav details.dropdown > summary {
+      border-color: transparent; background-color: transparent; box-shadow: none;
+      color: var(--pico-primary); height: auto; padding: .25rem 1.6rem .25rem .25rem; }
+    .main-nav details.dropdown > summary:hover { color: var(--pico-primary-hover); }
+    .main-nav details.dropdown[open] > summary { color: var(--pico-primary-hover); }
+    .main-nav .nav-group-active > summary, .main-nav a[aria-current="page"] { font-weight: 700; }
+    .main-nav details.dropdown ul li a[aria-current="page"] { text-decoration: underline; }
+    .theme-toggle { padding: .2rem .55rem; margin: 0; font-size: 1rem; line-height: 1.2; }
+    .nav-mobile { display: none; }
+    @media (max-width: 767px) {
+      .nav-desktop { display: none; }
+      .nav-mobile { display: flex; }
+      .export-bar .group { flex-wrap: wrap; }
+      .export-bar .group + .group { border-left: none; padding-left: 0; }
+      .export-bar input[type=text] { width: auto; flex: 1 1 9rem; }
+    }
   </style>
   {% block head %}{% endblock %}
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  {% set nav_groups = [
+    ("Search", [("ui.search_page", "Search papers"), ("ui.similar_page", "Similar papers"),
+                ("ui.bulk_page", "Bulk download")]),
+    ("Library", [("ui.library_page", "Library"), ("ui.history_page", "Search history"),
+                 ("ui.sessions_page", "Browser sessions")]),
+    ("AI", [("ui.rag_landing", "Overview"), ("ui.rag_index_page", "Index"),
+            ("ui.rag_ask_page", "Ask"), ("ui.rag_chat_page", "Chat")]),
+    ("Analysis", [("ui.analysis_landing", "Overview"), ("ui.compare_page", "Compare"),
+                  ("ui.network_page", "Citation network")]),
+  ] %}
+  {% set nav_single = [("ui.notebook_page", "NotebookLM"), ("ui.config_page", "Config")] %}
+  {% macro nav_link(endpoint, label) -%}
+    <a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ label }}</a>
+  {%- endmacro %}
+  {% macro theme_button() -%}
+    <button type="button" class="outline secondary theme-toggle" onclick="toggleTheme()"
+            aria-label="Colour theme: auto, light or dark" title="Toggle colour theme">&#9681;</button>
+  {%- endmacro %}
   <header class="container">
-    <nav>
+    <nav class="main-nav" aria-label="Main">
       <ul>
-        <li><strong>MOSAIC</strong></li>
+        <li><a class="brand" href="{{ url_for('ui.search_page') }}">MOSAIC</a></li>
       </ul>
-      <ul>
-        <li><a href="{{ url_for('ui.search_page') }}" {% if request.path == '/' %}aria-current="page"{% endif %}>Search</a></li>
-        <li><a href="{{ url_for('ui.similar_page') }}" {% if '/similar' in request.path %}aria-current="page"{% endif %}>Similar</a></li>
-        <li><a href="{{ url_for('ui.bulk_page') }}" {% if '/bulk' in request.path %}aria-current="page"{% endif %}>Bulk</a></li>
-        <li><a href="{{ url_for('ui.library_page') }}" {% if '/library' in request.path %}aria-current="page"{% endif %}>Library</a></li>
-        <li><a href="{{ url_for('ui.analysis_landing') }}" {% if request.path.startswith(('/analysis', '/compare', '/network')) %}aria-current="page"{% endif %}>Analysis</a></li>
-        <li><a href="{{ url_for('ui.notebook_page') }}" {% if '/notebook' in request.path %}aria-current="page"{% endif %}>NotebookLM</a></li>
-        <li><a href="{{ url_for('ui.history_page') }}" {% if '/history' in request.path %}aria-current="page"{% endif %}>History</a></li>
-        <li><a href="{{ url_for('ui.sessions_page') }}" {% if '/sessions' in request.path %}aria-current="page"{% endif %}>Sessions</a></li>
-        <li><a href="{{ url_for('ui.rag_landing') }}" {% if '/rag' in request.path %}aria-current="page"{% endif %}>AI</a></li>
-        <li><a href="{{ url_for('ui.config_page') }}" {% if '/config' in request.path %}aria-current="page"{% endif %}>Config</a></li>
-        <li><a href="#" id="theme-toggle" onclick="toggleTheme();return false" title="Toggle dark/light mode">&#9681;</a></li>
+      <ul class="nav-desktop">
+        {% for label, links in nav_groups %}
+        {% set active = request.endpoint in links | map('first') | list %}
+        <li>
+          <details class="dropdown{% if active %} nav-group-active{% endif %}">
+            <summary>{{ label }}</summary>
+            <ul{% if loop.last %} dir="rtl"{% endif %}>
+              {% for endpoint, text in links %}<li>{{ nav_link(endpoint, text) }}</li>{% endfor %}
+            </ul>
+          </details>
+        </li>
+        {% endfor %}
+        {% for endpoint, text in nav_single %}<li>{{ nav_link(endpoint, text) }}</li>{% endfor %}
+        <li>{{ theme_button() }}</li>
+      </ul>
+      <ul class="nav-mobile">
+        <li>{{ theme_button() }}</li>
+        <li>
+          <details class="dropdown">
+            <summary>Menu</summary>
+            <ul dir="rtl">
+              {% for label, links in nav_groups %}
+                {% for endpoint, text in links %}
+                <li>{{ nav_link(endpoint, (label ~ " overview") if text == "Overview" else text) }}</li>
+                {% endfor %}
+              {% endfor %}
+              {% for endpoint, text in nav_single %}<li>{{ nav_link(endpoint, text) }}</li>{% endfor %}
+            </ul>
+          </details>
+        </li>
       </ul>
     </nav>
   </header>
 
-  <main class="container">
+  <div id="sr-status" class="sr-only" role="status" aria-live="polite"></div>
+
+  <main class="container" id="main" tabindex="-1">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}
         <article class="flash-message{% if category == 'warning' %} alert-warning{% endif %}" style="position:relative;">
@@ -111,6 +183,32 @@
         setTimeout(function() { el.remove(); }, 500);
       });
     }, 8000);
+
+    // Dropdown menus: one open at a time, close on outside click or Escape
+    document.addEventListener("click", function(e) {
+      document.querySelectorAll("nav details.dropdown[open]").forEach(function(d) {
+        if (!d.contains(e.target)) d.removeAttribute("open");
+      });
+    });
+    document.addEventListener("keydown", function(e) {
+      if (e.key !== "Escape") return;
+      document.querySelectorAll("nav details.dropdown[open]").forEach(function(d) {
+        d.removeAttribute("open");
+        d.querySelector("summary").focus();
+      });
+    });
+
+    // Screen readers: announce the outcome of background jobs once, not every poll
+    document.body.addEventListener("htmx:afterSwap", function(e) {
+      var target = e.detail.target;
+      if (!target || target.querySelector('[aria-busy="true"]')) return;
+      var source = target.querySelector("[data-announce], ins, mark, .stats-line, p, article");
+      var text = (source ? source.textContent : target.textContent || "").replace(/\s+/g, " ").trim();
+      if (!text) return;
+      var status = document.getElementById("sr-status");
+      status.textContent = "";
+      setTimeout(function() { status.textContent = text.slice(0, 200); }, 50);
+    });
 
     // Keyboard shortcuts
     document.addEventListener("keydown", function(e) {

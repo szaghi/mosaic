@@ -68,7 +68,7 @@ _LOGIN_HINT = (
 )
 
 
-def _require_notebooklm() -> None:
+def require_notebooklm() -> None:
     """Raise a clear ImportError if notebooklm-py is not installed."""
     try:
         import notebooklm  # noqa: F401

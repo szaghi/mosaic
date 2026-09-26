@@ -42,6 +42,7 @@ mosaic search [OPTIONS] QUERY
 | `--pdf-only` | | flag | off | Show only papers with a known PDF URL |
 | `--source` | `-s` | str | all | Limit to one source — tab-completes all shorthands |
 | `--year` | `-y` | str | | Year filter (see formats below) |
+| `--require-year` | | flag | off | With `--year`, drop papers whose year is unknown (they are kept by default) |
 | `--author` | `-a` | str | | Author filter, repeatable |
 | `--journal` | `-j` | str | | Journal name substring filter |
 | `--field` | `-f` | str | `all` | Scope query to `title`, `abstract`, or `all` — tab-completes |

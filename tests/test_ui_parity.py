@@ -24,20 +24,29 @@ def base_cfg(tmp_path):
     }
 
 
+_apps: list = []
+
+
 def _make_app(cfg, **kwargs):
     from mosaic.ui import create_app
 
     with patch("mosaic.config.load", return_value=cfg):
         app = create_app(**kwargs)
     app.config["TESTING"] = True
+    _apps.append(app)
     return app
+
+
+@pytest.fixture(autouse=True)
+def _close_apps():
+    yield
+    while _apps:
+        _apps.pop().config["MOSAIC_CACHE"].close()
 
 
 @pytest.fixture
 def app(base_cfg):
-    app = _make_app(base_cfg)
-    yield app
-    app.config["MOSAIC_CACHE"].close()
+    return _make_app(base_cfg)
 
 
 @pytest.fixture
@@ -179,10 +188,15 @@ class TestConfigSecrets:
         assert rag["full_text_index"] is False  # unchecked box
 
     def test_db_path_change_swaps_cache(self, client, app, tmp_path):
+        import sqlite3
+
         self._seed()
+        old_cache = app.config["MOSAIC_CACHE"]
         new_db = tmp_path / "moved" / "cache.db"
         client.post("/config", data={"db_path": str(new_db)}, headers={"HX-Request": "true"})
         assert app.config["MOSAIC_CACHE"]._db_path == str(new_db)
+        with pytest.raises(sqlite3.ProgrammingError):  # the previous connection is closed
+            old_cache.con.execute("SELECT 1")
 
 
 class TestUntrustedUrls:
@@ -243,9 +257,9 @@ class TestNetworkSearch:
             _paper(title="a", doi="10.1/a", year=2023),
         ]
         with (
-            patch("mosaic.ui.routes.build_sources", return_value=[src]),
-            patch("mosaic.ui.routes.source_choices", return_value={"myrepo": "My Repo"}),
-            patch("mosaic.ui.routes.search_all", return_value=papers) as search,
+            patch("mosaic.ui.routes.search.build_sources", return_value=[src]),
+            patch("mosaic.ui.routes.search.source_choices", return_value={"myrepo": "My Repo"}),
+            patch("mosaic.ui.routes.search.search_all", return_value=papers) as search,
         ):
             resp = client.post(
                 "/search",
@@ -263,7 +277,7 @@ class TestNetworkSearch:
 class TestSimilar:
     def test_paper_not_found_message(self, client, app):
         with patch(
-            "mosaic.ui.routes._run_similar", return_value={"seed_title": None, "papers": []}
+            "mosaic.ui.routes.search._run_similar", return_value={"seed_title": None, "papers": []}
         ):
             resp = client.post("/similar", data={"identifier": "10.9/none"})
             _wait(app, resp.data, "/similar/status")
@@ -397,7 +411,7 @@ class TestNotebook:
     def test_system_exit_in_job_does_not_poll_forever(self, client, app):
         with (
             patch("mosaic.notebooklm_bridge.preflight_error", return_value=None),
-            patch("mosaic.ui.routes._run_notebook_from_query", side_effect=SystemExit(1)),
+            patch("mosaic.ui.routes.notebook._run_notebook_from_query", side_effect=SystemExit(1)),
         ):
             resp = client.post("/notebook", data={"name": "NB", "query": "q"})
             _wait(app, resp.data, "/notebook/status")
@@ -497,3 +511,29 @@ class TestAccessToken:
         headers = {"Authorization": "Bearer s3cret"}
         assert client.get("/", headers=headers).status_code == 200
         assert client.get("/", headers={"Authorization": "Bearer nope"}).status_code == 401
+
+
+class TestLayoutAndA11y:
+    def test_grouped_navigation_and_skip_link(self, client):
+        html = client.get("/rag/chat").data.decode()
+        assert '<a class="skip-link" href="#main">' in html and 'id="main"' in html
+        assert html.count('class="dropdown') >= 4  # grouped desktop menus (+ mobile menu)
+        assert 'href="/rag/chat" aria-current="page"' in html
+        assert 'aria-label="Colour theme: auto, light or dark"' in html
+
+    def test_tables_are_not_aria_grids(self, client, app):
+        _cache(app).save(_paper(title="Library paper"))
+        assert b'role="grid"' not in client.get("/library").data
+
+    def test_flags_have_text_for_screen_readers(self, client, app):
+        _cache(app).save(_paper(title="Closed paper", is_open_access=False))
+        html = client.post("/search", data={"query": "Closed", "mode": "cached"}).data
+        assert b'<span class="sr-only">not open access</span>' in html
+        assert b"data-announce" in html
+
+    def test_require_year_checkbox_filters_cached_search(self, client, app):
+        _cache(app).save(_paper(title="Undated paper", doi="10.1/u", year=None))
+        base = {"query": "Undated", "mode": "cached", "year": "2020"}
+        assert b"Undated paper" in client.post("/search", data=base).data
+        strict = client.post("/search", data={**base, "require_year": "on"}).data
+        assert b"Undated paper" not in strict

@@ -389,7 +389,7 @@ class TestBrowserDownload:
 
             with (
                 patch("mosaic.auth._require_playwright", return_value=None),
-                patch("mosaic.auth._launch_browser", AsyncMock(return_value=mock_browser)),
+                patch("mosaic.auth.launch_browser", AsyncMock(return_value=mock_browser)),
                 patch.dict(sys.modules, {"playwright.async_api": mock_pw_module}),
             ):
                 result = self._run(
