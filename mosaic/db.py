@@ -13,6 +13,16 @@ from mosaic.models import Paper
 
 log = logging.getLogger(__name__)
 
+# sqlite-vec rejects KNN queries with k above this value.
+VEC_MAX_K = 4096
+
+# Batch size for ``IN (...)`` lists, well below SQLITE_MAX_VARIABLE_NUMBER.
+_IN_BATCH = 500
+
+_VEC_TABLES = ("vec_papers", "vec_chunks")
+
+_NO_VEC_MSG = "sqlite-vec is not installed. Run: pipx inject mosaic-search sqlite-vec"
+
 
 def _connect(db_path: str) -> sqlite3.Connection:
     path = Path(db_path)
@@ -66,7 +76,6 @@ def _init(con: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_pc_source ON paper_citations(source_uid);
         CREATE INDEX IF NOT EXISTS idx_pc_target ON paper_citations(target_uid);
-        CREATE INDEX IF NOT EXISTS idx_papers_openalex ON papers(openalex_id);
         CREATE TABLE IF NOT EXISTS downloads (
             uid        TEXT PRIMARY KEY,
             local_path TEXT,
@@ -109,12 +118,13 @@ def _init(con: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_pc_target ON paper_citations(target_uid)",
         "CREATE INDEX IF NOT EXISTS idx_papers_openalex ON papers(openalex_id)",
         """CREATE TABLE IF NOT EXISTS paper_chunks (
-            chunk_id   TEXT PRIMARY KEY,
-            uid        TEXT NOT NULL,
-            chunk_idx  INTEGER NOT NULL,
-            text       TEXT NOT NULL,
-            char_start INTEGER NOT NULL,
-            char_end   INTEGER NOT NULL
+            chunk_id    TEXT PRIMARY KEY,
+            uid         TEXT NOT NULL,
+            chunk_idx   INTEGER NOT NULL,
+            text        TEXT NOT NULL,
+            char_start  INTEGER NOT NULL,
+            char_end    INTEGER NOT NULL,
+            text_source TEXT NOT NULL DEFAULT 'metadata'
         )""",
         "CREATE INDEX IF NOT EXISTS idx_paper_chunks_uid ON paper_chunks(uid)",
     ):
@@ -123,6 +133,20 @@ def _init(con: sqlite3.Connection) -> None:
             con.commit()
         except sqlite3.OperationalError:
             pass  # already exists
+    # text_source records what a paper's chunks were built from: "metadata",
+    # "pdf" (full text) or "pdf_unreadable" (PDF present but no extractable text).
+    # Indexes built before this column existed: multi-chunk papers were full text.
+    try:
+        con.execute(
+            "ALTER TABLE paper_chunks ADD COLUMN text_source TEXT NOT NULL DEFAULT 'metadata'"
+        )
+        con.execute(
+            "UPDATE paper_chunks SET text_source='pdf' WHERE uid IN "
+            "(SELECT uid FROM paper_chunks GROUP BY uid HAVING COUNT(*) > 1)"
+        )
+        con.commit()
+    except sqlite3.OperationalError:
+        con.rollback()  # column already exists
 
 
 def upsert(con: sqlite3.Connection, paper: Paper) -> None:
@@ -134,9 +158,14 @@ def upsert(con: sqlite3.Connection, paper: Paper) -> None:
     - is_open_access : True supersedes False (OR / MAX)
     - citation_count : keep the higher value; NULL is treated as "unknown"
     - authors        : keep the longer JSON array
-    - doi/arxiv_id/pii, journal, volume, issue, pages, url : fill if empty
-    - title, year, source : keep the first-recorded value
+    - doi/arxiv_id/pii, year, journal, volume, issue, pages, url : fill if empty
+    - title, source : keep the first-recorded value
     """
+    with con:
+        _upsert_row(con, paper)
+
+
+def _upsert_row(con: sqlite3.Connection, paper: Paper) -> None:
     con.execute(
         """
         INSERT INTO papers
@@ -163,6 +192,7 @@ def upsert(con: sqlite3.Connection, paper: Paper) -> None:
                     THEN excluded.authors
                 ELSE papers.authors
             END,
+            year        = COALESCE(papers.year,        excluded.year),
             doi         = COALESCE(papers.doi,         excluded.doi),
             arxiv_id    = COALESCE(papers.arxiv_id,    excluded.arxiv_id),
             pii         = COALESCE(papers.pii,         excluded.pii),
@@ -194,19 +224,18 @@ def upsert(con: sqlite3.Connection, paper: Paper) -> None:
             paper.openalex_id,
         ),
     )
-    con.commit()
 
 
 def set_download(con: sqlite3.Connection, uid: str, local_path: str, status: str) -> None:
-    con.execute(
-        """
-        INSERT INTO downloads(uid, local_path, status)
-        VALUES (?,?,?)
-        ON CONFLICT(uid) DO UPDATE SET local_path=excluded.local_path, status=excluded.status
-    """,
-        (uid, local_path, status),
-    )
-    con.commit()
+    with con:
+        con.execute(
+            """
+            INSERT INTO downloads(uid, local_path, status)
+            VALUES (?,?,?)
+            ON CONFLICT(uid) DO UPDATE SET local_path=excluded.local_path, status=excluded.status
+        """,
+            (uid, local_path, status),
+        )
 
 
 def get_download(con: sqlite3.Connection, uid: str) -> sqlite3.Row | None:
@@ -236,6 +265,10 @@ def row_to_paper(row: sqlite3.Row) -> Paper:
     )
 
 
+def _clamp_k(k: int) -> int:
+    return max(1, min(int(k), VEC_MAX_K))
+
+
 class Cache:
     """Thread-safe SQLite cache.
 
@@ -251,6 +284,17 @@ class Cache:
         # Alias for internal methods that use _conn naming convention
         self._conn = self.con
 
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+        with self._lock:
+            self.con.close()
+
+    def __enter__(self) -> Cache:
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
     # ── Basic read/write ──────────────────────────────────────────────────────
 
     def save(self, paper: Paper) -> None:
@@ -265,10 +309,27 @@ class Cache:
         with self._lock:
             return get_download(self.con, uid)
 
+    def get_download_owner(self, local_path: str) -> str | None:
+        """Return the uid of the paper whose successful download is stored at *local_path*."""
+        with self._lock:
+            row = self.con.execute(
+                "SELECT uid FROM downloads WHERE local_path=? AND status='ok'", (local_path,)
+            ).fetchone()
+        return row["uid"] if row else None
+
     def get_by_uid(self, uid: str) -> Paper | None:
         with self._lock:
             row = self.con.execute("SELECT * FROM papers WHERE uid=?", (uid,)).fetchone()
             return row_to_paper(row) if row else None
+
+    def get_by_doi(self, doi: str) -> Paper | None:
+        """Look up a cached paper by DOI (URL-form and case variants accepted)."""
+        from mosaic.parsing import normalise_doi
+
+        bare = normalise_doi(doi)
+        if not bare:
+            return None
+        return self.get_by_uid(Paper(title="", doi=bare, source="").uid)
 
     def search_local(self, query: str) -> list[Paper]:
         with self._lock:
@@ -281,12 +342,11 @@ class Cache:
     def save_search(
         self, query: str, filters_json: str = "", sources_json: str = "", result_count: int = 0
     ) -> None:
-        with self._lock:
+        with self._lock, self.con:
             self.con.execute(
                 "INSERT INTO searches(query, filters_json, sources_json, result_count) VALUES (?,?,?,?)",
                 (query, filters_json, sources_json, result_count),
             )
-            self.con.commit()
 
     def list_searches(self, limit: int = 50) -> list[dict]:
         with self._lock:
@@ -407,7 +467,7 @@ class Cache:
 
         Returns the number of records removed.
         """
-        with self._lock:
+        with self._lock, self.con:
             rows = self.con.execute(
                 "SELECT uid, local_path FROM downloads WHERE status='ok'"
             ).fetchall()
@@ -416,32 +476,39 @@ class Cache:
                 if not row["local_path"] or not Path(row["local_path"]).exists():
                     self.con.execute("DELETE FROM downloads WHERE uid=?", (row["uid"],))
                     removed += 1
-            if removed:
-                self.con.commit()
             return removed
 
     def clear(self) -> None:
-        """Wipe all papers, downloads, searches, exports, vector index, and citation graph."""
+        """Wipe all papers, downloads, searches, exports, vector index, and citation graph.
+
+        Atomic: raises RuntimeError *before* deleting anything when a vector
+        index exists but sqlite-vec is not loaded (vec0 tables cannot be
+        dropped without it).
+        """
         with self._lock:
-            self.con.executescript(
-                "DELETE FROM papers; DELETE FROM downloads; "
-                "DELETE FROM searches; DELETE FROM exports; "
-                "DELETE FROM paper_citations; DELETE FROM rag_meta; "
-                "DELETE FROM paper_chunks;"
-            )
-            self.con.commit()
-        self.rebuild_vec_table()  # drops vec_papers/vec_chunks; safe whether or not sqlite-vec is loaded
+            self._require_vec_for_existing_tables()
+            with self.con:
+                for table in (
+                    "papers",
+                    "downloads",
+                    "searches",
+                    "exports",
+                    "paper_citations",
+                    "rag_meta",
+                    "paper_chunks",
+                ):
+                    self.con.execute(f"DELETE FROM {table}")  # noqa: S608
+                self._drop_vec_tables()
 
     # ── Export tracking (Phase 4) ─────────────────────────────────────────────
 
     def track_export(self, uid: str, fmt: str, destination: str = "") -> None:
         """Record that *uid* was exported in format *fmt* to *destination*."""
-        with self._lock:
+        with self._lock, self.con:
             self.con.execute(
                 "INSERT INTO exports(uid, format, destination) VALUES (?,?,?)",
                 (uid, fmt, destination),
             )
-            self.con.commit()
 
     def was_exported(self, uid: str, fmt: str, destination: str = "") -> bool:
         """True if *uid* was previously exported in *fmt* to *destination*."""
@@ -462,41 +529,65 @@ class Cache:
             return row[0] if row else None
 
     def set_rag_meta(self, key: str, value: str) -> None:
-        with self._lock:
+        with self._lock, self._conn:
             self._conn.execute(
                 "INSERT OR REPLACE INTO rag_meta (key, value) VALUES (?, ?)", (key, value)
             )
-            self._conn.commit()
+
+    # vec0 virtual tables do not support INSERT OR REPLACE ("UNIQUE constraint
+    # failed"), so every upsert below deletes the old row first, inside the
+    # same transaction.
+
+    @property
+    def vec_available(self) -> bool:
+        """True when the sqlite-vec extension is loaded on this connection."""
+        return self._vec_available
+
+    def vec_tables(self) -> set[str]:
+        """Names of the vector tables that exist (works without sqlite-vec)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?)",
+                _VEC_TABLES,
+            ).fetchall()
+            return {r[0] for r in rows}
+
+    def _require_vec_for_existing_tables(self) -> None:
+        if not self._vec_available and self.vec_tables():
+            raise RuntimeError(
+                "The vector index was built with sqlite-vec, which is not loaded, "
+                "so it cannot be modified. " + _NO_VEC_MSG
+            )
+
+    def _drop_vec_tables(self) -> None:
+        for table in _VEC_TABLES:
+            self._conn.execute(f"DROP TABLE IF EXISTS {table}")
 
     def _ensure_vec_table(self, dim: int) -> None:
         """Create vec_papers virtual table for given embedding dimension if not exists."""
         if not self._vec_available:
-            raise RuntimeError(
-                "sqlite-vec is not installed. Run: pipx inject mosaic-search sqlite-vec"
-            )
+            raise RuntimeError(_NO_VEC_MSG)
         self._conn.execute(
             f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_papers USING vec0(uid TEXT PRIMARY KEY, embedding float[{dim}])"
         )
         self._conn.commit()
 
     def upsert_embedding(self, uid: str, embedding: list[float], dim: int) -> None:
-        with self._lock:
-            self._ensure_vec_table(dim)
-            self._conn.execute(
-                "INSERT OR REPLACE INTO vec_papers(uid, embedding) VALUES (?, ?)",
-                (uid, json.dumps(embedding)),
-            )
-            self._conn.commit()
+        self.upsert_embeddings_batch([(uid, embedding)], dim)
 
     def upsert_embeddings_batch(self, rows: list[tuple[str, list[float]]], dim: int) -> None:
-        """Batch upsert for efficiency."""
+        """Batch upsert into the legacy per-paper index (last row wins per uid)."""
+        latest = dict(rows)
         with self._lock:
             self._ensure_vec_table(dim)
-            self._conn.executemany(
-                "INSERT OR REPLACE INTO vec_papers(uid, embedding) VALUES (?, ?)",
-                [(uid, json.dumps(emb)) for uid, emb in rows],
-            )
-            self._conn.commit()
+            with self._conn:
+                self._conn.executemany(
+                    "DELETE FROM vec_papers WHERE uid = ?", [(uid,) for uid in latest]
+                )
+                self._conn.executemany(
+                    "INSERT INTO vec_papers(uid, embedding) VALUES (?, ?)",
+                    [(uid, json.dumps(emb)) for uid, emb in latest.items()],
+                )
 
     def get_indexed_uids(self) -> set[str]:
         """Return set of UIDs already present in the chunk index (or legacy vec_papers)."""
@@ -528,7 +619,7 @@ class Cache:
                   AND k = ?
                 ORDER BY distance
                 """,
-                (json.dumps(query_embedding), k),
+                (json.dumps(query_embedding), _clamp_k(k)),
             ).fetchall()
             return [r[0] for r in rows]
 
@@ -543,9 +634,33 @@ class Cache:
                   AND k = ?
                 ORDER BY distance
                 """,
-                (json.dumps(query_embedding), k),
+                (json.dumps(query_embedding), _clamp_k(k)),
             ).fetchall()
             return [(r[0], float(r[1])) for r in rows]
+
+    def nearest_papers_for_uids(
+        self, query_embedding: list[float], uids: set[str] | list[str], k: int
+    ) -> list[tuple[str, float]]:
+        """Exact nearest search in the legacy index restricted to *uids*.
+
+        Returns up to *k* ``(uid, distance)`` pairs, closest first.  Unlike a
+        KNN query followed by filtering, a narrow subset always gets results.
+        """
+        q = json.dumps(query_embedding)
+        results: list[tuple[str, float]] = []
+        ids = list(uids)
+        with self._lock:
+            for i in range(0, len(ids), _IN_BATCH):
+                batch = ids[i : i + _IN_BATCH]
+                placeholders = ",".join("?" * len(batch))
+                rows = self._conn.execute(
+                    "SELECT uid, vec_distance_l2(embedding, ?) AS d FROM vec_papers "  # noqa: S608
+                    f"WHERE uid IN ({placeholders}) ORDER BY d LIMIT ?",
+                    [q, *batch, k],
+                ).fetchall()
+                results.extend((r[0], float(r[1])) for r in rows)
+        results.sort(key=lambda t: t[1])
+        return results[:k]
 
     def get_downloaded_uids(self) -> set[str]:
         """Return UIDs of papers with at least one successful local download."""
@@ -554,19 +669,57 @@ class Cache:
             return {r[0] for r in rows}
 
     def rebuild_vec_table(self) -> None:
-        """Drop and recreate vec tables (needed when embedding model changes)."""
+        """Drop the vector tables and chunk texts (needed when the embedding model changes).
+
+        Raises RuntimeError without touching anything when a vector index
+        exists but sqlite-vec is not loaded.
+        """
         with self._lock:
-            self._conn.execute("DROP TABLE IF EXISTS vec_papers")
-            self._conn.execute("DROP TABLE IF EXISTS vec_chunks")
-            self._conn.execute("DELETE FROM paper_chunks")
-            self._conn.commit()
+            self._require_vec_for_existing_tables()
+            with self._conn:
+                self._drop_vec_tables()
+                self._conn.execute("DELETE FROM paper_chunks")
+
+    def has_legacy_only_index(self) -> bool:
+        """True when only the old per-paper index (vec_papers) holds embeddings.
+
+        Adding papers incrementally to the chunk index in this state would
+        hide every legacy-indexed paper from retrieval.
+        """
+        with self._lock:
+            if "vec_papers" not in self.vec_tables():
+                return False
+            row = self._conn.execute("SELECT 1 FROM paper_chunks LIMIT 1").fetchone()
+            return row is None
+
+    def drop_legacy_index_if_superseded(self) -> bool:
+        """Drop vec_papers once every paper in it is also in the chunk index."""
+        with self._lock:
+            if "vec_papers" not in self.vec_tables() or not self._vec_available:
+                return False
+            legacy = {r[0] for r in self._conn.execute("SELECT uid FROM vec_papers").fetchall()}
+            chunked = {
+                r[0] for r in self._conn.execute("SELECT DISTINCT uid FROM paper_chunks").fetchall()
+            }
+            if not chunked or not legacy <= chunked:
+                return False
+            with self._conn:
+                self._conn.execute("DROP TABLE IF EXISTS vec_papers")
+            return True
+
+    def get_metadata_only_uids(self) -> set[str]:
+        """UIDs whose chunks were built from metadata only (no PDF attempt yet)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT uid FROM paper_chunks GROUP BY uid "
+                "HAVING SUM(text_source != 'metadata') = 0"
+            ).fetchall()
+            return {r[0] for r in rows}
 
     def _ensure_vec_chunks_table(self, dim: int) -> None:
         """Create vec_chunks virtual table for given embedding dimension if not exists."""
         if not self._vec_available:
-            raise RuntimeError(
-                "sqlite-vec is not installed. Run: pipx inject mosaic-search sqlite-vec"
-            )
+            raise RuntimeError(_NO_VEC_MSG)
         self._conn.execute(
             f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks USING vec0(chunk_id TEXT PRIMARY KEY, embedding float[{dim}])"
         )
@@ -576,58 +729,124 @@ class Cache:
         self,
         rows: list[tuple[str, str, int, str, int, int, list[float]]],
         dim: int,
+        *,
+        text_sources: dict[str, str] | None = None,
     ) -> None:
-        """Upsert chunk metadata + embeddings atomically.
+        """Replace the chunk set of every paper present in *rows*, atomically.
 
         Each row is (chunk_id, uid, chunk_idx, text, char_start, char_end, embedding).
+        Existing chunks of those papers are deleted first, so *rows* must hold a
+        paper's complete chunk set.  *text_sources* maps uid to "metadata",
+        "pdf" or "pdf_unreadable" (default "metadata").  On any error the whole
+        batch is rolled back.
         """
         if not rows:
             return
+        latest = {r[0]: r for r in rows}  # last row wins per chunk_id
+        uids = list(dict.fromkeys(r[1] for r in latest.values()))
+        sources = text_sources or {}
         with self._lock:
             self._ensure_vec_chunks_table(dim)
-            self._conn.executemany(
-                "INSERT OR REPLACE INTO paper_chunks "
-                "(chunk_id, uid, chunk_idx, text, char_start, char_end) "
-                "VALUES (?,?,?,?,?,?)",
-                [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows],
-            )
-            self._conn.executemany(
-                "INSERT OR REPLACE INTO vec_chunks(chunk_id, embedding) VALUES (?,?)",
-                [(r[0], json.dumps(r[6])) for r in rows],
-            )
-            self._conn.commit()
+            with self._conn:
+                old_ids: list[str] = []
+                for i in range(0, len(uids), _IN_BATCH):
+                    batch = uids[i : i + _IN_BATCH]
+                    placeholders = ",".join("?" * len(batch))
+                    old_ids.extend(
+                        r[0]
+                        for r in self._conn.execute(
+                            f"SELECT chunk_id FROM paper_chunks WHERE uid IN ({placeholders})",  # noqa: S608
+                            batch,
+                        ).fetchall()
+                    )
+                    self._conn.execute(
+                        f"DELETE FROM paper_chunks WHERE uid IN ({placeholders})",  # noqa: S608
+                        batch,
+                    )
+                stale = set(old_ids) | set(latest)
+                self._conn.executemany(
+                    "DELETE FROM vec_chunks WHERE chunk_id = ?", [(cid,) for cid in stale]
+                )
+                self._conn.executemany(
+                    "INSERT INTO paper_chunks "
+                    "(chunk_id, uid, chunk_idx, text, char_start, char_end, text_source) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    [
+                        (r[0], r[1], r[2], r[3], r[4], r[5], sources.get(r[1], "metadata"))
+                        for r in latest.values()
+                    ],
+                )
+                self._conn.executemany(
+                    "INSERT INTO vec_chunks(chunk_id, embedding) VALUES (?,?)",
+                    [(r[0], json.dumps(r[6])) for r in latest.values()],
+                )
 
     def vector_search_chunks(self, query_embedding: list[float], k: int) -> list[tuple[str, float]]:
-        """Return up to k (chunk_id, distance) pairs from vec_chunks (closest first)."""
-        with self._lock:
-            try:
-                rows = self._conn.execute(
-                    """
-                    SELECT chunk_id, distance
-                    FROM vec_chunks
-                    WHERE embedding MATCH ?
-                      AND k = ?
-                    ORDER BY distance
-                    """,
-                    (json.dumps(query_embedding), k),
-                ).fetchall()
-                return [(r[0], r[1]) for r in rows]
-            except Exception as exc:
-                if "no such table" in str(exc).lower():
-                    raise
-                return []
+        """Return up to k (chunk_id, distance) pairs from vec_chunks (closest first).
 
-    def get_chunk_texts(self, chunk_ids: list[str]) -> dict[str, str]:
-        """Return {chunk_id: text} for the given chunk IDs."""
+        Errors propagate (missing table, dimension mismatch, missing sqlite-vec).
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT chunk_id, distance
+                FROM vec_chunks
+                WHERE embedding MATCH ?
+                  AND k = ?
+                ORDER BY distance
+                """,
+                (json.dumps(query_embedding), _clamp_k(k)),
+            ).fetchall()
+            return [(r[0], float(r[1])) for r in rows]
+
+    def nearest_chunks_for_uids(
+        self, query_embedding: list[float], uids: set[str] | list[str], k: int
+    ) -> list[tuple[str, str, float]]:
+        """Exact per-paper nearest search in the chunk index restricted to *uids*.
+
+        Returns up to *k* ``(uid, best_chunk_id, distance)`` triples, closest
+        first: one per paper, using that paper's best-matching chunk.
+        """
+        q = json.dumps(query_embedding)
+        results: list[tuple[str, str, float]] = []
+        ids = list(uids)
+        with self._lock:
+            for i in range(0, len(ids), _IN_BATCH):
+                batch = ids[i : i + _IN_BATCH]
+                placeholders = ",".join("?" * len(batch))
+                # SQLite takes bare columns (chunk_id) from the row holding MIN().
+                rows = self._conn.execute(
+                    "SELECT pc.uid, pc.chunk_id, MIN(vec_distance_l2(vc.embedding, ?)) AS d "  # noqa: S608
+                    "FROM paper_chunks pc JOIN vec_chunks vc ON vc.chunk_id = pc.chunk_id "
+                    f"WHERE pc.uid IN ({placeholders}) GROUP BY pc.uid ORDER BY d LIMIT ?",
+                    [q, *batch, k],
+                ).fetchall()
+                results.extend((r[0], r[1], float(r[2])) for r in rows)
+        results.sort(key=lambda t: t[2])
+        return results[:k]
+
+    def get_chunk_texts(
+        self, chunk_ids: list[str], *, full_text_only: bool = False
+    ) -> dict[str, str]:
+        """Return {chunk_id: text} for the given chunk IDs.
+
+        With *full_text_only*, chunks built from metadata (title/abstract) are
+        left out so callers can fall back to the paper's own fields.
+        """
         if not chunk_ids:
             return {}
+        where = " AND text_source = 'pdf'" if full_text_only else ""
+        result: dict[str, str] = {}
         with self._lock:
-            placeholders = ",".join("?" * len(chunk_ids))
-            rows = self._conn.execute(
-                f"SELECT chunk_id, text FROM paper_chunks WHERE chunk_id IN ({placeholders})",  # noqa: S608
-                chunk_ids,
-            ).fetchall()
-            return {r[0]: r[1] for r in rows}
+            for i in range(0, len(chunk_ids), _IN_BATCH):
+                batch = chunk_ids[i : i + _IN_BATCH]
+                placeholders = ",".join("?" * len(batch))
+                rows = self._conn.execute(
+                    f"SELECT chunk_id, text FROM paper_chunks WHERE chunk_id IN ({placeholders}){where}",  # noqa: S608
+                    batch,
+                ).fetchall()
+                result.update({r[0]: r[1] for r in rows})
+        return result
 
     def get_papers_by_uids(self, uids: list[str]) -> list[Paper]:
         """Fetch Paper objects for the given UIDs from the papers table."""
@@ -655,12 +874,11 @@ class Cache:
         Args:
             edges: List of ``(source_uid, target_uid, provider)`` tuples.
         """
-        with self._lock:
+        with self._lock, self._conn:
             self._conn.executemany(
                 "INSERT OR IGNORE INTO paper_citations (source_uid, target_uid, provider) VALUES (?,?,?)",
                 edges,
             )
-            self._conn.commit()
 
     def get_citation_links(self, uid: str, candidate_uids: set[str]) -> int:
         """Count citation edges between *uid* and any uid in *candidate_uids*.
