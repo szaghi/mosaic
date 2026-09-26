@@ -11,10 +11,10 @@
 {% set max_deg = deg.get(group[0], 0) if group else 0 %}
 {% if clustered %}
 {% set sample = papers.get(group[0]) if group else none %}
-<h4>Cluster {{ loop.index }} &mdash; {{ sample.title[:50] if sample else 'Cluster ' ~ loop.index }} <small>({{ group | length }} papers)</small></h4>
+<h2>Cluster {{ loop.index }} &mdash; {{ sample.title[:50] if sample else 'Cluster ' ~ loop.index }} <small>({{ group | length }} papers)</small></h2>
 {% endif %}
 <figure>
-<table role="grid">
+<table>
   <thead><tr><th>#</th><th>Title</th><th>Authors</th><th>Year</th><th>Degree</th></tr></thead>
   <tbody>
     {% for uid in group[:top] %}

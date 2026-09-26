@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/macros.html" import flag %}
 {% block title %}Library &mdash; MOSAIC{% endblock %}
 
 {% block head %}
@@ -10,7 +11,7 @@
 {% endblock %}
 
 {% block content %}
-<h2>Library</h2>
+<h1>Library</h1>
 <p>Papers stored in your local cache (same data as <code>mosaic cache</code>).</p>
 
 <div class="stat-grid">
@@ -56,7 +57,7 @@
 </div>
 
 <figure>
-<table role="grid">
+<table>
   <thead>
     <tr><th>#</th><th>Title</th><th>Authors</th><th>Year</th><th>Source</th><th>OA</th><th>PDF</th><th>Abstr.</th></tr>
   </thead>
@@ -68,9 +69,9 @@
       <td>{{ p.short_authors }}</td>
       <td>{{ p.year or '' }}</td>
       <td>{{ p.source }}</td>
-      <td>{% if p.is_open_access %}<span class="badge-oa">&#10003;</span>{% else %}<span class="badge-closed">&ndash;</span>{% endif %}</td>
-      <td>{% if p.pdf_url %}<span class="badge-oa">&#10003;</span>{% else %}&ndash;{% endif %}</td>
-      <td>{% if p.abstract %}<span class="badge-oa">&#10003;</span>{% else %}&ndash;{% endif %}</td>
+      <td>{{ flag(p.is_open_access, "open access", "not open access") }}</td>
+      <td>{{ flag(p.pdf_url, "PDF available", "no PDF") }}</td>
+      <td>{{ flag(p.abstract, "has abstract", "no abstract") }}</td>
     </tr>
     {% endfor %}
   </tbody>

@@ -497,3 +497,22 @@ class TestAccessToken:
         headers = {"Authorization": "Bearer s3cret"}
         assert client.get("/", headers=headers).status_code == 200
         assert client.get("/", headers={"Authorization": "Bearer nope"}).status_code == 401
+
+
+class TestLayoutAndA11y:
+    def test_grouped_navigation_and_skip_link(self, client):
+        html = client.get("/rag/chat").data.decode()
+        assert '<a class="skip-link" href="#main">' in html and 'id="main"' in html
+        assert html.count('class="dropdown') >= 4  # grouped desktop menus (+ mobile menu)
+        assert 'href="/rag/chat" aria-current="page"' in html
+        assert 'aria-label="Colour theme: auto, light or dark"' in html
+
+    def test_tables_are_not_aria_grids(self, client, app):
+        _cache(app).save(_paper(title="Library paper"))
+        assert b'role="grid"' not in client.get("/library").data
+
+    def test_flags_have_text_for_screen_readers(self, client, app):
+        _cache(app).save(_paper(title="Closed paper", is_open_access=False))
+        html = client.post("/search", data={"query": "Closed", "mode": "cached"}).data
+        assert b'<span class="sr-only">not open access</span>' in html
+        assert b"data-announce" in html

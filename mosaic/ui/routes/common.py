@@ -162,14 +162,14 @@ def export_papers(papers: list[Paper], fmt: str, basename: str):
 
 def download_table(items) -> str:
     """Render a DownloadReport's items as an HTML table."""
-    html = '<table role="grid"><thead><tr><th>Paper</th><th>Status</th><th>File</th></tr></thead><tbody>'
+    html = "<table><thead><tr><th>Paper</th><th>Status</th><th>File</th></tr></thead><tbody>"
     for item in items:
         if item.status == "ok":
-            icon = '<span class="badge-oa">&#10003;</span>'
+            icon = '<span class="badge-oa" aria-hidden="true">&#10003;</span><span class="sr-only">downloaded</span>'
         elif item.status == "skip":
-            icon = '<span class="badge-closed">&ndash;</span>'
+            icon = '<span class="badge-closed" aria-hidden="true">&ndash;</span><span class="sr-only">skipped</span>'
         else:
-            icon = '<span class="badge-closed">&#10007;</span>'
+            icon = '<span class="badge-closed" aria-hidden="true">&#10007;</span><span class="sr-only">failed</span>'
         label = item.paper.title if item.paper.title != item.paper.doi else item.paper.doi
         name = Path(item.path).name if item.path else ""
         html += f"<tr><td>{escape(label or '')}</td><td>{icon}</td><td>{escape(name)}</td></tr>"

@@ -2,12 +2,12 @@
 {% block title %}Browser Sessions &mdash; MOSAIC{% endblock %}
 
 {% block content %}
-<h2>Browser Sessions</h2>
+<h1>Browser Sessions</h1>
 <p>Saved browser sessions for authenticated PDF access to paywalled sources.</p>
 <p><small>To create a new session, use the CLI: <code>mosaic auth login &lt;name&gt; --url &lt;login-url&gt;</code></small></p>
 
 {% if sessions %}
-<table role="grid">
+<table>
   <thead>
     <tr>
       <th>Name</th>
@@ -25,7 +25,7 @@
       <td><small>{{ s.saved }}</small></td>
       <td>
         {% if s.valid %}
-        <span class="badge-oa">&#10003;</span>
+        <span class="badge-oa" aria-hidden="true">&#10003;</span><span class="sr-only">valid</span>
         {% else %}
         <span class="badge-closed">&#10007; expired</span>
         {% endif %}

@@ -1,0 +1,4 @@
+{# Yes/no indicator: a visual glyph plus text for screen readers #}
+{% macro flag(value, yes_text, no_text) -%}
+{% if value %}<span class="badge-oa" aria-hidden="true">&#10003;</span><span class="sr-only">{{ yes_text }}</span>{% else %}<span class="badge-closed" aria-hidden="true">&ndash;</span><span class="sr-only">{{ no_text }}</span>{% endif %}
+{%- endmacro %}

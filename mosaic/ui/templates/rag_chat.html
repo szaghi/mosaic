@@ -8,8 +8,12 @@
                         font-size: .8em; color: var(--pico-muted-color); }
   .chat-toolbar select, .chat-toolbar input, .chat-toolbar button {
     margin: 0; height: 2.4rem; padding: .3rem .7rem; font-size: .9rem; }
-  .chat-toolbar select { width: 10rem; }
-  .chat-toolbar input { width: 16rem; }
+  .chat-toolbar select { width: 10rem; max-width: 100%; }
+  .chat-toolbar input { width: 16rem; max-width: 100%; }
+  @media (max-width: 767px) {
+    .chat-toolbar .spacer { display: none; }
+    .chat-msg { max-width: 100%; }
+  }
   .chat-toolbar .spacer { flex: 1; }
 
   .chat-thread { display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1.25rem; }
@@ -35,7 +39,7 @@
 {% endblock %}
 
 {% block content %}
-<h2>AI &mdash; Chat</h2>
+<h1>AI &mdash; Chat</h1>
 
 <p>Multi-turn conversation with your indexed papers (the last turns are sent as context).
 Requires <a href="{{ url_for('ui.rag_index_page') }}">indexed papers</a> and a
@@ -76,7 +80,7 @@ Requires <a href="{{ url_for('ui.rag_index_page') }}">indexed papers</a> and a
 </form>
 
 <div id="chat-input-area">
-  <textarea id="chat-q" placeholder="Ask a question about your papers…" rows="2"></textarea>
+  <textarea id="chat-q" placeholder="Ask a question about your papers…" rows="2" aria-label="Your question"></textarea>
   <button id="chat-send"
           hx-post="{{ url_for('ui.rag_chat_send') }}"
           hx-include="#chat-form"
