@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from mosaic.citations.crossref import CrossRefCitationProvider
 from mosaic.citations.openalex import OpenAlexCitationProvider, _item_to_uid
 from mosaic.citations.opencitations import OpenCitationsCitationProvider
@@ -367,8 +369,16 @@ class TestRegistry:
 
 
 class TestEnrichmentOrchestrator:
+    @pytest.fixture(autouse=True)
+    def _close_caches(self):
+        self._caches: list[Cache] = []
+        yield
+        for cache in self._caches:
+            cache.close()
+
     def _make_cache(self, tmp_path, papers: list[Paper]) -> Cache:
         cache = Cache(str(tmp_path / "enrich.db"))
+        self._caches.append(cache)
         for p in papers:
             cache.save(p)
         return cache
@@ -493,13 +503,13 @@ class TestCacheMethodsCitations:
         assert cache.get_citation_links(p1.uid, set()) == 0
 
     def test_get_citation_links_unrelated(self, tmp_path):
-        cache = Cache(str(tmp_path / "unrelated.db"))
-        p1 = Paper(title="A", doi="10.1/a", source="test")
-        p2 = Paper(title="B", doi="10.1/b", source="test")
-        cache.save(p1)
-        cache.save(p2)
-        # No edges stored
-        assert cache.get_citation_links(p1.uid, {p2.uid}) == 0
+        with Cache(str(tmp_path / "unrelated.db")) as cache:
+            p1 = Paper(title="A", doi="10.1/a", source="test")
+            p2 = Paper(title="B", doi="10.1/b", source="test")
+            cache.save(p1)
+            cache.save(p2)
+            # No edges stored
+            assert cache.get_citation_links(p1.uid, {p2.uid}) == 0
 
     def test_get_citation_neighbors(self, tmp_cache_with_citations):
         cache, p1, p2 = tmp_cache_with_citations
@@ -535,14 +545,14 @@ class TestGraphBoostedRetrieval:
         """alpha=0 must preserve original cosine order."""
         from mosaic.rag import _citation_boost
 
-        cache = Cache(str(tmp_path / "boost.db"))
-        p1 = Paper(title="A", doi="10.1/a", source="t", abstract="x")
-        p2 = Paper(title="B", doi="10.1/b", source="t", abstract="y")
-        cache.save(p1)
-        cache.save(p2)
-        uids = [p1.uid, p2.uid]
-        result = _citation_boost(uids, cache, alpha=0.0, top_k=10)
-        assert result == uids  # original order preserved
+        with Cache(str(tmp_path / "boost.db")) as cache:
+            p1 = Paper(title="A", doi="10.1/a", source="t", abstract="x")
+            p2 = Paper(title="B", doi="10.1/b", source="t", abstract="y")
+            cache.save(p1)
+            cache.save(p2)
+            uids = [p1.uid, p2.uid]
+            result = _citation_boost(uids, cache, alpha=0.0, top_k=10)
+            assert result == uids  # original order preserved
 
     def test_citation_boost_promotes_cited_paper(self, tmp_path):
         """Paper with more citation links should rise above a paper with fewer.
@@ -555,53 +565,53 @@ class TestGraphBoostedRetrieval:
         """
         from mosaic.rag import _citation_boost
 
-        cache = Cache(str(tmp_path / "boost2.db"))
-        p1 = Paper(title="A", doi="10.1/a", source="t", abstract="x")  # rank 0
-        p2 = Paper(title="B", doi="10.1/b", source="t", abstract="y")  # rank 1
-        p3 = Paper(title="C", doi="10.1/c", source="t", abstract="z")  # rank 2
-        for p in [p1, p2, p3]:
-            cache.save(p)
-        # p3 cites both p1 and p2
-        cache.upsert_citation_edges(
-            [
-                (p3.uid, p1.uid, "openalex"),
-                (p3.uid, p2.uid, "openalex"),
-            ]
-        )
-        uids = [p1.uid, p2.uid, p3.uid]
-        result = _citation_boost(uids, cache, alpha=2.0, top_k=10)
-        assert result.index(p3.uid) < result.index(p2.uid)
+        with Cache(str(tmp_path / "boost2.db")) as cache:
+            p1 = Paper(title="A", doi="10.1/a", source="t", abstract="x")  # rank 0
+            p2 = Paper(title="B", doi="10.1/b", source="t", abstract="y")  # rank 1
+            p3 = Paper(title="C", doi="10.1/c", source="t", abstract="z")  # rank 2
+            for p in [p1, p2, p3]:
+                cache.save(p)
+            # p3 cites both p1 and p2
+            cache.upsert_citation_edges(
+                [
+                    (p3.uid, p1.uid, "openalex"),
+                    (p3.uid, p2.uid, "openalex"),
+                ]
+            )
+            uids = [p1.uid, p2.uid, p3.uid]
+            result = _citation_boost(uids, cache, alpha=2.0, top_k=10)
+            assert result.index(p3.uid) < result.index(p2.uid)
 
     def test_expand_neighbors_adds_cached_neighbors(self, tmp_path):
         """_expand_neighbors should append citation neighbors not in the list."""
         from mosaic.rag import _expand_neighbors
 
-        cache = Cache(str(tmp_path / "expand.db"))
-        p1 = Paper(title="A", doi="10.1/a", source="t", abstract="x")
-        p2 = Paper(title="B", doi="10.1/b", source="t", abstract="y")
-        p3 = Paper(title="C", doi="10.1/c", source="t", abstract="z")
-        for p in [p1, p2, p3]:
-            cache.save(p)
-        # p1 cites p3; p3 is not in the initial uid list
-        cache.upsert_citation_edges([(p1.uid, p3.uid, "openalex")])
-        result = _expand_neighbors([p1.uid, p2.uid], cache, top_k=5)
-        assert p3.uid in result
-        # Original entries preserved at original positions
-        assert result[0] == p1.uid
-        assert result[1] == p2.uid
+        with Cache(str(tmp_path / "expand.db")) as cache:
+            p1 = Paper(title="A", doi="10.1/a", source="t", abstract="x")
+            p2 = Paper(title="B", doi="10.1/b", source="t", abstract="y")
+            p3 = Paper(title="C", doi="10.1/c", source="t", abstract="z")
+            for p in [p1, p2, p3]:
+                cache.save(p)
+            # p1 cites p3; p3 is not in the initial uid list
+            cache.upsert_citation_edges([(p1.uid, p3.uid, "openalex")])
+            result = _expand_neighbors([p1.uid, p2.uid], cache, top_k=5)
+            assert p3.uid in result
+            # Original entries preserved at original positions
+            assert result[0] == p1.uid
+            assert result[1] == p2.uid
 
     def test_expand_neighbors_no_duplicates(self, tmp_path):
         """Neighbors already in the uid list should not be added again."""
         from mosaic.rag import _expand_neighbors
 
-        cache = Cache(str(tmp_path / "dedup.db"))
-        p1 = Paper(title="A", doi="10.1/a", source="t", abstract="x")
-        p2 = Paper(title="B", doi="10.1/b", source="t", abstract="y")
-        for p in [p1, p2]:
-            cache.save(p)
-        cache.upsert_citation_edges([(p1.uid, p2.uid, "openalex")])
-        result = _expand_neighbors([p1.uid, p2.uid], cache, top_k=5)
-        assert result.count(p2.uid) == 1
+        with Cache(str(tmp_path / "dedup.db")) as cache:
+            p1 = Paper(title="A", doi="10.1/a", source="t", abstract="x")
+            p2 = Paper(title="B", doi="10.1/b", source="t", abstract="y")
+            for p in [p1, p2]:
+                cache.save(p)
+            cache.upsert_citation_edges([(p1.uid, p2.uid, "openalex")])
+            result = _expand_neighbors([p1.uid, p2.uid], cache, top_k=5)
+            assert result.count(p2.uid) == 1
 
     def test_retrieve_with_citation_boost_enabled(self, tmp_path):
         """retrieve() must call _citation_boost when citations.enabled=True."""
@@ -609,25 +619,25 @@ class TestGraphBoostedRetrieval:
 
         from mosaic.rag import retrieve
 
-        cache = Cache(str(tmp_path / "retrieve.db"))
-        p = Paper(title="X", doi="10.1/x", source="t", abstract="hello world")
-        cache.save(p)
+        with Cache(str(tmp_path / "retrieve.db")) as cache:
+            p = Paper(title="X", doi="10.1/x", source="t", abstract="hello world")
+            cache.save(p)
 
-        cfg = {
-            "rag": {
-                "top_k": 5,
-                "citations": {"enabled": True, "boost_alpha": 0.3, "expand_neighbors": False},
-                "embedding_provider": "openai",
-                "embedding_model": "test",
-                "embedding_api_key": "key",
-                "embedding_base_url": "",
+            cfg = {
+                "rag": {
+                    "top_k": 5,
+                    "citations": {"enabled": True, "boost_alpha": 0.3, "expand_neighbors": False},
+                    "embedding_provider": "openai",
+                    "embedding_model": "test",
+                    "embedding_api_key": "key",
+                    "embedding_base_url": "",
+                }
             }
-        }
-        fake_emb = [0.1] * 3
+            fake_emb = [0.1] * 3
 
-        with _patch("mosaic.embeddings.embed_texts", return_value=[fake_emb]):
-            with _patch.object(cache, "vector_search", return_value=[p.uid]):
-                with _patch("mosaic.rag._citation_boost", return_value=[p.uid]) as mock_boost:
-                    retrieve("hello", cfg, cache)
+            with _patch("mosaic.embeddings.embed_texts", return_value=[fake_emb]):
+                with _patch.object(cache, "vector_search", return_value=[p.uid]):
+                    with _patch("mosaic.rag._citation_boost", return_value=[p.uid]) as mock_boost:
+                        retrieve("hello", cfg, cache)
 
-        mock_boost.assert_called_once()
+            mock_boost.assert_called_once()

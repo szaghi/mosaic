@@ -205,7 +205,9 @@ def config_save():
     if cfg.get("db_path") != old_db_path:
         from mosaic.db import Cache
 
+        old_cache = current_app.config["MOSAIC_CACHE"]
         current_app.config["MOSAIC_CACHE"] = Cache(cfg["db_path"])
+        old_cache.close()
 
     if request.headers.get("HX-Request"):
         html = '<article style="padding:.5rem 1rem;"><ins>Configuration saved.</ins>'

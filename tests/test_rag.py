@@ -485,24 +485,24 @@ class TestSemanticSearch:
         from mosaic.db import Cache
         from mosaic.rag import semantic_search
 
-        cache = Cache(str(tmp_path / "sem.db"))
-        dim = 2
-        p1 = _paper("Paper Alpha", abstract="alpha")
-        p2 = _paper("Paper Beta", abstract="beta")
-        cache.save(p1)
-        cache.save(p2)
-        cache.upsert_embeddings_batch([(p1.uid, [1.0, 0.0]), (p2.uid, [0.0, 1.0])], dim)
+        with Cache(str(tmp_path / "sem.db")) as cache:
+            dim = 2
+            p1 = _paper("Paper Alpha", abstract="alpha")
+            p2 = _paper("Paper Beta", abstract="beta")
+            cache.save(p1)
+            cache.save(p2)
+            cache.upsert_embeddings_batch([(p1.uid, [1.0, 0.0]), (p2.uid, [0.0, 1.0])], dim)
 
-        # Query embedding == p1's embedding → p1 is closest
-        with patch("httpx.post", return_value=_make_emb_response([[1.0, 0.0]])):
-            results = semantic_search("alpha query", cache, _CFG_EMB, k=2)
+            # Query embedding == p1's embedding → p1 is closest
+            with patch("httpx.post", return_value=_make_emb_response([[1.0, 0.0]])):
+                results = semantic_search("alpha query", cache, _CFG_EMB, k=2)
 
-        assert len(results) == 2
-        assert results[0].uid == p1.uid
-        assert results[0].relevance_score is not None
-        assert 0.0 < results[0].relevance_score <= 1.0
-        # Closest paper has higher score than the farther one
-        assert results[0].relevance_score > results[1].relevance_score
+            assert len(results) == 2
+            assert results[0].uid == p1.uid
+            assert results[0].relevance_score is not None
+            assert 0.0 < results[0].relevance_score <= 1.0
+            # Closest paper has higher score than the farther one
+            assert results[0].relevance_score > results[1].relevance_score
 
     def test_no_vec_table_raises_runtime_error(self, tmp_path):
         """If vec_papers does not exist, raise RuntimeError with helpful message."""
@@ -518,10 +518,10 @@ class TestSemanticSearch:
         from mosaic.db import Cache
         from mosaic.rag import semantic_search
 
-        cache = Cache(str(tmp_path / "empty.db"))
-        with patch("httpx.post", return_value=_make_emb_response([[0.1, 0.2]])):
-            with pytest.raises(RuntimeError, match="mosaic index"):
-                semantic_search("query", cache, _CFG_EMB, k=5)
+        with Cache(str(tmp_path / "empty.db")) as cache:
+            with patch("httpx.post", return_value=_make_emb_response([[0.1, 0.2]])):
+                with pytest.raises(RuntimeError, match="mosaic index"):
+                    semantic_search("query", cache, _CFG_EMB, k=5)
 
     def test_downloaded_only_filters_results(self, tmp_path):
         """downloaded_only=True should exclude papers without an ok download."""
@@ -535,34 +535,34 @@ class TestSemanticSearch:
         from mosaic.db import Cache
         from mosaic.rag import semantic_search
 
-        cache = Cache(str(tmp_path / "dl.db"))
-        dim = 2
-        p_dl = _paper("Downloaded", uid_suffix="-dl")
-        p_nd = _paper("Not Downloaded", uid_suffix="-nd")
-        cache.save(p_dl)
-        cache.save(p_nd)
-        cache.upsert_embeddings_batch([(p_dl.uid, [1.0, 0.0]), (p_nd.uid, [0.9, 0.1])], dim)
-        cache.set_download(p_dl.uid, "/tmp/dl.pdf", "ok")
+        with Cache(str(tmp_path / "dl.db")) as cache:
+            dim = 2
+            p_dl = _paper("Downloaded", uid_suffix="-dl")
+            p_nd = _paper("Not Downloaded", uid_suffix="-nd")
+            cache.save(p_dl)
+            cache.save(p_nd)
+            cache.upsert_embeddings_batch([(p_dl.uid, [1.0, 0.0]), (p_nd.uid, [0.9, 0.1])], dim)
+            cache.set_download(p_dl.uid, "/tmp/dl.pdf", "ok")
 
-        with patch("httpx.post", return_value=_make_emb_response([[1.0, 0.0]])):
-            results = semantic_search("query", cache, _CFG_EMB, k=10, downloaded_only=True)
+            with patch("httpx.post", return_value=_make_emb_response([[1.0, 0.0]])):
+                results = semantic_search("query", cache, _CFG_EMB, k=10, downloaded_only=True)
 
-        uids = {p.uid for p in results}
-        assert p_dl.uid in uids
-        assert p_nd.uid not in uids
+            uids = {p.uid for p in results}
+            assert p_dl.uid in uids
+            assert p_nd.uid not in uids
 
     def test_empty_embedding_response_returns_empty(self, tmp_path):
         """If embed_texts returns nothing, semantic_search returns []."""
         from mosaic.db import Cache
         from mosaic.rag import semantic_search
 
-        cache = Cache(str(tmp_path / "noemb.db"))
-        m = MagicMock()
-        m.raise_for_status = MagicMock()
-        m.json.return_value = {"data": []}
-        with patch("httpx.post", return_value=m):
-            results = semantic_search("query", cache, _CFG_EMB, k=5)
-        assert results == []
+        with Cache(str(tmp_path / "noemb.db")) as cache:
+            m = MagicMock()
+            m.raise_for_status = MagicMock()
+            m.json.return_value = {"data": []}
+            with patch("httpx.post", return_value=m):
+                results = semantic_search("query", cache, _CFG_EMB, k=5)
+            assert results == []
 
 
 # ---------------------------------------------------------------------------

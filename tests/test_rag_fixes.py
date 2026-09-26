@@ -79,8 +79,10 @@ def vec_cache(tmp_path):
         pytest.skip("sqlite-vec not installed")
     cache = Cache(str(tmp_path / "vec.db"))
     if not cache.vec_available:
+        cache.close()
         pytest.skip("sqlite-vec could not be loaded")
-    return cache
+    yield cache
+    cache.close()
 
 
 def _chunk_count(cache: Cache, uid: str) -> int:
@@ -184,8 +186,8 @@ class TestVecStorage:
         assert not vec_cache.con.in_transaction
         assert vec_cache.get_chunk_texts(["u::0"]) == {"u::0": "keep me"}
         # Another connection can write immediately (no dangling lock)
-        other = Cache(vec_cache._db_path)
-        other.save(_p("Other"))
+        with Cache(vec_cache._db_path) as other:
+            other.save(_p("Other"))
 
     def test_vector_search_chunks_reraises_errors(self, vec_cache):
         vec_cache.upsert_chunks_batch([("u::0", "u", 0, "t", 0, 1, [1.0, 0.0])], 2)
@@ -280,8 +282,8 @@ class TestDbWithoutVec:
         )
         con.commit()
         con.close()
-        cache = Cache(db)
-        assert cache.get_metadata_only_uids() == {"b"}
+        with Cache(db) as cache:
+            assert cache.get_metadata_only_uids() == {"b"}
 
 
 # ---------------------------------------------------------------------------

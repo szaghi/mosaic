@@ -24,20 +24,29 @@ def base_cfg(tmp_path):
     }
 
 
+_apps: list = []
+
+
 def _make_app(cfg, **kwargs):
     from mosaic.ui import create_app
 
     with patch("mosaic.config.load", return_value=cfg):
         app = create_app(**kwargs)
     app.config["TESTING"] = True
+    _apps.append(app)
     return app
+
+
+@pytest.fixture(autouse=True)
+def _close_apps():
+    yield
+    while _apps:
+        _apps.pop().config["MOSAIC_CACHE"].close()
 
 
 @pytest.fixture
 def app(base_cfg):
-    app = _make_app(base_cfg)
-    yield app
-    app.config["MOSAIC_CACHE"].close()
+    return _make_app(base_cfg)
 
 
 @pytest.fixture
@@ -179,10 +188,15 @@ class TestConfigSecrets:
         assert rag["full_text_index"] is False  # unchecked box
 
     def test_db_path_change_swaps_cache(self, client, app, tmp_path):
+        import sqlite3
+
         self._seed()
+        old_cache = app.config["MOSAIC_CACHE"]
         new_db = tmp_path / "moved" / "cache.db"
         client.post("/config", data={"db_path": str(new_db)}, headers={"HX-Request": "true"})
         assert app.config["MOSAIC_CACHE"]._db_path == str(new_db)
+        with pytest.raises(sqlite3.ProgrammingError):  # the previous connection is closed
+            old_cache.con.execute("SELECT 1")
 
 
 class TestUntrustedUrls:

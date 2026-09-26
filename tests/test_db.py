@@ -285,7 +285,7 @@ class TestSchemaUpgrade:
         con.commit()
         con.close()
 
-        cache = Cache(str(path))
-        assert cache.get_by_uid("doi:10.1/old").title == "Old paper"
-        cols = {r[1] for r in cache.con.execute("PRAGMA table_info(papers)")}
-        assert "openalex_id" in cols
+        with Cache(str(path)) as cache:
+            assert cache.get_by_uid("doi:10.1/old").title == "Old paper"
+            cols = {r[1] for r in cache.con.execute("PRAGMA table_info(papers)")}
+            assert "openalex_id" in cols
