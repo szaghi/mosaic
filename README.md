@@ -325,7 +325,7 @@ See the [Agent Workflows guide](https://szaghi.github.io/mosaic/guide/agent-work
 | **DOAJ** | `doaj` | 8 M+ fully open-access articles | None | Always |
 | **Europe PMC** | `epmc` | 45 M biomedical papers | None | PMC articles |
 | **OpenAlex** | `oa` | 250 M+ works, all disciplines | None | When available |
-| **BASE** | `base` | 300 M+ docs from 10 000+ repos | None | When OA + PDF format |
+| **BASE** | `base` | 300 M+ docs from 10 000+ repos | Registered IP (off by default) | When OA + PDF format |
 | **CORE** | `core` | 200 M+ OA full-text from repos | Free API key | `downloadUrl` field |
 | **NASA ADS** | `ads` | 15 M+ astronomy & astrophysics records | Free API token | OA articles |
 | **IEEE Xplore** | `ieee` | 5 M+ IEEE journals, transactions & conference proceedings | Free API key | OA articles |

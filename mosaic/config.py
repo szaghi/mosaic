@@ -29,7 +29,8 @@ _DEFAULTS: dict = {
         "doaj": {"enabled": True},
         "europepmc": {"enabled": True},
         "openalex": {"enabled": True},
-        "base": {"enabled": True},
+        # BASE's API only answers registered IP addresses: opt in once access is granted
+        "base": {"enabled": False},
         "springer_api": {"enabled": True, "api_key": ""},
         "core": {"enabled": True, "api_key": ""},
         "nasa_ads": {"enabled": True, "api_key": ""},

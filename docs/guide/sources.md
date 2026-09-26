@@ -212,7 +212,7 @@ mosaic search "transformer" --source oa
 BASE aggregates metadata from institutional repositories, open-access journals, and digital libraries worldwide. It is particularly strong for grey literature, theses, and documents not indexed by journal-centric databases.
 
 ::: warning Access restricted by IP
-BASE's HTTP API only answers IP addresses that BASE has registered; other clients get an "access denied" reply. MOSAIC reports it as a BASE error. If you have not requested access, disable the source: `mosaic config --disable-source base`.
+BASE's HTTP API only answers IP addresses that BASE has registered; other clients get an "access denied" reply. MOSAIC reports it as a BASE error. The source is therefore **disabled by default**; enable it once your address is registered: `mosaic config --enable-source base`.
 :::
 
 Search queries support Lucene syntax. Filters for author (`dccreator`), journal (`dcsource`), and year (`dcyear`) are appended natively.

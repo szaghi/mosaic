@@ -257,3 +257,9 @@ class TestRequireYearAndDefaults:
         )
         assert {p["title"] for p in lenient["papers"]} == {"Graph dated", "Graph undated"}
         assert [p["title"] for p in strict["papers"]] == ["Graph dated"]
+
+    def test_base_disabled_by_default(self):
+        from mosaic.source_registry import build_sources
+
+        names = {s.name for s in build_sources(cfg_mod.load())}
+        assert "BASE" not in names and "arXiv" in names

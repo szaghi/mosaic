@@ -190,7 +190,7 @@ mosaic search "query" [OPTIONS]
 | `doaj` | DOAJ | 8 M+ fully OA articles | None |
 | `epmc` | Europe PMC | 45 M biomedical papers | None |
 | `oa` | OpenAlex | 250 M+ works | None |
-| `base` | BASE | 300 M+ from 10k+ repos | None |
+| `base` | BASE | 300 M+ from 10k+ repos | Registered IP; disabled by default |
 | `core` | CORE | 200 M+ OA full-text | Free API key |
 | `ads` | NASA ADS | Astronomy & astrophysics | Free API token |
 | `ieee` | IEEE Xplore | 5 M+ IEEE papers | Free API key |
