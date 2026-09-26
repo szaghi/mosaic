@@ -2,7 +2,20 @@
 {% block title %}Configuration &mdash; MOSAIC{% endblock %}
 
 {% block content %}
+{% macro secret(name, placeholder, is_set, title) -%}
+<div class="secret-field">
+  <label for="f-{{ name }}">{{ title | safe }}</label>
+  <input type="password" id="f-{{ name }}" name="{{ name }}" value="" autocomplete="off"
+         placeholder="{% if is_set %}&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull; saved &mdash; leave blank to keep{% else %}{{ placeholder }}{% endif %}">
+  {% if is_set %}<label class="secret-clear"><input type="checkbox" name="clear_{{ name }}"> remove saved value</label>{% endif %}
+</div>
+{%- endmacro %}
+<style>
+  .secret-field label.secret-clear { font-size: .8em; color: var(--pico-muted-color);
+    margin-top: calc(var(--pico-spacing) * -.6); margin-bottom: var(--pico-spacing); }
+</style>
 <h2>Configuration</h2>
+<p><small>Saved secrets (API keys) are never shown here; leave a field blank to keep its current value.</small></p>
 
 <div id="config-status"></div>
 
@@ -36,60 +49,27 @@
   <fieldset>
     <legend><strong>API Keys</strong></legend>
     <div class="grid">
-      <label>
-        Elsevier (ScienceDirect)
-        <input type="password" name="elsevier_key" value="{{ cfg.get('sources', {}).get('sciencedirect', {}).get('api_key', '') }}" placeholder="API key">
-      </label>
-      <label>
-        Semantic Scholar
-        <input type="password" name="ss_key" value="{{ cfg.get('sources', {}).get('semantic_scholar', {}).get('api_key', '') }}" placeholder="API key">
-      </label>
+      {{ secret('elsevier_key', 'API key', secrets.get('elsevier_key'), 'Elsevier (ScienceDirect)') }}
+      {{ secret('ss_key', 'API key', secrets.get('ss_key'), 'Semantic Scholar') }}
     </div>
     <div class="grid">
-      <label>
-        NCBI (PubMed / PMC)
-        <input type="password" name="ncbi_key" value="{{ cfg.get('sources', {}).get('pubmed', {}).get('api_key', '') }}" placeholder="API key">
-      </label>
-      <label>
-        CORE
-        <input type="password" name="core_key" value="{{ cfg.get('sources', {}).get('core', {}).get('api_key', '') }}" placeholder="API key">
-      </label>
+      {{ secret('ncbi_key', 'API key', secrets.get('ncbi_key'), 'NCBI (PubMed / PMC)') }}
+      {{ secret('core_key', 'API key', secrets.get('core_key'), 'CORE') }}
     </div>
     <div class="grid">
-      <label>
-        NASA ADS
-        <input type="password" name="ads_key" value="{{ cfg.get('sources', {}).get('nasa_ads', {}).get('api_key', '') }}" placeholder="API token">
-      </label>
-      <label>
-        IEEE Xplore
-        <input type="password" name="ieee_key" value="{{ cfg.get('sources', {}).get('ieee', {}).get('api_key', '') }}" placeholder="API key">
-      </label>
+      {{ secret('ads_key', 'API token', secrets.get('ads_key'), 'NASA ADS') }}
+      {{ secret('ieee_key', 'API key', secrets.get('ieee_key'), 'IEEE Xplore') }}
     </div>
     <div class="grid">
-      <label>
-        Springer Nature
-        <input type="password" name="springer_key" value="{{ cfg.get('sources', {}).get('springer_api', {}).get('api_key', '') }}" placeholder="API key">
-      </label>
-      <label>
-        Zotero
-        <input type="password" name="zotero_key" value="{{ cfg.get('zotero', {}).get('api_key', '') }}" placeholder="Web API key">
-      </label>
+      {{ secret('springer_key', 'API key', secrets.get('springer_key'), 'Springer Nature') }}
+      {{ secret('zotero_key', 'Web API key', secrets.get('zotero_key'), 'Zotero') }}
     </div>
     <div class="grid">
-      <label>
-        Scopus API key
-        <input type="password" name="scopus_key" value="{{ cfg.get('sources', {}).get('scopus', {}).get('api_key', '') }}" placeholder="API key (same account as Elsevier)">
-      </label>
-      <label>
-        Scopus institutional token <small>(optional — unlocks full abstracts)</small>
-        <input type="password" name="scopus_inst_token" value="{{ cfg.get('sources', {}).get('scopus', {}).get('inst_token', '') }}" placeholder="Institution token">
-      </label>
+      {{ secret('scopus_key', 'API key (same account as Elsevier)', secrets.get('scopus_key'), 'Scopus API key') }}
+      {{ secret('scopus_inst_token', 'Institution token', secrets.get('scopus_inst_token'), 'Scopus institutional token <small>(optional — unlocks full abstracts)</small>') }}
     </div>
     <div class="grid">
-      <label>
-        Zenodo <small>(optional — raises anonymous rate limits)</small>
-        <input type="password" name="zenodo_key" value="{{ cfg.get('sources', {}).get('zenodo', {}).get('api_key', '') }}" placeholder="Personal access token">
-      </label>
+      {{ secret('zenodo_key', 'Personal access token', secrets.get('zenodo_key'), 'Zenodo <small>(optional — raises anonymous rate limits)</small>') }}
       <label></label>
     </div>
   </fieldset>
@@ -156,8 +136,8 @@
     <label>
       <input type="checkbox" name="pedro_fetch_details"
              {% if pedro_cfg.get('fetch_details', false) %}checked{% endif %}>
-      Fetch each record's detail page to populate authors, year, DOI and abstract
-      <small>(issues one extra request per result — slower but richer metadata)</small>
+      <span>Fetch each record's detail page to populate authors, year, DOI and abstract
+      <small>(issues one extra request per result — slower but richer metadata)</small></span>
     </label>
     <label>
       Rate limit delay (seconds between requests)
@@ -217,10 +197,7 @@
       </label>
     </div>
     <div class="grid">
-      <label>
-        API key
-        <input type="password" name="llm_api_key" value="{{ llm_cfg.get('api_key', '') }}" placeholder="sk-…">
-      </label>
+      {{ secret('llm_api_key', 'sk-…', secrets.get('llm_api_key'), 'API key') }}
       <label>
         Base URL <small>(leave empty for hosted APIs; set for Ollama etc.)</small>
         <input type="text" name="llm_base_url" value="{{ llm_cfg.get('base_url', '') }}" placeholder="http://localhost:11434/v1">
@@ -250,10 +227,7 @@
       </label>
     </div>
     <div class="grid">
-      <label>
-        Embedding API key <small>(leave empty to inherit LLM key)</small>
-        <input type="password" name="rag_embedding_api_key" value="{{ rag_cfg.get('embedding_api_key', '') }}" placeholder="sk-…">
-      </label>
+      {{ secret('rag_embedding_api_key', 'sk-…', secrets.get('rag_embedding_api_key'), 'Embedding API key <small>(leave empty to inherit LLM key)</small>') }}
       <label>
         Embedding base URL <small>(e.g. http://localhost:11434/v1 for Ollama)</small>
         <input type="text" name="rag_embedding_base_url" value="{{ rag_cfg.get('embedding_base_url', '') }}"
@@ -271,6 +245,30 @@
         <input type="checkbox" name="rag_auto_index"
                {% if rag_cfg.get('auto_index', false) %}checked{% endif %}>
         Auto-index new papers after each search / get
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        Chunk size <small>(tokens per chunk)</small>
+        <input type="number" name="rag_chunk_size" min="64" max="8192"
+               value="{{ rag_cfg.get('chunk_size', 512) }}" placeholder="512">
+      </label>
+      <label>
+        Chunk overlap <small>(tokens)</small>
+        <input type="number" name="rag_chunk_overlap" min="0"
+               value="{{ rag_cfg.get('chunk_overlap', 50) }}" placeholder="50">
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        <input type="checkbox" name="rag_full_text_index"
+               {% if rag_cfg.get('full_text_index', true) %}checked{% endif %}>
+        <span>Index full PDF text when available <small>(requires pymupdf)</small></span>
+      </label>
+      <label>
+        <input type="checkbox" name="rag_citations_enabled"
+               {% if rag_cfg.get('citations', {}).get('enabled', false) %}checked{% endif %}>
+        <span>Citation-graph boosting in retrieval <small>(needs enriched citations)</small></span>
       </label>
     </div>
   </fieldset>

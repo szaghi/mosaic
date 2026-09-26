@@ -43,11 +43,19 @@ def find_similar(
     seed_title, oa_papers = _similar_openalex(identifier, max_results, email=oa_email)
     seen: dict[str, Paper] = {p.uid: p for p in oa_papers}
 
+    ss_papers: list[Paper] = []
     if ss_api_key:
-        for p in _similar_ss(identifier, max_results, api_key=ss_api_key):
+        ss_papers = _similar_ss(identifier, max_results, api_key=ss_api_key)
+        for p in ss_papers:
             merge_papers(seen, p)
 
-    return seed_title, list(seen.values())
+    # Unknown to OpenAlex but recommended by Semantic Scholar: the seed exists,
+    # we just don't know its title.
+    if seed_title is None and ss_papers:
+        seed_title = identifier.strip()
+
+    # OpenAlex results first, then Semantic Scholar-only ones, capped at max_results
+    return seed_title, list(seen.values())[:max_results]
 
 
 def _similar_openalex(

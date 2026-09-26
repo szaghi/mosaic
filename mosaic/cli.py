@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 from rich import box
 from rich import print as rprint
@@ -16,11 +17,18 @@ from rich.table import Table
 import mosaic.config as cfg_mod
 from mosaic.config import apply_api_keys
 from mosaic.db import Cache
-from mosaic.downloader import download as dl_paper
-from mosaic.errors import set_verbose_logging
+from mosaic.errors import MosaicError, set_verbose_logging
 from mosaic.search import search_all
-from mosaic.services import build_filters, filter_papers, sort_by_relevance
-from mosaic.source_registry import SRC_MAP, build_sources
+from mosaic.services import (
+    FIELD_CHOICES,
+    RAG_MODES,
+    SORT_CHOICES,
+    build_filters,
+    filter_papers,
+    select_cached_papers,
+)
+from mosaic.source_registry import SRC_MAP, build_sources, source_choices
+from mosaic.workflows import auto_index, finalize_search
 
 
 def _version_callback(value: bool) -> None:
@@ -31,7 +39,18 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-app = typer.Typer(help="MOSAIC — Multi-source Scientific Article Indexer and Collector")
+class _MosaicTyper(typer.Typer):
+    """Typer app that reports MOSAIC errors (e.g. an unreadable config) without a traceback."""
+
+    def __call__(self, *args, **kwargs):
+        try:
+            return super().__call__(*args, **kwargs)
+        except MosaicError as e:
+            rprint(f"[red]{e}[/red]")
+            raise SystemExit(1) from None
+
+
+app = _MosaicTyper(help="MOSAIC — Multi-source Scientific Article Indexer and Collector")
 notebook_app = typer.Typer(
     help="Create and populate Google NotebookLM notebooks from search results."
 )
@@ -70,12 +89,45 @@ def main(
 
 
 console = Console()
+err_console = Console(stderr=True)
 
 
 def warn(msg: str) -> None:
     """Print a warning — only when --verbose is active."""
     if _verbose:
         rprint(msg)
+
+
+def _auto_index(papers: list, cfg: dict, cache: Cache) -> None:
+    """Run ``rag.auto_index`` and report (never hide) a failure."""
+    warning = auto_index(papers, cfg, cache)
+    if warning:
+        rprint(f"[dark_orange]{warning}[/dark_orange]")
+
+
+def _read_dois_or_exit(path: Path) -> list[str]:
+    from mosaic.bulk import read_dois
+
+    if not path.exists():
+        rprint(f"[red]File not found: {path}[/red]")
+        raise typer.Exit(1)
+    try:
+        return read_dois(path)
+    except ValueError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+
+def _subset_or_exit(
+    cache: Cache, *, query: str = "", from_file: Path | None = None, year: str = ""
+):
+    """Cached papers selected by --query/--from/--year (``None`` = whole library)."""
+    dois = _read_dois_or_exit(from_file) if from_file else None
+    try:
+        return select_cached_papers(cache, query=query, dois=dois, year=year or "")
+    except ValueError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -212,14 +264,46 @@ def search(
         cfg["sources"]["pedro"]["fetch_details"] = True
     cache = Cache(cfg["db_path"])
 
-    if cached or semantic:
-        filters, year_warning = build_filters(
-            year=year, author=list(author), journal=journal, field=field, raw_query=raw_query
-        )
-        if year_warning:
-            rprint(f"[red]{year_warning}[/red]")
-            raise typer.Exit(1)
+    if field not in FIELD_CHOICES:
+        rprint('[red]--field must be "title", "abstract", or "all"[/red]')
+        raise typer.Exit(1)
+    if sort_by and sort_by not in SORT_CHOICES:
+        rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year, relevance[/red]')
+        raise typer.Exit(1)
 
+    filters, year_warning = build_filters(
+        year=year, author=list(author), journal=journal, field=field, raw_query=raw_query
+    )
+    if year_warning:
+        rprint(f"[red]{year_warning}[/red]")
+        raise typer.Exit(1)
+
+    history = {
+        "filters": {
+            "year": year,
+            "author": ", ".join(author),
+            "journal": journal,
+            "field": field,
+            "raw_query": raw_query,
+        }
+    }
+    post_opts = {
+        "output": list(output),
+        "do_download": download,
+        "oa_only": oa_only,
+        "pdf_only": pdf_only,
+        "zotero": zotero,
+        "zotero_collection": zotero_collection,
+        "zotero_local": zotero_local,
+        "obsidian": obsidian,
+        "obsidian_folder": obsidian_folder,
+    }
+
+    if cached or semantic:
+        mode = "semantic" if semantic else "cached"
+        history["filters"]["mode"] = mode
+        history["sources"] = [mode]
+        effective_sort = sort_by
         if semantic:
             if not json_output:
                 rprint(f"[dim]Searching local vector index for '{query}'…[/dim]")
@@ -238,87 +322,63 @@ def search(
                     "[dim]Hint: run mosaic config --embedding-model <model> to configure an embedding model.[/dim]"
                 )
                 raise typer.Exit(1) from None
-            if filters:
-                papers = [p for p in papers if filters.match(p)]
             # --sort citations/year is allowed; --sort relevance would clobber
             # semantic ordering with BM25, so treat it as no sort.
             effective_sort = sort_by if sort_by in ("citations", "year") else ""
-            if json_output:
-                _emit_json(papers, query=query)
-                return
-            _post_process(
-                papers,
-                cfg,
-                cache,
-                query=query,
-                output=list(output),
-                do_download=download,
-                sort_by=effective_sort,
-                oa_only=oa_only,
-                pdf_only=pdf_only,
-                zotero=zotero,
-                zotero_collection=zotero_collection,
-                zotero_local=zotero_local,
-                obsidian=obsidian,
-                obsidian_folder=obsidian_folder,
-                show_score=True,
-            )
         else:
             if not json_output:
                 rprint(f"[dim]Searching local cache for '{query}'…[/dim]")
             papers = cache.search_local(query)
-            if filters:
-                papers = [p for p in papers if filters.match(p)]
             if downloaded_only:
                 dld = cache.get_downloaded_uids()
                 papers = [p for p in papers if p.uid in dld]
-            if json_output:
-                _emit_json(papers, query=query)
-                return
-            _post_process(
+        if filters:
+            papers = [p for p in papers if filters.match(p)]
+        if json_output:
+            papers = finalize_search(
                 papers,
                 cfg,
                 cache,
                 query=query,
-                output=list(output),
-                do_download=download,
-                sort_by=sort_by,
                 oa_only=oa_only,
                 pdf_only=pdf_only,
-                zotero=zotero,
-                zotero_collection=zotero_collection,
-                zotero_local=zotero_local,
-                obsidian=obsidian,
-                obsidian_folder=obsidian_folder,
+                sort_by=effective_sort,
+                save=False,
+                history=history,
             )
+            _export_outputs(papers, list(output), quiet=True)
+            _emit_json(papers, query=query)
+            return
+        _post_process(
+            papers,
+            cfg,
+            cache,
+            query=query,
+            sort_by=effective_sort,
+            show_score=semantic,
+            save=False,
+            history=history,
+            **post_opts,
+        )
         return
 
     sources = build_sources(cfg)
 
-    # filter by source shorthand
+    # filter by source shorthand (custom sources are selectable by name)
     if source:
+        choices = source_choices(cfg)
         key = source.lower()
-        if key not in SRC_MAP:
-            rprint(f"[red]Unknown source '{source}'. Use: {', '.join(SRC_MAP.keys())}[/red]")
+        if key not in choices:
+            rprint(f"[red]Unknown source '{source}'. Use: {', '.join(choices)}[/red]")
             raise typer.Exit(1)
-        name = SRC_MAP[key]
+        name = choices[key]
         sources = [s for s in sources if s.name == name]
         if not sources:
             rprint(
                 f"[dark_orange]Source '{source}' is not active (missing API key or disabled in config).[/dark_orange]"
             )
             raise typer.Exit(1)
-
-    if field not in ("all", "title", "abstract"):
-        rprint('[red]--field must be "title", "abstract", or "all"[/red]')
-        raise typer.Exit(1)
-
-    filters, year_warning = build_filters(
-        year=year, author=list(author), journal=journal, field=field, raw_query=raw_query
-    )
-    if year_warning:
-        rprint(f"[red]{year_warning}[/red]")
-        raise typer.Exit(1)
+    history["sources"] = sorted(s.name for s in sources)
 
     errors: list[str] = []
     search_stats: dict = {}
@@ -345,32 +405,24 @@ def search(
                 stats=search_stats,
             )
 
-    if not json_output:
-        for err in errors:
-            warn(f"[dark_orange]Warning:[/dark_orange] {err}")
-
-    if prefer_cache:
-        rich = cache.rich_uids()
-        papers = [cache.get_by_uid(p.uid) or p if p.uid in rich else p for p in papers]
-
     if json_output:
-        papers = filter_papers(
+        papers = finalize_search(
             papers,
+            cfg,
+            cache,
+            query=query,
             oa_only=oa_only,
             pdf_only=pdf_only,
-            sort_by=sort_by if sort_by != "relevance" else "",
+            sort_by=sort_by,
+            prefer_cache=prefer_cache,
+            history=history,
         )
-        if sort_by == "relevance":
-            papers = sort_by_relevance(query, papers, cfg)
-        for p in papers:
-            cache.save(p)
-        if output:
-            from mosaic.exporter import export
-
-            for path in list(output):
-                export(papers, path)
+        _export_outputs(papers, list(output), quiet=True)
         _emit_json(papers, query=query, errors=errors)
         return
+
+    for err in errors:
+        warn(f"[dark_orange]Warning:[/dark_orange] {err}")
 
     if stats:
         _print_search_stats(search_stats, filters)
@@ -380,16 +432,10 @@ def search(
         cfg,
         cache,
         query=query,
-        output=list(output),
-        do_download=download,
         sort_by=sort_by,
-        oa_only=oa_only,
-        pdf_only=pdf_only,
-        zotero=zotero,
-        zotero_collection=zotero_collection,
-        zotero_local=zotero_local,
-        obsidian=obsidian,
-        obsidian_folder=obsidian_folder,
+        prefer_cache=prefer_cache,
+        history=history,
+        **post_opts,
     )
 
 
@@ -511,21 +557,20 @@ def similar(
         raise typer.Exit(1)
 
     if json_output:
-        papers = filter_papers(
-            papers,
-            oa_only=oa_only,
-            pdf_only=pdf_only,
-            sort_by=sort_by if sort_by != "relevance" else "",
-        )
-        if sort_by == "relevance":
-            papers = sort_by_relevance(seed_title or identifier, papers, cfg)
-        for p in papers:
-            cache.save(p)
-        if output:
-            from mosaic.exporter import export
-
-            for path in list(output):
-                export(papers, path)
+        try:
+            papers = finalize_search(
+                papers,
+                cfg,
+                cache,
+                query=seed_title or identifier,
+                oa_only=oa_only,
+                pdf_only=pdf_only,
+                sort_by=sort_by,
+            )
+        except ValueError as e:
+            err_console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1) from None
+        _export_outputs(papers, list(output), quiet=True)
         _emit_json(papers, query=identifier, seed=seed_title)
         return
 
@@ -613,44 +658,32 @@ def get(
         rprint("[red]Provide a DOI argument or use --from <file> for bulk download.[/red]")
         raise typer.Exit(1)
 
-    from mosaic.models import Paper
+    from mosaic.services import papers_for_dois
+    from mosaic.workflows import download_papers
 
-    _bare = Paper(title=doi, doi=doi, source="manual")
-    paper = cache.get_by_uid(_bare.uid) or _bare
-    if paper is not _bare:
+    paper = papers_for_dois(cache, [doi])[0]
+    if paper.source != "manual":
         rprint(f"[dim]Found in local cache: {paper.title[:80]}[/dim]")
-    path = dl_paper(
-        paper,
-        cfg["download_dir"],
-        cache,
-        cfg.get("unpaywall", {}).get("email", ""),
-        cfg.get("filename_pattern", "{year}_{source}_{author}_{title}"),
-    )
+    report = download_papers([paper], cfg, cache, skip_without_link=False)
+    path = report.items[0].path
     if path:
         rprint(f"[green]Saved:[/green] {path}")
     else:
         rprint("[red]Could not find a downloadable PDF for this DOI.[/red]")
 
     if zotero:
-        pdf_map = {paper.uid: path} if path else {}
         _push_to_zotero(
             [paper],
             cfg,
             collection_name=zotero_collection,
             force_local=zotero_local,
-            pdf_map=pdf_map,
+            pdf_map=report.pdf_map,
         )
 
     if obsidian:
         _push_to_obsidian([paper], cfg, subfolder_override=obsidian_folder)
 
-    if cfg.get("rag", {}).get("auto_index"):
-        try:
-            from mosaic.rag import index_papers
-
-            index_papers([paper], cfg, cache, progress=False)
-        except Exception:
-            pass  # auto-index failures are always silent
+    _auto_index([paper], cfg, cache)
 
 
 _CITE_STYLES = ["bibtex", "apa", "mla", "chicago", "harvard", "vancouver"]
@@ -761,50 +794,35 @@ def index(
     cfg = cfg_mod.load()
     cache = Cache(cfg["db_path"])
 
-    # Gather candidate papers
-    if from_file:
-        from mosaic.bulk import read_dois
-
-        dois = read_dois(from_file)
-        papers_from_file = []
-        for doi in dois:
-            papers_from_file.extend(cache.search_local(doi))
-        seen: set[str] = set()
-        unique: list = []
-        for p in papers_from_file:
-            if p.uid not in seen:
-                seen.add(p.uid)
-                unique.append(p)
-        papers = unique
-    elif query:
-        papers = cache.search_local(query)
-    else:
+    # Gather candidate papers (--query and --from combine)
+    papers = _subset_or_exit(cache, query=query, from_file=from_file)
+    if papers is None:
         papers = cache.get_all_papers()
 
     if not papers:
-        rprint("[yellow]No papers found in cache. Run some searches first.[/yellow]")
+        rprint("[yellow]No matching papers found in cache. Run some searches first.[/yellow]")
         raise typer.Exit()
 
     from mosaic import pdf as _pdf
+    from mosaic.rag import NO_PYMUPDF_MESSAGE, index_health
 
     if cfg.get("rag", {}).get("full_text_index", True) and not _pdf.is_available():
-        rprint(
-            "[yellow]Warning: full_text_index is enabled but pymupdf is not installed.\n"
-            "Run: pipx inject mosaic-search pymupdf\n"
-            "Falling back to metadata-only indexing.[/yellow]"
-        )
+        rprint(f"[yellow]Warning: {NO_PYMUPDF_MESSAGE}[/yellow]")
 
     rprint(f"[cyan]Indexing {len(papers)} papers…[/cyan]")
     try:
-        newly, skipped, full_text = index_papers(papers, cfg, cache, reindex=reindex)
-        rprint(f"[green]Indexed {newly} new paper(s).[/green] {skipped} already indexed.")
-        if full_text:
-            rprint(
-                f"  [dim]└─ {full_text} full-text (PDF), {newly - full_text} metadata-only[/dim]"
-            )
-    except ValueError as e:
+        newly, skipped, full_text = index_papers(
+            papers, cfg, cache, reindex=reindex, batch_size=batch_size
+        )
+    except (ValueError, RuntimeError) as e:
         rprint(f"[red]{e}[/red]")
         raise typer.Exit(1) from None
+    except httpx.HTTPError as e:
+        rprint(f"[red]Embedding request failed: {e}[/red]")
+        raise typer.Exit(1) from None
+    rprint(f"[green]Indexed {newly} new paper(s).[/green] {skipped} already indexed.")
+    if full_text:
+        rprint(f"  [dim]└─ {full_text} full-text (PDF), {newly - full_text} metadata-only[/dim]")
 
     # ── Citation enrichment ───────────────────────────────────────────────────
     if enrich_citations or cfg.get("rag", {}).get("citations", {}).get("enabled", False):
@@ -819,6 +837,10 @@ def index(
             )
         except Exception as e:
             rprint(f"[yellow]Citation enrichment warning: {e}[/yellow]")
+
+    for warning in index_health(cfg, cache):
+        if warning != NO_PYMUPDF_MESSAGE:  # already reported above
+            rprint(f"[yellow]Warning: {warning}[/yellow]")
 
 
 @app.command()
@@ -855,52 +877,28 @@ def ask(
     from rich.rule import Rule
 
     from mosaic.rag import ask as rag_ask
+    from mosaic.services import format_answer
+
+    if mode not in RAG_MODES:
+        rprint(f"[red]Unknown mode {mode!r}. Choose from: {', '.join(sorted(RAG_MODES))}[/red]")
+        raise typer.Exit(1)
 
     cfg = cfg_mod.load()
     cache = Cache(cfg["db_path"])
 
-    # Build pre_filter from --query or --from
-    pre_filter: list[str] | None = None
-    if from_file:
-        from mosaic.bulk import read_dois
-
-        dois = read_dois(from_file)
-        papers_from_file = []
-        for doi in dois:
-            papers_from_file.extend(cache.search_local(doi))
-        pre_filter = list({p.uid for p in papers_from_file})
-    elif query:
-        filtered = cache.search_local(query)
-        pre_filter = [p.uid for p in filtered]
-
-    # Apply year filter to pre_filter if provided
-    if year and pre_filter is not None:
-        from mosaic.services import build_filters, filter_papers
-
-        filters, _ = build_filters(year=year)
-        all_papers = cache.get_papers_by_uids(pre_filter)
-        filtered_papers = filter_papers(all_papers, oa_only=False, pdf_only=False)
-        filtered_papers = [p for p in all_papers if filters and filters.match(p)]
-        pre_filter = [p.uid for p in filtered_papers]
-    elif year:
-        from mosaic.services import build_filters
-
-        filters, _ = build_filters(year=year)
-        all_papers = cache.get_all_papers()
-        filtered_papers = [p for p in all_papers if filters and filters.match(p)]
-        pre_filter = [p.uid for p in filtered_papers]
-
-    valid_modes = {"synthesis", "gaps", "compare", "extract"}
-    if mode not in valid_modes:
-        rprint(f"[red]Unknown mode {mode!r}. Choose from: {', '.join(sorted(valid_modes))}[/red]")
-        raise typer.Exit(1)
+    # --query, --from and --year restrict the retrieval pool (all must match)
+    subset = _subset_or_exit(cache, query=query, from_file=from_file, year=year or "")
+    pre_filter = None if subset is None else [p.uid for p in subset]
 
     console.print(Rule(f"[cyan]mosaic ask[/cyan] · mode: {mode}"))
 
     try:
         answer, papers = rag_ask(question, cfg, cache, mode=mode, k=n, pre_filter=pre_filter)
-    except ValueError as e:
+    except (ValueError, RuntimeError) as e:
         rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+    except httpx.HTTPError as e:
+        rprint(f"[red]LLM/embedding request failed: {e}[/red]")
         raise typer.Exit(1) from None
 
     if show_sources:
@@ -913,7 +911,8 @@ def ask(
     console.print(Markdown(answer))
 
     # References footer
-    rprint("\n[bold]References[/bold]")
+    if papers:
+        rprint("\n[bold]References[/bold]")
     for i, p in enumerate(papers, 1):
         authors = ", ".join(p.authors[:3]) if p.authors else "Unknown"
         if len(p.authors) > 3:
@@ -921,26 +920,8 @@ def ask(
         rprint(f"  [{i}] {p.title or 'Untitled'} — {authors}, {p.year or '?'}")
 
     if output:
-        if str(output).endswith(".json"):
-            import json as _json
-
-            data = {
-                "question": question,
-                "mode": mode,
-                "answer": answer,
-                "sources": [
-                    {"title": p.title, "authors": p.authors, "year": p.year, "doi": p.doi}
-                    for p in papers
-                ],
-            }
-            output.write_text(_json.dumps(data, indent=2, default=str))
-        else:
-            # Markdown
-            lines = [f"# {question}\n", f"*Mode: {mode}*\n\n", answer, "\n\n## References\n"]
-            for i, p in enumerate(papers, 1):
-                authors = ", ".join(p.authors[:3]) if p.authors else "Unknown"
-                lines.append(f"- [{i}] {p.title or 'Untitled'} — {authors} ({p.year or '?'})")
-            output.write_text("\n".join(lines))
+        fmt = "json" if output.suffix.lower() == ".json" else "md"
+        output.write_text(format_answer(question, mode, answer, papers, fmt), encoding="utf-8")
         rprint(f"[green]Answer saved to {output}[/green]")
 
 
@@ -957,29 +938,28 @@ def chat(
     mode: Annotated[
         str, typer.Option("--mode", help="Default prompt mode: synthesis, gaps, compare, extract")
     ] = "synthesis",
+    year: Annotated[
+        str | None,
+        typer.Option(
+            "--year", "-y", help="Narrow retrieval pool by year or range (e.g. 2020-2024)"
+        ),
+    ] = None,
 ):
     """Interactive RAG chat session over your cached papers."""
     from rich.markdown import Markdown
     from rich.rule import Rule
 
-    from mosaic.rag import _PROMPTS, _build_context, retrieve
+    from mosaic.rag import chat_turn
+
+    if mode not in RAG_MODES:
+        rprint(f"[red]Unknown mode {mode!r}. Choose from: {', '.join(sorted(RAG_MODES))}[/red]")
+        raise typer.Exit(1)
 
     cfg = cfg_mod.load()
     cache = Cache(cfg["db_path"])
 
-    # Build pre_filter
-    pre_filter: list[str] | None = None
-    if from_file:
-        from mosaic.bulk import read_dois
-
-        dois = read_dois(from_file)
-        papers_from_file = []
-        for doi in dois:
-            papers_from_file.extend(cache.search_local(doi))
-        pre_filter = list({p.uid for p in papers_from_file})
-    elif query:
-        filtered = cache.search_local(query)
-        pre_filter = [p.uid for p in filtered]
+    subset = _subset_or_exit(cache, query=query, from_file=from_file, year=year or "")
+    pre_filter = None if subset is None else [p.uid for p in subset]
 
     current_mode = mode
     history: list[dict] = []
@@ -1010,12 +990,11 @@ def chat(
                 last_papers.clear()
                 rprint("[dim]Conversation history cleared.[/dim]")
             elif cmd == "/mode":
-                valid = {"synthesis", "gaps", "compare", "extract"}
-                if arg in valid:
+                if arg in RAG_MODES:
                     current_mode = arg
                     rprint(f"[dim]Mode set to {current_mode}.[/dim]")
                 else:
-                    rprint(f"[red]Unknown mode. Choose from: {', '.join(sorted(valid))}[/red]")
+                    rprint(f"[red]Unknown mode. Choose from: {', '.join(sorted(RAG_MODES))}[/red]")
             elif cmd == "/sources":
                 if not last_papers:
                     rprint("[dim]No sources yet — ask a question first.[/dim]")
@@ -1027,90 +1006,22 @@ def chat(
                 rprint(f"[red]Unknown command: {cmd}[/red]")
             continue
 
-        # Retrieve papers for this turn
         try:
-            papers = retrieve(user_input, cfg, cache, pre_filter=pre_filter)
-        except Exception as e:
-            rprint(f"[red]Retrieval error: {e}[/red]")
-            continue
-
-        if not papers:
-            rprint("[yellow]No indexed papers found. Run `mosaic index` first.[/yellow]")
-            continue
-
-        last_papers = papers
-        context = _build_context(papers)
-        template = _PROMPTS.get(current_mode, _PROMPTS["synthesis"])
-        system_prompt = template.format(query=user_input, context=context)
-
-        # Build messages with history
-        messages = [{"role": "user", "content": system_prompt}]
-        for h in history[-6:]:  # last 3 turns
-            messages.append(h)
-        # The actual question is already in the system prompt; add a short user turn
-        messages.append({"role": "user", "content": user_input})
-
-        try:
-            import httpx as _httpx
-
-            llm_cfg = cfg.get("llm", {})
-            provider = llm_cfg.get("provider", "").lower()
-            api_key = llm_cfg.get("api_key", "")
-            llm_model = llm_cfg.get("model", "") or (
-                "gpt-4o-mini" if provider == "openai" else "claude-haiku-4-5-20251001"
+            answer, papers = chat_turn(
+                user_input, list(history), cfg, cache, mode=current_mode, pre_filter=pre_filter
             )
-            base_url = llm_cfg.get("base_url", "").rstrip("/")
+        except Exception as e:
+            rprint(f"[red]Error: {e}[/red]")
+            continue
 
-            if not api_key or not provider:
-                rprint(
-                    "[red]No LLM configured. Run: mosaic config --llm-provider ... "
-                    "--llm-api-key ... --llm-model ...[/red]"
-                )
-                continue
-
-            if provider == "openai" or base_url:
-                url = (
-                    f"{base_url}/chat/completions"
-                    if base_url
-                    else "https://api.openai.com/v1/chat/completions"
-                )
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                resp = _httpx.post(
-                    url,
-                    headers=headers,
-                    json={"model": llm_model, "messages": messages},
-                    timeout=180,
-                )
-                resp.raise_for_status()
-                answer = resp.json()["choices"][0]["message"]["content"]
-            elif provider == "anthropic":
-                url = "https://api.anthropic.com/v1/messages"
-                headers = {
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                }
-                resp = _httpx.post(
-                    url,
-                    headers=headers,
-                    json={"model": llm_model, "max_tokens": 2048, "messages": messages},
-                    timeout=180,
-                )
-                resp.raise_for_status()
-                answer = resp.json()["content"][0]["text"]
-            else:
-                rprint(f"[red]Unknown provider: {provider}[/red]")
-                continue
-
+        if papers:
+            last_papers = papers
             history.append({"role": "user", "content": user_input})
             history.append({"role": "assistant", "content": answer})
 
-            rprint("\n[bold cyan]mosaic:[/bold cyan]")
-            console.print(Markdown(answer))
-            rprint()
-
-        except Exception as e:
-            rprint(f"[red]LLM error: {e}[/red]")
+        rprint("\n[bold cyan]mosaic:[/bold cyan]")
+        console.print(Markdown(answer))
+        rprint()
 
 
 @app.command()
@@ -1225,6 +1136,13 @@ def config(
         ),
     ] = "",
     # --- rag / embeddings ---
+    embedding_provider: Annotated[
+        str,
+        typer.Option(
+            "--embedding-provider",
+            help='Embedding provider: "openai" or "custom" (empty = inherit from the LLM provider)',
+        ),
+    ] = "",
     embedding_model: Annotated[
         str,
         typer.Option(
@@ -1257,10 +1175,21 @@ def config(
             help="Auto-index new papers after each search/get run",
         ),
     ] = None,
+    chunk_size: Annotated[
+        int | None,
+        typer.Option("--chunk-size", help="Max tokens per text chunk (default: 512)"),
+    ] = None,
     chunk_overlap: Annotated[
         int | None,
         typer.Option(
             "--chunk-overlap", help="Token overlap between consecutive chunks (default: 50)"
+        ),
+    ] = None,
+    rag_citations: Annotated[
+        bool | None,
+        typer.Option(
+            "--rag-citations/--no-rag-citations",
+            help="Boost retrieval with the citation graph (needs `mosaic index --enrich-citations`)",
         ),
     ] = None,
     full_text_index: Annotated[
@@ -1294,16 +1223,13 @@ def config(
     if ncbi_key:
         cfg["sources"]["pmc"]["api_key"] = ncbi_key
     if zotero_key:
-        cfg["zotero"]["api_key"] = zotero_key
-        from mosaic.zotero import ZoteroClient
+        from mosaic.workflows import configure_zotero_key
 
-        client = ZoteroClient(api_key=zotero_key)
-        try:
-            uid = client.discover_user_id()
-            cfg["zotero"]["user_id"] = uid
-            rprint(f"[green]Zotero web API configured for user {uid}[/green]")
-        except Exception as e:
-            warn(f"[dark_orange]Could not auto-discover Zotero user ID: {e}[/dark_orange]")
+        warning = configure_zotero_key(cfg, zotero_key)
+        if warning:
+            rprint(f"[dark_orange]{warning} (it will be retried on the first export)[/dark_orange]")
+        else:
+            rprint(f"[green]Zotero web API configured for user {cfg['zotero']['user_id']}[/green]")
     if unpaywall_email:
         cfg["unpaywall"]["email"] = unpaywall_email
 
@@ -1391,6 +1317,9 @@ def config(
 
     # --- rag ---
     _rag_changed = False
+    if embedding_provider:
+        cfg["rag"]["embedding_provider"] = embedding_provider
+        _rag_changed = True
     if embedding_model:
         cfg["rag"]["embedding_model"] = embedding_model
         _rag_changed = True
@@ -1406,8 +1335,20 @@ def config(
     if rag_auto_index is not None:
         cfg["rag"]["auto_index"] = rag_auto_index
         _rag_changed = True
+    if chunk_size is not None:
+        if chunk_size <= 0:
+            rprint("[red]--chunk-size must be a positive number of tokens[/red]")
+            raise typer.Exit(1)
+        cfg["rag"]["chunk_size"] = chunk_size
+        _rag_changed = True
     if chunk_overlap is not None:
+        if not 0 <= chunk_overlap < cfg["rag"].get("chunk_size", 512):
+            rprint("[red]--chunk-overlap must be >= 0 and smaller than the chunk size[/red]")
+            raise typer.Exit(1)
         cfg["rag"]["chunk_overlap"] = chunk_overlap
+        _rag_changed = True
+    if rag_citations is not None:
+        cfg["rag"].setdefault("citations", {})["enabled"] = rag_citations
         _rag_changed = True
     if full_text_index is not None:
         cfg["rag"]["full_text_index"] = full_text_index
@@ -1534,58 +1475,40 @@ def _bulk_download(
     obsidian: bool = False,
     obsidian_folder: str = "",
 ) -> None:
-    from mosaic.bulk import read_dois
-    from mosaic.models import Paper
+    from mosaic.workflows import bulk_get
 
-    if not from_file.exists():
-        rprint(f"[red]File not found: {from_file}[/red]")
-        raise typer.Exit(1)
-
-    try:
-        dois = read_dois(from_file)
-    except ValueError as e:
-        rprint(f"[red]{e}[/red]")
-        raise typer.Exit(1) from None
-
+    dois = _read_dois_or_exit(from_file)
     if not dois:
         rprint(f"[dark_orange]No DOIs found in {from_file.name}[/dark_orange]")
         raise typer.Exit()
 
     rprint(f"[dim]Found {len(dois)} DOI(s) in {from_file.name}[/dim]")
 
-    email = cfg.get("unpaywall", {}).get("email", "")
-    download_dir = cfg["download_dir"]
-    pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
-    ok = fail = skip = 0
-    papers_list: list = []
-    pdf_map: dict[str, str] = {}
-
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False
     ) as prog:
-        for doi in dois:
-            _bare = Paper(title=doi, doi=doi, source="manual")
-            paper = cache.get_by_uid(_bare.uid) or _bare
-            papers_list.append(paper)
-            task = prog.add_task(f"{doi}…")
-            path = dl_paper(paper, download_dir, cache, email, pattern)
-            prog.remove_task(task)
-            if path:
-                ok += 1
-                pdf_map[paper.uid] = path
-                rprint(f"  [green]✓[/green] {Path(path).name}")
-            elif oa_only:
-                skip += 1
-                rprint(f"  [dim]–[/dim] {doi} (no OA copy)")
-            else:
-                fail += 1
-                rprint(f"  [red]✗[/red] {doi}")
+        task_ids: list = []
 
+        def _start(paper) -> None:
+            task_ids.append(prog.add_task(f"{paper.doi}…"))
+
+        def _done(item) -> None:
+            prog.remove_task(task_ids.pop())
+            if item.status == "ok":
+                rprint(f"  [green]✓[/green] {Path(item.path).name}")
+            elif oa_only:
+                rprint(f"  [dim]–[/dim] {item.paper.doi} (no OA copy)")
+            else:
+                rprint(f"  [red]✗[/red] {item.paper.doi}")
+
+        papers_list, report = bulk_get(dois, cfg, cache, on_start=_start, on_item=_done)
+
+    ok, failed = report.count("ok"), report.count("fail")
     parts = [f"[bold]{ok}[/bold] downloaded"]
-    if fail:
-        parts.append(f"[red]{fail} failed[/red]")
-    if skip:
-        parts.append(f"[dim]{skip} skipped (no OA copy)[/dim]")
+    if failed and oa_only:
+        parts.append(f"[dim]{failed} skipped (no OA copy)[/dim]")
+    elif failed:
+        parts.append(f"[red]{failed} failed[/red]")
     console.print(f"\n[bold]Done:[/bold] {', '.join(parts)}")
 
     if zotero and papers_list:
@@ -1594,19 +1517,13 @@ def _bulk_download(
             cfg,
             collection_name=zotero_collection,
             force_local=zotero_local,
-            pdf_map=pdf_map,
+            pdf_map=report.pdf_map,
         )
 
     if obsidian and papers_list:
         _push_to_obsidian(papers_list, cfg, subfolder_override=obsidian_folder)
 
-    if cfg.get("rag", {}).get("auto_index") and papers_list:
-        try:
-            from mosaic.rag import index_papers
-
-            index_papers(papers_list, cfg, cache, progress=False)
-        except Exception:
-            pass  # auto-index failures are always silent
+    _auto_index(papers_list, cfg, cache)
 
 
 def _print_search_stats(stats: dict, filters) -> None:
@@ -1656,6 +1573,22 @@ def _print_search_stats(stats: dict, filters) -> None:
     console.print(table)
 
 
+def _export_outputs(papers: list, output: list[Path], *, quiet: bool = False) -> None:
+    """Write *papers* to every ``--output`` path (errors go to stderr in quiet/JSON mode)."""
+    if not output:
+        return
+    from mosaic.exporter import export
+
+    for path in output:
+        try:
+            export(papers, path)
+        except ValueError as e:
+            (err_console if quiet else console).print(f"[red]{e}[/red]")
+            raise typer.Exit(1) from None
+        if not quiet:
+            rprint(f"[green]Saved:[/green] {path}")
+
+
 def _post_process(
     papers: list,
     cfg: dict,
@@ -1673,37 +1606,37 @@ def _post_process(
     obsidian: bool = False,
     obsidian_folder: str = "",
     show_score: bool = False,
+    prefer_cache: bool = False,
+    save: bool = True,
+    history: dict | None = None,
 ) -> None:
     """Shared post-processing: filter, export, download, push to Zotero/Obsidian."""
-    if sort_by and sort_by not in ("citations", "year", "relevance"):
-        rprint(f'[red]Unknown --sort value "{sort_by}". Use: citations, year, relevance[/red]')
-        raise typer.Exit(1)
-    non_relevance_sort = sort_by if sort_by != "relevance" else ""
-    papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only, sort_by=non_relevance_sort)
-    if sort_by == "relevance":
-        papers = sort_by_relevance(query, papers, cfg)
+    try:
+        papers = finalize_search(
+            papers,
+            cfg,
+            cache,
+            query=query,
+            oa_only=oa_only,
+            pdf_only=pdf_only,
+            sort_by=sort_by,
+            prefer_cache=prefer_cache,
+            save=save,
+            history=history,
+        )
+    except ValueError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
 
     if not papers:
         rprint("[dark_orange]No results found.[/dark_orange]")
         raise typer.Exit()
 
-    for p in papers:
-        cache.save(p)
-
     show_rel = sort_by == "relevance" or show_score
     score_label = "Sim." if show_score else "Rel."
     _print_results(papers, show_relevance=show_rel, score_label=score_label)
 
-    if output:
-        from mosaic.exporter import export
-
-        for path in output:
-            try:
-                export(papers, path)
-                rprint(f"[green]Saved:[/green] {path}")
-            except ValueError as e:
-                rprint(f"[red]{e}[/red]")
-                raise typer.Exit(1) from None
+    _export_outputs(papers, output or [])
 
     pdf_map: dict[str, str] = {}
     if do_download:
@@ -1721,14 +1654,8 @@ def _post_process(
     if obsidian:
         _push_to_obsidian(papers, cfg, subfolder_override=obsidian_folder)
 
-    # Auto-index if configured
-    if cfg.get("rag", {}).get("auto_index") and papers:
-        try:
-            from mosaic.rag import index_papers
-
-            index_papers(papers, cfg, cache, progress=False)
-        except Exception:
-            pass  # auto-index failures are always silent
+    # Auto-index last, so freshly downloaded PDFs are indexed as full text
+    _auto_index(papers, cfg, cache)
 
 
 _RAINBOW = ["red", "dark_orange", "green", "cyan", "blue", "magenta"]
@@ -1799,32 +1726,32 @@ def _print_results(papers: list, show_relevance: bool = False, score_label: str 
 
 def _download_all(papers: list, cfg: dict, cache: Cache) -> dict[str, str]:
     """Download PDFs for *papers*. Returns a ``{paper.uid: local_path}`` map."""
-    email = cfg.get("unpaywall", {}).get("email", "")
-    download_dir = cfg["download_dir"]
-    pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
-    ok = fail = skip = 0
-    pdf_map: dict[str, str] = {}
+    from mosaic.workflows import download_papers
 
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False
     ) as prog:
-        for p in papers:
-            if not (p.pdf_url or p.doi):
-                skip += 1
-                continue
-            task = prog.add_task(f"Downloading: {p.title[:50]}…")
-            path = dl_paper(p, download_dir, cache, email, pattern)
-            prog.remove_task(task)
-            if path:
-                ok += 1
-                pdf_map[p.uid] = path
-                rprint(f"  [green]✓[/green] {Path(path).name}")
-            else:
-                fail += 1
-                rprint(f"  [red]✗[/red] {p.title[:60]}")
+        task_ids: list = []
 
-    console.print(f"\n[bold]Done:[/bold] {ok} downloaded, {fail} failed, {skip} skipped (no PDF)")
-    return pdf_map
+        def _start(paper) -> None:
+            task_ids.append(prog.add_task(f"Downloading: {paper.title[:50]}…"))
+
+        def _done(item) -> None:
+            if item.status == "skip":
+                return
+            prog.remove_task(task_ids.pop())
+            if item.status == "ok":
+                rprint(f"  [green]✓[/green] {Path(item.path).name}")
+            else:
+                rprint(f"  [red]✗[/red] {item.paper.title[:60]}")
+
+        report = download_papers(papers, cfg, cache, on_start=_start, on_item=_done)
+
+    console.print(
+        f"\n[bold]Done:[/bold] {report.count('ok')} downloaded, {report.count('fail')} failed, "
+        f"{report.count('skip')} skipped (no PDF)"
+    )
+    return report.pdf_map
 
 
 def _push_to_zotero(
@@ -1955,12 +1882,16 @@ def notebook_create(
     Requires: pip install 'mosaic-search[notebooklm]' && notebooklm login
     """
     from mosaic.notebooklm_bridge import (
-        _require_notebooklm,
         create_notebook,
         create_notebook_from_dir,
+        describe_error,
+        preflight_error,
     )
 
-    _require_notebooklm()
+    problem = preflight_error()
+    if problem:
+        rprint(f"[red]{problem}[/red]")
+        raise typer.Exit(1)
 
     if from_dir and query:
         rprint("[red]Use either --query or --from-dir, not both.[/red]")
@@ -1999,23 +1930,23 @@ def notebook_create(
         ) as prog:
             prog.add_task(f"Creating notebook [bold]{name}[/bold] from {from_dir}…")
             try:
-                nb_id = asyncio.run(create_notebook_from_dir(name, from_dir, artifacts=_artifacts))
+                nb_result = asyncio.run(
+                    create_notebook_from_dir(name, from_dir, artifacts=_artifacts)
+                )
             except ValueError as e:
                 rprint(f"[red]{e}[/red]")
                 raise typer.Exit(1) from None
-        rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
-        if _artifacts:
-            rprint(
-                f"[dim]{', '.join(sorted(_artifacts))} queued — check NotebookLM in a few minutes.[/dim]"
-            )
+            except Exception as e:
+                rprint(f"[red]{describe_error(e)}[/red]")
+                raise typer.Exit(1) from None
+        _print_notebook_result(nb_result)
         return
 
     # ── query path: search → download → import ────────────────────────────────
     sources = build_sources(cfg)
     cache = Cache(cfg["db_path"])
-    email = cfg.get("unpaywall", {}).get("email", "")
 
-    if field not in ("all", "title", "abstract"):
+    if field not in FIELD_CHOICES:
         rprint('[red]--field must be "title", "abstract", or "all"[/red]')
         raise typer.Exit(1)
 
@@ -2046,21 +1977,7 @@ def notebook_create(
 
     rprint(f"[dim]Found {len(papers)} paper(s). Downloading PDFs…[/dim]")
 
-    papers_with_paths: list[tuple] = []
-    with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
-    ) as prog:
-        for p in papers:
-            task = prog.add_task(f"{p.title[:55]}…")
-            path = dl_paper(
-                p,
-                cfg["download_dir"],
-                cache,
-                email,
-                cfg.get("filename_pattern", "{year}_{source}_{author}_{title}"),
-            )
-            prog.remove_task(task)
-            papers_with_paths.append((p, Path(path) if path else None))
+    papers_with_paths = _download_each(papers, cfg, cache)
 
     downloaded = sum(1 for _, path in papers_with_paths if path)
     rprint(
@@ -2071,13 +1988,46 @@ def notebook_create(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
     ) as prog:
         prog.add_task(f"Importing into NotebookLM notebook [bold]{name}[/bold]…")
-        nb_id = asyncio.run(create_notebook(name, papers_with_paths, artifacts=_artifacts))
+        try:
+            nb_result = asyncio.run(create_notebook(name, papers_with_paths, artifacts=_artifacts))
+        except Exception as e:
+            rprint(f"[red]{describe_error(e)}[/red]")
+            raise typer.Exit(1) from None
 
-    rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
-    if _artifacts:
-        rprint(
-            f"[dim]{', '.join(sorted(_artifacts))} queued — check NotebookLM in a few minutes.[/dim]"
+    _print_notebook_result(nb_result)
+
+
+def _download_each(papers: list, cfg: dict, cache: Cache) -> list[tuple]:
+    """Attempt a download for every paper (with a spinner) → ``[(paper, Path | None)]``."""
+    from mosaic.workflows import download_papers
+
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
+    ) as prog:
+        task_ids: list = []
+
+        def _start(paper) -> None:
+            task_ids.append(prog.add_task(f"{paper.title[:55]}…"))
+
+        def _done(_item) -> None:
+            prog.remove_task(task_ids.pop())
+
+        report = download_papers(
+            papers, cfg, cache, skip_without_link=False, on_start=_start, on_item=_done
         )
+    return [(i.paper, Path(i.path) if i.path else None) for i in report.items]
+
+
+def _print_notebook_result(nb_result) -> None:
+    rprint(f"[green]Notebook created:[/green] {nb_result.url}")
+    rprint(f"[dim]{nb_result.sources_added} source(s) added.[/dim]")
+    if nb_result.artifacts_queued:
+        rprint(
+            f"[dim]{', '.join(nb_result.artifacts_queued)} queued — "
+            "check NotebookLM in a few minutes.[/dim]"
+        )
+    for warning in nb_result.warnings():
+        rprint(f"[dark_orange]{warning}[/dark_orange]")
 
 
 @app.command()
@@ -2109,59 +2059,26 @@ def network(
     results by community.  Export with --output to JSON (node-link), .gv
     (Graphviz DOT), or .md (Mermaid diagram).
     """
-    from mosaic.network import (
-        build_adj,
-        compute_degree,
-        export_graph,
-        louvain_clusters,
-        subgraph_from_seeds,
-    )
+    from mosaic.network import export_graph
+    from mosaic.services import analyse_network
 
     cfg = cfg_mod.load()
     cache = Cache(cfg["db_path"])
 
-    edges = cache.get_all_citation_edges()
-    if not edges:
-        rprint(
-            "[yellow]No citation edges found. "
-            "Run [bold]mosaic index --enrich-citations[/bold] first.[/yellow]"
+    try:
+        graph = analyse_network(
+            cache, query=query, depth=depth, min_connections=min_connections, cluster=cluster
         )
-        raise typer.Exit()
+    except LookupError as e:
+        rprint(f"[yellow]{e}[/yellow]")
+        raise typer.Exit() from None
 
-    adj = build_adj(edges)
-
-    # Seed: subset from query, or full graph
-    if query:
-        seed_papers = cache.search_local(query)
-        seeds = [p.uid for p in seed_papers if p.uid in adj]
-        if not seeds:
-            rprint(
-                f"[yellow]No cached papers matching {query!r} found in the citation graph.[/yellow]"
-            )
-            raise typer.Exit()
-        nodes = subgraph_from_seeds(adj, seeds, depth)
-    else:
-        nodes = set(adj.keys())
-
-    # Apply min-connections filter
-    deg = compute_degree(adj, nodes)
-    nodes = {uid for uid in nodes if deg.get(uid, 0) >= min_connections}
-
-    if not nodes:
-        rprint("[yellow]No papers meet the --min-connections threshold.[/yellow]")
-        raise typer.Exit()
-
-    # Recompute degrees on the filtered subgraph
-    deg = compute_degree(adj, nodes)
-
-    # Fetch Paper metadata
-    paper_list = cache.get_papers_by_uids(list(nodes))
-    papers_map = {p.uid: p for p in paper_list}
-
-    # Cluster
-    clusters: list | None = None
-    if cluster:
-        clusters = louvain_clusters(nodes, adj)
+    nodes, adj, papers_map, clusters = (
+        graph["nodes"],
+        graph["adj"],
+        graph["papers"],
+        graph["clusters"],
+    )
 
     # Write to file if requested
     if output:
@@ -2173,7 +2090,7 @@ def network(
             raise typer.Exit(1) from None
 
     # Terminal report
-    _print_network(nodes, adj, papers_map, clusters, deg, top)
+    _print_network(nodes, adj, papers_map, clusters, graph["deg"], top)
 
 
 def _print_network(
@@ -2298,7 +2215,7 @@ def compare(
 
     Examples::
 
-        mosaic compare "diffusion models" --sort citations -n 15 --output comparison.md
+        mosaic compare -q "diffusion models" --sort citations -n 15 --output comparison.md
         mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
     """
     from mosaic.compare import (
@@ -2309,24 +2226,16 @@ def compare(
         format_markdown,
     )
 
+    if sort and sort not in _COMPARE_SORT_VALUES:
+        rprint(f"[red]Unknown --sort value {sort!r}. Use: citations, year[/red]")
+        raise typer.Exit(1)
+
     cfg = cfg_mod.load()
     cache = Cache(cfg["db_path"])
 
-    # ── Gather papers ─────────────────────────────────────────────────────────
-    if from_file:
-        from mosaic.bulk import read_dois
-
-        dois = read_dois(from_file)
-        seen: set[str] = set()
-        papers: list = []
-        for doi in dois:
-            for p in cache.search_local(doi):
-                if p.uid not in seen:
-                    seen.add(p.uid)
-                    papers.append(p)
-    elif query:
-        papers = cache.search_local(query)
-    else:
+    # ── Gather papers (--query and --from combine) ────────────────────────────
+    papers = _subset_or_exit(cache, query=query, from_file=from_file)
+    if papers is None:
         papers = cache.get_all_papers()
 
     if not papers:
@@ -2356,7 +2265,10 @@ def compare(
             "Use [bold]mosaic config --llm-provider ...[/bold] to enable LLM extraction.[/dim]"
         )
 
-    rows = compare_papers(papers, dims, cfg)
+    compare_errors: list[str] = []
+    rows = compare_papers(papers, dims, cfg, errors=compare_errors)
+    for err in compare_errors:
+        rprint(f"[dark_orange]Warning:[/dark_orange] {err}")
 
     # ── Output ────────────────────────────────────────────────────────────────
     if output:
@@ -2425,7 +2337,17 @@ def ui(
         rprint("  pip install 'mosaic-search[ui]'")
         raise typer.Exit(1) from None
 
-    flask_app = create_app()
+    from mosaic.ui import allowed_hosts_for
+
+    if host.strip("[]") not in ("127.0.0.1", "localhost", "::1"):
+        rprint(
+            "[bold dark_orange]Warning:[/bold dark_orange] the web UI has no authentication. "
+            f"Binding to {host} exposes your library, API keys and downloads to the network."
+        )
+        if allowed_hosts_for(host) is None:
+            rprint("[dim]Host-header checks are disabled for wildcard bind addresses.[/dim]")
+
+    flask_app = create_app(bind_host=host)
     if not no_browser:
         import threading
         import webbrowser
@@ -2460,7 +2382,11 @@ def auth_login(
 
     from mosaic.auth import login as do_login
 
-    asyncio.run(do_login(name, url))
+    try:
+        asyncio.run(do_login(name, url))
+    except ImportError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
 
 
 @auth_app.command("logout")
@@ -2479,7 +2405,8 @@ def auth_logout(
     if delete_session(name):
         rprint(f"[green]Session removed:[/green] {name}")
     else:
-        warn(f"[dark_orange]No session found for:[/dark_orange] {name}")
+        rprint(f"[dark_orange]No session found for:[/dark_orange] {name}")
+        raise typer.Exit(1)
 
 
 @auth_app.command("status")

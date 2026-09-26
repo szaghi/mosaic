@@ -80,7 +80,7 @@ class TestCreateNotebook:
 
     def test_returns_notebook_id(self):
         result, _ = self._run_create([])
-        assert result == "nb-42"
+        assert result.nb_id == "nb-42"
 
     def test_uploads_local_pdf_when_path_exists(self, tmp_path):
         pdf = tmp_path / "paper.pdf"
@@ -134,7 +134,7 @@ class TestCreateNotebook:
         client.sources.add_url = AsyncMock(side_effect=Exception("NLM error"))
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
             result = _run(create_notebook("Test NB", [(paper, None)]))
-        assert result == "nb-001"  # notebook was still created
+        assert result.nb_id == "nb-001"  # notebook was still created
 
     def test_prefers_local_pdf_over_url(self, tmp_path):
         pdf = tmp_path / "paper.pdf"
@@ -182,7 +182,7 @@ class TestCreateNotebookFromDir:
     def test_returns_notebook_id(self, tmp_path):
         (tmp_path / "paper.pdf").write_bytes(b"%PDF")
         result, _ = self._run_from_dir(tmp_path)
-        assert result == "nb-dir"
+        assert result.nb_id == "nb-dir"
 
     def test_podcast_queued_when_flag_set(self, tmp_path):
         (tmp_path / "paper.pdf").write_bytes(b"%PDF")
@@ -197,4 +197,93 @@ class TestCreateNotebookFromDir:
         client.sources.add_file = AsyncMock(side_effect=Exception("upload error"))
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
             result = _run(create_notebook_from_dir("Test", tmp_path))
-        assert result == "nb-001"
+        assert result.nb_id == "nb-001"
+
+
+# ---------------------------------------------------------------------------
+# Issue #30 — outcome reporting, preflight and error messages
+# ---------------------------------------------------------------------------
+
+
+class TestNotebookOutcome:
+    def test_artifacts_skipped_when_notebook_empty(self):
+        from mosaic.notebooklm_bridge import create_notebook
+
+        fake_mod, client = _make_fake_notebooklm("nb-empty")
+        with patch.dict(sys.modules, {"notebooklm": fake_mod}):
+            result = _run(
+                create_notebook("NB", [(Paper(title="no url"), None)], artifacts={"podcast"})
+            )
+        client.artifacts.generate_audio.assert_not_awaited()
+        assert result.sources_added == 0
+        assert result.artifacts_skipped == ["podcast"]
+        warnings = " ".join(result.warnings())
+        assert "empty" in warnings and "podcast" in warnings
+
+    def test_queued_and_failed_artifacts_are_reported(self):
+        from mosaic.notebooklm_bridge import create_notebook
+
+        fake_mod, client = _make_fake_notebooklm()
+        client.artifacts.generate_report = AsyncMock(side_effect=Exception("quota"))
+        paper = Paper(title="P", url="https://example.com/p")
+        with patch.dict(sys.modules, {"notebooklm": fake_mod}):
+            result = _run(
+                create_notebook("NB", [(paper, None)], artifacts={"podcast", "briefing", "bogus"})
+            )
+        assert result.artifacts_queued == ["podcast"]
+        assert sorted(result.artifacts_failed) == ["bogus", "briefing"]
+        assert result.url == "https://notebooklm.google.com/notebook/nb-001"
+
+    def test_failed_sources_are_counted(self):
+        from mosaic.notebooklm_bridge import create_notebook
+
+        fake_mod, client = _make_fake_notebooklm()
+        client.sources.add_url = AsyncMock(side_effect=Exception("NLM error"))
+        paper = Paper(title="Broken", url="https://example.com/p")
+        with patch.dict(sys.modules, {"notebooklm": fake_mod}):
+            result = _run(create_notebook("NB", [(paper, None)]))
+        assert result.sources_failed == ["Broken"]
+
+
+class TestPreflightAndErrors:
+    def test_preflight_not_installed(self):
+        from mosaic.notebooklm_bridge import preflight_error
+
+        status = {"installed": False, "authenticated": False}
+        with patch("mosaic.notebooklm_bridge.check_notebooklm_status", return_value=status):
+            assert "not installed" in preflight_error()
+
+    def test_preflight_not_authenticated(self):
+        from mosaic.notebooklm_bridge import preflight_error
+
+        status = {"installed": True, "authenticated": False}
+        with patch("mosaic.notebooklm_bridge.check_notebooklm_status", return_value=status):
+            assert "notebooklm login" in preflight_error()
+
+    def test_preflight_ok(self):
+        from mosaic.notebooklm_bridge import preflight_error
+
+        status = {"installed": True, "authenticated": True}
+        with patch("mosaic.notebooklm_bridge.check_notebooklm_status", return_value=status):
+            assert preflight_error() is None
+
+    def test_describe_error_maps_auth_failures(self):
+        from mosaic.notebooklm_bridge import describe_error
+
+        msg = describe_error(FileNotFoundError("storage_state.json"))
+        assert "notebooklm login" in msg
+        assert describe_error(RuntimeError("boom")) == "NotebookLM error: boom"
+
+
+class TestClientCompat:
+    def test_context_manager_from_storage_is_not_awaited(self):
+        """notebooklm-py >= 0.8: from_storage() returns an async context object."""
+        from mosaic.notebooklm_bridge import create_notebook
+
+        fake_mod, client = _make_fake_notebooklm("nb-new")
+        fake_mod.NotebookLMClient.from_storage = MagicMock(return_value=client)
+        paper = Paper(title="P", url="https://example.com/p")
+        with patch.dict(sys.modules, {"notebooklm": fake_mod}):
+            result = _run(create_notebook("NB", [(paper, None)]))
+        assert result.nb_id == "nb-new"
+        client.__aenter__.assert_awaited_once()

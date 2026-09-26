@@ -13,11 +13,7 @@
     {% if progress %}
     <div class="source-progress" style="margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.3rem;">
       {% for name, status in progress.items() %}
-      <small style="padding:.15rem .4rem;border-radius:4px;
-        {% if status == 'done' %}background:var(--pico-ins-color);color:#fff;
-        {% elif status == 'error' %}background:var(--pico-del-color);color:#fff;
-        {% else %}background:var(--pico-secondary-background);
-        {% endif %}">{{ name }}</small>
+      <small class="chip {% if status == 'done' %}chip-ok{% elif status == 'error' %}chip-err{% else %}chip-pending{% endif %}">{{ name }}</small>
       {% endfor %}
     </div>
     {% endif %}

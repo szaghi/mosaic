@@ -16,9 +16,7 @@
   </summary>
   <div style="display:flex;flex-wrap:wrap;gap:.3rem;margin:.5rem 0;">
     {% for name, count in stats['per_source'].items() %}
-    <small style="padding:.15rem .4rem;border-radius:4px;background:var(--pico-secondary-background);">
-      <strong>{{ name }}</strong>={{ count }}
-    </small>
+    <small class="chip"><strong>{{ name }}</strong> {{ count }}</small>
     {% endfor %}
   </div>
 </details>
@@ -27,14 +25,31 @@
 {% if papers %}
 {% if job_id is defined and job_id %}
 <div class="export-bar">
-  <strong>Export:</strong>
-  <a href="{{ url_for('ui.export_results', job_id=job_id, format='csv') }}" role="button" class="outline secondary">CSV</a>
-  <a href="{{ url_for('ui.export_results', job_id=job_id, format='json') }}" role="button" class="outline secondary">JSON</a>
-  <a href="{{ url_for('ui.export_results', job_id=job_id, format='bib') }}" role="button" class="outline secondary">BibTeX</a>
-  <a href="{{ url_for('ui.export_results', job_id=job_id, format='md') }}" role="button" class="outline secondary">Markdown</a>
-  <span style="margin-left:.5rem;">|</span>
-  <form style="display:inline-flex;gap:.3rem;align-items:center;margin:0;" onsubmit="return false;">
-    <input type="text" name="zotero_collection" placeholder="Collection (optional)" style="width:150px;">
+  <strong>Export</strong>
+  <span class="group">
+    <a href="{{ url_for('ui.export_results', job_id=job_id, format='csv') }}" role="button" class="outline secondary">CSV</a>
+    <a href="{{ url_for('ui.export_results', job_id=job_id, format='json') }}" role="button" class="outline secondary">JSON</a>
+    <a href="{{ url_for('ui.export_results', job_id=job_id, format='bib') }}" role="button" class="outline secondary">BibTeX</a>
+    <a href="{{ url_for('ui.export_results', job_id=job_id, format='ris') }}" role="button" class="outline secondary">RIS</a>
+    <a href="{{ url_for('ui.export_results', job_id=job_id, format='md') }}" role="button" class="outline secondary">Markdown</a>
+    <a href="{{ url_for('ui.export_results', job_id=job_id, format='markdown') }}" role="button" class="outline secondary" title="Markdown with abstracts">Markdown + abstracts</a>
+  </span>
+</div>
+<div class="export-bar">
+  <strong>Actions</strong>
+  <span class="group">
+    <button hx-post="{{ url_for('ui.download_all', job_id=job_id) }}"
+            hx-target="#download-all-status"
+            hx-disabled-elt="this"
+            class="outline">
+      Download all PDFs
+    </button>
+  </span>
+  <form class="group" onsubmit="return false;">
+    <input type="text" name="zotero_collection" placeholder="Zotero collection" aria-label="Zotero collection (optional)">
+    <label title="Use the Zotero desktop local API even when a web API key is configured">
+      <input type="checkbox" name="zotero_local"> local API
+    </label>
     <button hx-post="{{ url_for('ui.zotero_export', job_id=job_id) }}"
             hx-include="closest form"
             hx-target="#zotero-status"
@@ -42,18 +57,23 @@
       Send to Zotero
     </button>
   </form>
-  <span style="margin-left:.5rem;">|</span>
-  <button hx-post="{{ url_for('ui.obsidian_export', job_id=job_id) }}"
-          hx-target="#obsidian-status"
-          class="outline">
-    Export to Obsidian
-  </button>
+  <form class="group" onsubmit="return false;">
+    <input type="text" name="obsidian_folder" placeholder="Vault subfolder" aria-label="Obsidian vault subfolder (optional)">
+    <button hx-post="{{ url_for('ui.obsidian_export', job_id=job_id) }}"
+            hx-include="closest form"
+            hx-target="#obsidian-status"
+            class="outline">
+      Export to Obsidian
+    </button>
+  </form>
 </div>
+<div id="download-all-status"></div>
 <div id="zotero-status"></div>
 <div id="obsidian-status"></div>
 {% endif %}
 
 {% set has_citations = papers | selectattr('citation_count') | list %}
+{% set show_score = score_label is defined and score_label %}
 <figure>
 <table role="grid" id="results-table">
   <thead>
@@ -62,10 +82,12 @@
       <th>Title</th>
       <th>Authors</th>
       <th>Year</th>
+      <th>DOI</th>
       <th>Source</th>
       <th>OA</th>
       <th>PDF</th>
       {% if has_citations %}<th>Cited</th>{% endif %}
+      {% if show_score %}<th>{{ score_label }}</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -75,11 +97,15 @@
       <td><a href="{{ url_for('ui.paper_detail', uid=p.uid) }}">{{ p.title[:80] }}{% if p.title | length > 80 %}&hellip;{% endif %}</a></td>
       <td>{{ p.short_authors }}</td>
       <td>{% if p.year %}{{ p.year }}{% else %}&ndash;{% endif %}</td>
+      <td>{% if p.doi %}<small><a href="https://doi.org/{{ p.doi }}" target="_blank" rel="noopener">{{ p.doi }}</a></small>{% else %}&ndash;{% endif %}</td>
       <td>{{ p.source }}</td>
       <td>{% if p.is_open_access %}<span class="badge-oa">&#10003;</span>{% else %}<span class="badge-closed">&ndash;</span>{% endif %}</td>
       <td>{% if p.pdf_url %}<span class="badge-oa">&#10003;</span>{% else %}&ndash;{% endif %}</td>
       {% if has_citations %}
       <td>{% if p.citation_count is not none %}{{ p.citation_count }}{% else %}&ndash;{% endif %}</td>
+      {% endif %}
+      {% if show_score %}
+      <td>{% if p.relevance_score is not none %}{{ '%.2f' | format(p.relevance_score) }}{% else %}&ndash;{% endif %}</td>
       {% endif %}
     </tr>
     {% endfor %}

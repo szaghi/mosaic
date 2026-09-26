@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Analysis &mdash; MOSAIC{% endblock %}
+
+{% block content %}
+<h2>Analysis</h2>
+<p>Tools that work on the papers already in your <a href="{{ url_for('ui.library_page') }}">library</a>.</p>
+
+<div class="grid">
+  <article>
+    <header><strong>Compare</strong></header>
+    <p>Build a comparison table (method, dataset, metric, result, &hellip;) for a set of papers.
+    Uses the configured LLM; without one, only metadata columns are filled.
+    Same as <code>mosaic compare</code>.</p>
+    <a href="{{ url_for('ui.compare_page') }}" role="button">Go to Compare &rarr;</a>
+  </article>
+  <article>
+    <header><strong>Citation network</strong></header>
+    <p>Find the most connected papers and topic clusters in the local citation graph.
+    Needs citation edges (<em>Enrich citation graph</em> when indexing). Same as <code>mosaic network</code>.</p>
+    <a href="{{ url_for('ui.network_page') }}" role="button">Go to Network &rarr;</a>
+  </article>
+</div>
+{% endblock %}

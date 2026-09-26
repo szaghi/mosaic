@@ -18,6 +18,9 @@ class Job:
     result: Any = None
     error_message: str = ""
     progress: dict[str, str] = field(default_factory=dict)
+    # Per-job UI state (form options, exportable results, …).  Lives and dies
+    # with the job, so nothing leaks when finished jobs are purged.
+    meta: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.monotonic)
     _event: threading.Event = field(default_factory=threading.Event, repr=False)
 
@@ -34,14 +37,29 @@ class JobManager:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
 
-    def submit(self, fn: Callable, *args: Any, **kwargs: Any) -> str:
+    def submit(
+        self, fn: Callable, *args: Any, meta: dict[str, Any] | None = None, **kwargs: Any
+    ) -> str:
         self._cleanup()
         job_id = uuid.uuid4().hex[:12]
-        job = Job(id=job_id)
+        job = Job(id=job_id, meta=dict(meta or {}))
         with self._lock:
             self._jobs[job_id] = job
         future = self._executor.submit(fn, *args, **kwargs)
         future.add_done_callback(lambda f: self._on_complete(job_id, f))
+        return job_id
+
+    def register_done(self, result: Any = None, meta: dict[str, Any] | None = None) -> str:
+        """Record an already-finished job (e.g. a synchronous cache search).
+
+        The job is purged like any other, so data attached to it does not leak.
+        """
+        self._cleanup()
+        job_id = uuid.uuid4().hex[:12]
+        job = Job(id=job_id, status="done", result=result, meta=dict(meta or {}))
+        job._event.set()
+        with self._lock:
+            self._jobs[job_id] = job
         return job_id
 
     def _on_complete(self, job_id: str, future: Future) -> None:
@@ -52,9 +70,15 @@ class JobManager:
             try:
                 job.result = future.result()
                 job.status = "done"
-            except Exception as e:
+            # BaseException: library code (or a dependency) may raise SystemExit;
+            # anything that escapes here would leave the job "running" forever
+            # and the UI polling it indefinitely.
+            except BaseException as e:
                 job.status = "error"
-                job.error_message = str(e)
+                if isinstance(e, SystemExit):
+                    job.error_message = f"Operation aborted (exit status {e.code})."
+                else:
+                    job.error_message = str(e) or type(e).__name__
             job._event.set()
 
     def get(self, job_id: str) -> Job | None:

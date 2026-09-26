@@ -29,12 +29,19 @@ def app(tmp_path):
         }
         flask_app = create_app()
     flask_app.config["TESTING"] = True
-    return flask_app
+    yield flask_app
+    flask_app.config["MOSAIC_CACHE"].close()
 
 
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+def _source(name):
+    src = MagicMock()
+    src.name = name
+    return src
 
 
 def _make_paper(**kw):
@@ -89,7 +96,7 @@ class TestSearch:
     def test_search_submit_and_status(self, mock_search, mock_build, client, app):
         papers = [_make_paper()]
         mock_search.return_value = papers
-        mock_build.return_value = []
+        mock_build.return_value = [_source("arXiv")]
 
         # Submit search
         resp = client.post("/search", data={"query": "test", "max_results": "5"})
@@ -212,14 +219,8 @@ class TestInputValidation:
     """Tests for input validation edge cases."""
 
     def test_invalid_year_format_shows_warning(self, client, app):
-        """Invalid year filter should warn user, not silently ignore."""
-        with (
-            patch("mosaic.ui.routes.build_sources") as mock_build,
-            patch("mosaic.ui.routes.search_all") as mock_search,
-        ):
-            mock_build.return_value = [MagicMock(name="arXiv")]
-            mock_search.return_value = []
-
+        """Invalid year filter is rejected with a message (like the CLI), not ignored."""
+        with patch("mosaic.ui.routes.search_all") as mock_search:
             resp = client.post(
                 "/search",
                 data={
@@ -228,18 +229,9 @@ class TestInputValidation:
                     "max_results": "5",
                 },
             )
-            assert resp.status_code == 200
-            # Should get a polling response; wait for status to see warning
-            # The job_meta should contain the year_warning
-            with app.app_context():
-                from flask import current_app
-
-                _jm = current_app.config["JOB_MANAGER"]
-                # Find the stored meta
-                meta_keys = [k for k in current_app.config if k.startswith("job_meta_")]
-                assert len(meta_keys) == 1
-                meta = current_app.config[meta_keys[0]]
-                assert "Invalid year format" in meta["year_warning"]
+        assert resp.status_code == 200
+        assert b"Invalid year format" in resp.data
+        mock_search.assert_not_called()
 
     def test_no_sources_selected_shows_error(self, client):
         """Deselecting all sources should show error, not search all."""

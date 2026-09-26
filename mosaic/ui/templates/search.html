@@ -17,10 +17,20 @@
     </button>
   </div>
 
+  {% set pf = prefill_filters or {} %}
   <div class="grid">
     <label>
-      Max per source
-      <input type="number" name="max_results" value="10" min="1" max="100">
+      Search in
+      <select name="mode">
+        <option value="sources" {% if pf.get('mode', 'sources') in ('', 'sources') %}selected{% endif %}>Online sources</option>
+        <option value="cached" {% if pf.get('mode') == 'cached' %}selected{% endif %}>Local cache (keywords)</option>
+        <option value="semantic" {% if pf.get('mode') == 'semantic' %}selected{% endif %}>Local vector index (semantic)</option>
+      </select>
+    </label>
+    <label>
+      Max results
+      <input type="number" name="max_results" value="10" min="1" max="100"
+             title="Per source for online searches; in total for local searches">
     </label>
     <label>
       Sort by
@@ -34,13 +44,12 @@
     <fieldset>
       <label><input type="checkbox" name="oa_only" role="switch"> Open Access only</label>
       <label><input type="checkbox" name="pdf_only" role="switch"> PDF available only</label>
-      <label><input type="checkbox" name="cached" role="switch"> Cache only</label>
-      <label><input type="checkbox" name="prefer_cache" role="switch"> Prefer cache</label>
+      <label title="Local cache and vector index searches only"><input type="checkbox" name="downloaded_only" role="switch"> Downloaded PDFs only</label>
+      <label><input type="checkbox" name="prefer_cache" role="switch"> Prefer cached records</label>
     </fieldset>
   </div>
 
-  {% set pf = prefill_filters or {} %}
-  {% set has_filters = pf.get('year') or pf.get('author') or pf.get('journal') or (pf.get('field') and pf.get('field') != 'all') %}
+  {% set has_filters = pf.get('raw_query') or pf.get('year') or pf.get('author') or pf.get('journal') or (pf.get('field') and pf.get('field') != 'all') %}
   <details {% if has_filters %}open{% endif %}>
     <summary>Filters</summary>
     <div class="filter-grid">
@@ -70,12 +79,13 @@
     </div>
     <label>
       Raw query <small>(bypass field transforms, sent directly to source APIs)</small>
-      <input type="text" name="raw_query" placeholder="Advanced: raw API query override">
+      <input type="text" name="raw_query" placeholder="Advanced: raw API query override"
+             value="{{ pf.get('raw_query', '') }}">
     </label>
   </details>
 
   <details>
-    <summary>Sources ({{ sources | length }})</summary>
+    <summary>Sources ({{ sources | length }}) <small>(online mode)</small></summary>
     <div style="margin-bottom: .5rem;">
       <small>
         <a href="#" onclick="document.querySelectorAll('#source-checks input').forEach(c=>c.checked=true);return false">Select all</a>

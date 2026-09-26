@@ -578,3 +578,203 @@ class TestSplitAuthors:
     def test_split_authors_strips_whitespace(self):
         """Surrounding whitespace is stripped."""
         assert split_authors("  Alice  ,  Bob  ", sep=",") == ["Alice", "Bob"]
+
+
+# ── services: merge rules aligned with db.upsert ─────────────────────────────
+
+
+class TestMergePapersUpsertRules:
+    def _merge(self, existing: Paper, incoming: Paper) -> Paper:
+        seen = {existing.uid: existing}
+        merge_papers(seen, incoming)
+        return seen[existing.uid]
+
+    def test_longer_abstract_wins(self):
+        merged = self._merge(
+            Paper(title="P", doi="10.1/x", abstract="Short"),
+            Paper(title="P", doi="10.1/x", abstract="A much longer abstract"),
+        )
+        assert merged.abstract == "A much longer abstract"
+
+    def test_open_access_true_supersedes_false(self):
+        merged = self._merge(
+            Paper(title="P", doi="10.1/x", is_open_access=False),
+            Paper(title="P", doi="10.1/x", is_open_access=True),
+        )
+        assert merged.is_open_access is True
+
+    def test_longer_author_list_wins(self):
+        merged = self._merge(
+            Paper(title="P", doi="10.1/x", authors=["A"]),
+            Paper(title="P", doi="10.1/x", authors=["A", "B", "C"]),
+        )
+        assert merged.authors == ["A", "B", "C"]
+
+    def test_missing_metadata_filled(self):
+        merged = self._merge(
+            Paper(title="P", doi="10.1/x", source="First"),
+            Paper(
+                title="Other title",
+                doi="10.1/x",
+                source="Second",
+                year=2021,
+                journal="Nature",
+                volume="5",
+                openalex_id="W1",
+                url="https://example.org",
+            ),
+        )
+        assert (merged.year, merged.journal, merged.volume) == (2021, "Nature", "5")
+        assert merged.openalex_id == "W1"
+        assert merged.url == "https://example.org"
+        # title and source keep the first-recorded value
+        assert (merged.title, merged.source) == ("P", "First")
+
+
+# ── services: post-processing and cached selection ───────────────────────────
+
+
+class TestPostProcess:
+    def test_unknown_sort_raises(self):
+        import pytest
+
+        from mosaic.services import post_process
+
+        with pytest.raises(ValueError, match="Unknown sort"):
+            post_process([], query="q", cfg={}, sort_by="bogus")
+
+    def test_relevance_sort_uses_ranker(self):
+        from unittest.mock import patch
+
+        from mosaic.services import post_process
+
+        papers = [Paper(title="a", doi="10.1/a"), Paper(title="b", doi="10.1/b")]
+        with patch("mosaic.services.sort_by_relevance", return_value=papers[::-1]) as rank:
+            out = post_process(papers, query="q", cfg={}, sort_by="relevance")
+        rank.assert_called_once()
+        assert [p.title for p in out] == ["b", "a"]
+
+
+class TestSelectCachedPapers:
+    def _cache(self, tmp_cache):
+        tmp_cache.save(Paper(title="Deep learning", doi="10.1/a", year=2020, source="s"))
+        tmp_cache.save(Paper(title="Deep learning 2", doi="10.1/b", year=2023, source="s"))
+        tmp_cache.save(Paper(title="Graph theory", doi="10.1/c", year=2023, source="s"))
+        return tmp_cache
+
+    def test_no_constraint_returns_none(self, tmp_cache):
+        from mosaic.services import select_cached_papers
+
+        assert select_cached_papers(tmp_cache) is None
+
+    def test_dois_are_looked_up_by_uid(self, tmp_cache):
+        from mosaic.services import select_cached_papers
+
+        cache = self._cache(tmp_cache)
+        found = select_cached_papers(cache, dois=["https://doi.org/10.1/A", "10.1/unknown"])
+        assert [p.doi for p in found] == ["10.1/a"]
+
+    def test_constraints_intersect(self, tmp_cache):
+        from mosaic.services import select_cached_papers
+
+        cache = self._cache(tmp_cache)
+        found = select_cached_papers(cache, query="deep", dois=["10.1/b", "10.1/c"], year="2023")
+        assert [p.doi for p in found] == ["10.1/b"]
+
+    def test_no_match_is_empty_list_not_none(self, tmp_cache):
+        from mosaic.services import select_cached_papers, subset_uids
+
+        cache = self._cache(tmp_cache)
+        assert select_cached_papers(cache, query="nothing matches") == []
+        assert subset_uids(cache, year="1850") == []
+
+    def test_invalid_year_raises(self, tmp_cache):
+        import pytest
+
+        from mosaic.services import select_cached_papers
+
+        with pytest.raises(ValueError, match="Invalid year"):
+            select_cached_papers(tmp_cache, year="abc")
+
+
+class TestPapersForDois:
+    def test_cached_record_reused_and_duplicates_dropped(self, tmp_cache):
+        from mosaic.services import papers_for_dois
+
+        tmp_cache.save(Paper(title="Known", doi="10.1/a", source="arXiv", year=2020))
+        papers = papers_for_dois(tmp_cache, ["10.1/A", "https://doi.org/10.1/a", "10.1/new"])
+        assert [p.title for p in papers] == ["Known", "10.1/new"]
+        assert papers[1].source == "manual"
+
+
+class TestFormatAnswer:
+    def test_markdown_and_json(self):
+        import json
+
+        from mosaic.services import format_answer
+
+        papers = [Paper(title="T", authors=["A B"], year=2020, doi="10.1/x")]
+        md = format_answer("Q?", "gaps", "The answer", papers, "md")
+        assert md.startswith("# Q?") and "- [1] T — A B (2020)" in md
+        data = json.loads(format_answer("Q?", "gaps", "The answer", papers, "json"))
+        assert data["sources"][0]["doi"] == "10.1/x"
+
+
+class TestAnalyseNetwork:
+    def test_no_edges_raises_lookup_error(self, tmp_cache):
+        import pytest
+
+        from mosaic.services import analyse_network
+
+        with pytest.raises(LookupError, match="No citation edges"):
+            analyse_network(tmp_cache)
+
+    def test_graph_with_edges(self, tmp_cache_with_citations):
+        from mosaic.services import analyse_network
+
+        cache, p1, p2 = tmp_cache_with_citations
+        graph = analyse_network(cache)
+        assert graph["nodes"] == {p1.uid, p2.uid}
+        assert set(graph["papers"]) == {p1.uid, p2.uid}
+        assert graph["clusters"] is None
+
+
+# ── jobs: robustness (issue #30) and per-job metadata ────────────────────────
+
+
+class TestJobsRobustness:
+    def test_system_exit_marks_job_as_error(self):
+        """SystemExit from library code must not leave the job 'running' forever."""
+
+        def exits():
+            raise SystemExit(1)
+
+        mgr = JobManager(max_workers=1)
+        try:
+            job = mgr.get(mgr.submit(exits))
+            assert job.wait(timeout=5)
+            assert job.status == "error"
+            assert "exit status 1" in job.error_message
+        finally:
+            mgr.shutdown()
+
+    def test_meta_is_attached_to_job(self):
+        mgr = JobManager(max_workers=1)
+        try:
+            job = mgr.get(mgr.submit(lambda: 1, meta={"query": "q"}))
+            assert job.meta == {"query": "q"}
+        finally:
+            mgr.shutdown()
+
+    def test_register_done_creates_finished_job_that_gets_purged(self):
+        mgr = JobManager(max_workers=1)
+        try:
+            job_id = mgr.register_done({"papers": []}, meta={"k": "v"})
+            job = mgr.get(job_id)
+            assert job.status == "done" and job.wait(timeout=0)
+            assert job.result == {"papers": []} and job.meta == {"k": "v"}
+            job.created_at -= JobManager._MAX_AGE + 1
+            mgr._cleanup()
+            assert mgr.get(job_id) is None
+        finally:
+            mgr.shutdown()

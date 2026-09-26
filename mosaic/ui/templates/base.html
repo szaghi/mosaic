@@ -15,7 +15,12 @@
     table td, table th { padding: .4rem .6rem; font-size: .9em; }
     table td:first-child { white-space: nowrap; }
     .export-bar { display: flex; gap: .5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
-    .export-bar a, .export-bar button, .export-bar input { font-size: .85em; padding: .2rem .5rem; margin: 0; height: auto; }
+    .export-bar a, .export-bar button, .export-bar input:not([type=checkbox]) { font-size: .85em; padding: .2rem .5rem; margin: 0; height: auto; }
+    .export-bar .group { display: inline-flex; gap: .35rem; align-items: center; margin: 0; }
+    .export-bar .group + .group { padding-left: .75rem; border-left: 1px solid var(--pico-muted-border-color); }
+    .export-bar input[type=text] { width: 11rem; }
+    .export-bar label, .action-bar label { margin: 0; font-size: .85em; display: inline-flex; gap: .3rem; align-items: center; }
+    .export-bar input[type=checkbox], .action-bar input[type=checkbox] { margin: 0; }
     details summary { cursor: pointer; }
     .filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .5rem; }
     .source-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .25rem .5rem; }
@@ -26,7 +31,20 @@
     .paper-meta dd { margin-bottom: .5rem; }
     fieldset { margin-bottom: 1.5rem; }
     .action-bar { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; align-items: center; }
-    .action-bar a, .action-bar button, .action-bar input { font-size: .85em; padding: .2rem .5rem; margin: 0; height: auto; }
+    .action-bar a, .action-bar button, .action-bar input:not([type=checkbox]), .action-bar select { font-size: .85em; padding: .2rem .5rem; margin: 0; height: auto; }
+    /* Status chips — Pico tokens only, so text stays readable in light and dark themes */
+    .chip { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .85em;
+            background: var(--pico-code-background-color); border: 1px solid var(--pico-muted-border-color);
+            color: var(--pico-color); }
+    .chip-ok { color: var(--pico-ins-color); border-color: var(--pico-ins-color); }
+    .chip-err { color: var(--pico-del-color); border-color: var(--pico-del-color); }
+    .chip-pending { color: var(--pico-muted-color); }
+    /* Small stat tiles (library, index) */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .75rem; margin: 1rem 0; }
+    .stat { padding: .6rem .8rem; border: 1px solid var(--pico-muted-border-color); border-radius: 8px;
+            background: var(--pico-code-background-color); display: flex; flex-direction: column; min-width: 0; }
+    .stat small { color: var(--pico-muted-color); font-size: .8em; }
+    .stat strong { font-size: 1.3em; overflow-wrap: anywhere; }
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -40,6 +58,8 @@
         <li><a href="{{ url_for('ui.search_page') }}" {% if request.path == '/' %}aria-current="page"{% endif %}>Search</a></li>
         <li><a href="{{ url_for('ui.similar_page') }}" {% if '/similar' in request.path %}aria-current="page"{% endif %}>Similar</a></li>
         <li><a href="{{ url_for('ui.bulk_page') }}" {% if '/bulk' in request.path %}aria-current="page"{% endif %}>Bulk</a></li>
+        <li><a href="{{ url_for('ui.library_page') }}" {% if '/library' in request.path %}aria-current="page"{% endif %}>Library</a></li>
+        <li><a href="{{ url_for('ui.analysis_landing') }}" {% if request.path.startswith(('/analysis', '/compare', '/network')) %}aria-current="page"{% endif %}>Analysis</a></li>
         <li><a href="{{ url_for('ui.notebook_page') }}" {% if '/notebook' in request.path %}aria-current="page"{% endif %}>NotebookLM</a></li>
         <li><a href="{{ url_for('ui.history_page') }}" {% if '/history' in request.path %}aria-current="page"{% endif %}>History</a></li>
         <li><a href="{{ url_for('ui.sessions_page') }}" {% if '/sessions' in request.path %}aria-current="page"{% endif %}>Sessions</a></li>
