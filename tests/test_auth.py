@@ -250,18 +250,40 @@ class TestAbsolutise:
         assert result == "https://example.com/download/paper.pdf"
 
     def test_relative_path(self):
+        # Was "https://example.com/paper.pdf": relative hrefs resolve against
+        # the page's directory, not the site root.
         result = _absolutise("paper.pdf", "https://example.com/article/")
-        assert result == "https://example.com/paper.pdf"
+        assert result == "https://example.com/article/paper.pdf"
+
+    def test_relative_path_from_page(self):
+        result = _absolutise("pdf/x.pdf", "https://example.com/article/123/")
+        assert result == "https://example.com/article/123/pdf/x.pdf"
+
+    def test_protocol_relative(self):
+        result = _absolutise("//cdn.host/x.pdf", "https://example.com/article/123")
+        assert result == "https://cdn.host/x.pdf"
+
+    def test_parent_relative(self):
+        result = _absolutise("../files/x.pdf", "https://example.com/a/b/page")
+        assert result == "https://example.com/a/files/x.pdf"
 
 
 # ── _require_playwright ───────────────────────────────────────────────────────
 
 
 class TestRequirePlaywright:
-    def test_raises_system_exit_when_not_installed(self):
+    def test_raises_import_error_when_not_installed(self):
+        # Library code must not SystemExit (it hung web UI jobs forever)
         with patch.dict("sys.modules", {"playwright": None}):
-            with pytest.raises((SystemExit, ImportError)):
+            with pytest.raises(ImportError, match="pip install"):
                 _require_playwright()
+
+    def test_does_not_raise_system_exit(self):
+        with patch.dict("sys.modules", {"playwright": None}):
+            try:
+                _require_playwright()
+            except ImportError:
+                pass
 
 
 # ── _find_pdf_url ─────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 import httpx
 
@@ -141,10 +142,24 @@ def _call_llm(
     return scores
 
 
+_CODE_FENCE_RE = re.compile(r"```[A-Za-z0-9_-]*\s*\n?(.*?)\n?\s*```", re.DOTALL)
+
+
+def strip_code_fences(content: str) -> str:
+    """Return the body of a Markdown code fence in *content*, or *content* itself.
+
+    Models without a JSON mode (notably Anthropic's) often wrap JSON in
+    ```json … ``` fences even when asked for bare JSON.
+    """
+    m = _CODE_FENCE_RE.search(content)
+    return m.group(1).strip() if m else content.strip()
+
+
 def _parse_float_list(content: str, expected: int) -> list[float]:
-    """Extract a list of *expected* floats from an LLM JSON response."""
+    """Extract a list of *expected* floats in [0, 1] from an LLM JSON response."""
+    cleaned = strip_code_fences(content)
     try:
-        data = json.loads(content)
+        data = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         raise ValueError(f"LLM returned non-JSON: {content[:200]!r}") from exc
 
@@ -162,6 +177,8 @@ def _parse_float_list(content: str, expected: int) -> list[float]:
     else:
         raise ValueError(f"Unexpected LLM response type: {type(data).__name__}")
 
+    # Scores are on a 0.0-1.0 scale; clamp whatever the model returned (NaN → neutral)
+    floats = [0.5 if f != f else min(max(f, 0.0), 1.0) for f in floats]
     # Pad to expected length with neutral score if model returned fewer items
     while len(floats) < expected:
         floats.append(0.5)

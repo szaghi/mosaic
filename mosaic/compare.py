@@ -10,6 +10,7 @@ import logging
 import httpx
 
 from mosaic.models import Paper
+from mosaic.ranking import strip_code_fences
 
 _log = logging.getLogger(__name__)
 
@@ -23,17 +24,22 @@ def compare_papers(
     papers: list[Paper],
     dimensions: list[str],
     cfg: dict,
+    *,
+    errors: list[str] | None = None,
 ) -> list[dict[str, str]]:
     """Extract comparison dimensions for each paper.
 
     Tries the configured LLM when available.  Falls back to metadata-only
-    extraction (year, source, journal, DOI) when no LLM is configured or when
-    the LLM call fails.
+    extraction (year, source, journal, DOI) when no LLM is configured, and
+    per batch when an LLM call fails — one bad batch never discards the
+    batches that succeeded.
 
     Args:
         papers: Papers to compare.
         dimensions: Dimension names to extract (e.g. ``["method", "dataset"]``).
         cfg: Loaded mosaic config dict.
+        errors: Optional list that receives a human-readable message for every
+            LLM batch that failed and fell back to metadata.
 
     Returns:
         List of dicts with exactly *dimensions* as keys, one dict per paper.
@@ -42,9 +48,11 @@ def compare_papers(
     llm_cfg = cfg.get("llm", {})
     if llm_cfg.get("api_key") and llm_cfg.get("provider"):
         try:
-            return _llm_extract(papers, dimensions, llm_cfg)
+            return _llm_extract(papers, dimensions, llm_cfg, errors=errors)
         except Exception as exc:
             _log.warning("LLM comparison failed (%s) — using metadata fallback", exc)
+            if errors is not None:
+                errors.append(f"LLM comparison failed: {exc}")
     return _metadata_fallback(papers, dimensions)
 
 
@@ -83,8 +91,14 @@ def _llm_extract(
     papers: list[Paper],
     dimensions: list[str],
     llm_cfg: dict,
+    *,
+    errors: list[str] | None = None,
 ) -> list[dict[str, str]]:
-    """Send papers to the configured LLM in batches to extract *dimensions*."""
+    """Send papers to the configured LLM in batches to extract *dimensions*.
+
+    A batch whose call or response parsing fails is filled from metadata
+    (and reported in *errors*) instead of aborting the whole comparison.
+    """
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
 
     provider = llm_cfg.get("provider", "").lower()
@@ -120,8 +134,15 @@ def _llm_extract(
                 f'Use "-" when a dimension cannot be inferred from the title or abstract.\n\n'
                 f"{snippets}"
             )
-            raw = _call_llm(provider, api_key, model, prompt, base_url=base_url)
-            extracted = _parse_obj_list(raw, len(batch), dimensions)
+            try:
+                raw = _call_llm(provider, api_key, model, prompt, base_url=base_url)
+                extracted = _parse_obj_list(raw, len(batch), dimensions)
+            except Exception as exc:
+                msg = f"papers {i + 1}–{i + len(batch)}: LLM extraction failed ({exc})"
+                _log.warning("LLM comparison batch failed — %s", msg)
+                if errors is not None:
+                    errors.append(msg)
+                extracted = _metadata_fallback(batch, dimensions)
             rows.extend(extracted)
             progress.advance(task, len(batch))
 
@@ -193,7 +214,7 @@ def _parse_obj_list(
         ValueError: If the content is not valid JSON.
     """
     try:
-        data = json.loads(content)
+        data = json.loads(strip_code_fences(content))
     except json.JSONDecodeError as exc:
         raise ValueError(f"LLM returned non-JSON: {content[:200]!r}") from exc
 

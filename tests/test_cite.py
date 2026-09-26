@@ -146,7 +146,9 @@ class TestFetchPaperByDoi:
             paper = fetch_paper_by_doi("10.48550/arxiv.1706.03762")
 
         assert paper.pdf_url == "https://arxiv.org/pdf/1706.03762"
-        assert paper.is_open_access is True
+        # Was True: a PDF link alone no longer implies OA (Crossref also lists
+        # text-mining links for paywalled content) — OA comes from a CC licence.
+        assert paper.is_open_access is False
 
     def test_no_pdf_link_gives_none(self):
         from mosaic.cite import fetch_paper_by_doi

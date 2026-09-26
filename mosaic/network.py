@@ -235,11 +235,13 @@ def to_dot(
         p = papers.get(uid)
         if p:
             snippet = p.title if len(p.title) <= 45 else p.title[:44] + "…"
-            raw_label = f"{snippet}\\n{p.short_authors} {p.year or ''}"
+            # "\n" is DOT's line break; escape each part so a backslash or
+            # quote in the title cannot end the string early.
+            byline = f"{p.short_authors} {p.year or ''}"
+            label = f"{_dot_escape(snippet)}\\n{_dot_escape(byline)}"
         else:
-            raw_label = uid
-        label = raw_label.replace('"', '\\"')
-        lines.append(f'  "{uid}" [label="{label}"];')
+            label = _dot_escape(uid)
+        lines.append(f'  "{_dot_escape(uid)}" [label="{label}"];')
 
     edge_set: set[tuple[str, str]] = set()
     for src, targets in adj.items():
@@ -249,9 +251,14 @@ def to_dot(
                     a, b = (src, tgt) if src <= tgt else (tgt, src)
                     edge_set.add((a, b))
     for a, b in sorted(edge_set):
-        lines.append(f'  "{a}" -- "{b}";')
+        lines.append(f'  "{_dot_escape(a)}" -- "{_dot_escape(b)}";')
     lines.append("}")
     return "\n".join(lines)
+
+
+def _dot_escape(s: str) -> str:
+    """Escape *s* for use inside a double-quoted DOT string."""
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", "")
 
 
 def to_mermaid(
@@ -270,8 +277,10 @@ def to_mermaid(
         Markdown string with a ``mermaid`` fenced code block.
     """
 
-    def safe(uid: str) -> str:
-        return uid.replace(":", "_").replace("/", "_").replace(".", "_").replace("-", "_")
+    # Mermaid node ids must be plain identifiers: DOIs such as "10.1/a.b" and
+    # "10.1/a_b" (or SICI DOIs with "()<>;") cannot be sanitised into unique,
+    # valid ids, so number the nodes and keep the uid only in the label.
+    ids = {uid: f"n{i}" for i, uid in enumerate(sorted(nodes))}
 
     lines = ["```mermaid", "graph TD"]
     for uid in sorted(nodes):
@@ -280,8 +289,7 @@ def to_mermaid(
             label = (p.title[:40] + "…") if len(p.title) > 40 else p.title
         else:
             label = uid
-        label = label.replace('"', "'")
-        lines.append(f'  {safe(uid)}["{label}"]')
+        lines.append(f'  {ids[uid]}["{_mermaid_escape(label)}"]')
 
     edge_set: set[tuple[str, str]] = set()
     for src, targets in adj.items():
@@ -291,9 +299,17 @@ def to_mermaid(
                     a, b = (src, tgt) if src <= tgt else (tgt, src)
                     edge_set.add((a, b))
     for a, b in sorted(edge_set):
-        lines.append(f"  {safe(a)} --- {safe(b)}")
+        lines.append(f"  {ids[a]} --- {ids[b]}")
     lines.append("```")
     return "\n".join(lines)
+
+
+def _mermaid_escape(s: str) -> str:
+    """Escape *s* for a quoted Mermaid label using Mermaid's ``#entity;`` codes."""
+    s = s.replace("\n", " ").replace("\r", "")
+    for ch, code in (("#", "#35;"), ('"', "#quot;"), ("<", "#lt;"), (">", "#gt;")):
+        s = s.replace(ch, code)
+    return s
 
 
 def export_graph(
