@@ -7,7 +7,8 @@ import re
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.parsing import normalise_doi
+from mosaic.sources.base import BaseSource, any_of, build_field_query, lucene_phrase, with_retry
 
 _BASE = "https://api.archives-ouvertes.fr/search/"
 _FL = "title_s,authFullName_s,producedDate_s,doiId_s,abstract_s,journalTitle_s,fileMain_s,openAccess_bool,uri_s"
@@ -53,9 +54,9 @@ class HALSource(BaseSource):
     ) -> list[Paper]:
         """Search the HAL open archive API.
 
-        Supports field scoping to title via ``title_s:`` prefix and to
-        abstract via ``abstract_s:`` prefix. Year, author, and journal
-        filters are appended natively as Lucene clauses.
+        Supports field scoping to title via the ``title_t:`` prefix and to
+        abstract via ``abstract_t:``. Year (``producedDateY_i``), author, and
+        journal filters are appended natively as Lucene clauses.
 
         Args:
             query: Free-text search query.
@@ -68,29 +69,26 @@ class HALSource(BaseSource):
             A list of Paper objects parsed from the ``response.docs`` array.
             Returns an empty list when no documents are present in the response.
         """
-        q = build_field_query(query, filters, 'title_s:"{}"', 'abstract_s:"{}"')
+        # Search the tokenised ``*_t`` fields (case/accent-insensitive).  The
+        # ``*_s`` variants are exact-match strings meant for display and
+        # faceting: ``title_s:"deep learning"`` only matches a title that is
+        # exactly "deep learning".
+        q = build_field_query(query, filters, "title_t:{}", "abstract_t:{}", phrase=True)
 
-        # Append native year filter
+        # Append native year filter on the integer production-year field
         if filters:
-            if filters.year_from is not None and filters.year_to is not None:
-                year_from = filters.year_from
-                year_to = filters.year_to
-                q += (
-                    f" AND producedDate_s:[{year_from}-01-01T00:00:00Z"
-                    f" TO {year_to}-12-31T23:59:59Z]"
-                )
-            elif filters.year_from is not None:
-                y = filters.year_from
-                q += f" AND producedDate_s:[{y}-01-01T00:00:00Z TO {y}-12-31T23:59:59Z]"
-            elif filters.year_to is not None:
-                y = filters.year_to
-                q += f" AND producedDate_s:[{y}-01-01T00:00:00Z TO {y}-12-31T23:59:59Z]"
+            if filters.years:
+                q += f" AND producedDateY_i:({' OR '.join(str(y) for y in filters.years)})"
+            elif filters.year_from is not None or filters.year_to is not None:
+                lo = filters.year_from if filters.year_from is not None else "*"
+                hi = filters.year_to if filters.year_to is not None else "*"
+                q += f" AND producedDateY_i:[{lo} TO {hi}]"
 
-            for author in filters.authors or []:
-                q += f' AND authFullName_s:"{author}"'
+            if filters.authors:
+                q += " AND " + any_of(map(lucene_phrase, filters.authors), "authFullName_t:{}")
 
             if filters.journal:
-                q += f' AND journalTitle_s:"{filters.journal}"'
+                q += f" AND journalTitle_t:{lucene_phrase(filters.journal)}"
 
         params: dict = {
             "q": q,
@@ -100,7 +98,7 @@ class HALSource(BaseSource):
         }
 
         with httpx.Client(timeout=30) as client:
-            resp = client.get(_BASE, params=params)
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             docs = resp.json().get("response", {}).get("docs", [])
         return [self._parse(doc) for doc in docs]
@@ -137,7 +135,7 @@ class HALSource(BaseSource):
             except ValueError:
                 year = None
 
-        doi = doc.get("doiId_s") or None
+        doi = normalise_doi(doc.get("doiId_s"))
 
         # abstract_s is a list; take the first element; may be absent
         abstract_list = doc.get("abstract_s")

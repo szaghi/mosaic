@@ -2,13 +2,40 @@
 
 from __future__ import annotations
 
+import re
+
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import normalise_doi, parse_year
+from mosaic.sources.base import BaseSource, with_retry
 
 _SEARCH = "https://api.elsevier.com/content/search/sciencedirect"
 _ARTICLE = "https://api.elsevier.com/content/article/doi/{doi}"
+
+_VOLUME_RE = re.compile(r"\bVol(?:ume|\.)?\s*([^,\s]+)", re.IGNORECASE)
+_ISSUE_RE = re.compile(r"\b(?:Issue|No\.?)\s*([^,\s]+)", re.IGNORECASE)
+
+
+def _split_volume_issue(raw: str | None) -> tuple[str | None, str | None]:
+    """Split ScienceDirect's ``volumeIssue`` ("Volume 12, Issue 3") into parts.
+
+    >>> _split_volume_issue("Volume 12, Issue 3")
+    ('12', '3')
+    >>> _split_volume_issue("Volume 45")
+    ('45', None)
+    >>> _split_volume_issue("Supplement")
+    ('Supplement', None)
+    """
+    if not raw:
+        return None, None
+    vol_m = _VOLUME_RE.search(raw)
+    issue_m = _ISSUE_RE.search(raw)
+    volume = vol_m.group(1) if vol_m else None
+    issue = issue_m.group(1) if issue_m else None
+    if volume is None and issue is None:
+        return raw.strip() or None, None
+    return volume, issue
 
 
 class ScienceDirectSource(BaseSource):
@@ -66,8 +93,11 @@ class ScienceDirectSource(BaseSource):
         if self._oa_only:
             body["filters"] = {"openAccess": True}
         if filters:
-            if filters.authors:
-                body["authors"] = " ".join(filters.authors)
+            # The ``authors`` field is a single search string; joining several
+            # names would require all of them.  Several authors (meaning
+            # "any of") are left to the framework's post-filter.
+            if len(filters.authors) == 1:
+                body["authors"] = filters.authors[0]
             if filters.journal:
                 body["pub"] = filters.journal
             y_from = filters.year_from or (min(filters.years) if filters.years else None)
@@ -75,7 +105,7 @@ class ScienceDirectSource(BaseSource):
             if y_from or y_to:
                 body["date"] = f"{y_from or y_to}-{y_to or y_from}"
 
-        resp = httpx.put(_SEARCH, json=body, headers=headers, timeout=30)
+        resp = with_retry(lambda: httpx.put(_SEARCH, json=body, headers=headers, timeout=30))
         resp.raise_for_status()
         data = resp.json()
         return [self._parse(item) for item in data.get("results", [])]
@@ -90,35 +120,36 @@ class ScienceDirectSource(BaseSource):
                 ``uri``.
 
         Returns:
-            A Paper populated with available bibliographic metadata. The
-            ``pdf_url`` is set to the Elsevier article endpoint only when the
-            article is marked open access.
+            A Paper populated with available bibliographic metadata.
+            ``pdf_url`` is left unset: the Elsevier article endpoint needs the
+            ``X-ELS-APIKey`` header, which the generic downloader does not
+            send, so exposing it would only produce failed (or bogus)
+            downloads.  Open-access articles are still fetched through the
+            downloader's Unpaywall / browser-session fallbacks, or via
+            ``download_pdf``.
         """
         pages = item.get("pages") or {}
         first = pages.get("first", "")
         last = pages.get("last", "")
         page_str = f"{first}-{last}" if first and last else first or None
 
-        authors = [a.get("name", "") for a in item.get("authors", [])]
+        authors = [a.get("name") for a in item.get("authors") or [] if a.get("name")]
 
-        pub_date = item.get("publicationDate") or ""
-        year = int(pub_date[:4]) if pub_date else None
+        year = parse_year(item.get("publicationDate"))
 
-        doi = item.get("doi")
-        pdf_url = None
-        if doi and item.get("openAccess"):
-            pdf_url = _ARTICLE.format(doi=doi)  # requires Accept: application/pdf when downloading
+        volume, issue = _split_volume_issue(item.get("volumeIssue"))
 
         return Paper(
             title=item.get("title") or "",
             authors=authors,
             year=year,
-            doi=doi,
+            doi=normalise_doi(item.get("doi")),
             pii=item.get("pii"),
             journal=item.get("sourceTitle"),
-            volume=item.get("volumeIssue"),
+            volume=volume,
+            issue=issue,
             pages=page_str,
-            pdf_url=pdf_url,
+            pdf_url=None,
             source=self.name,
             is_open_access=item.get("openAccess", False),
             url=item.get("uri"),

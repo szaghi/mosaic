@@ -5,11 +5,28 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key, parse_year_earliest
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.parsing import normalise_doi, parse_authors_name_key, parse_year_earliest
+from mosaic.sources.base import (
+    BaseSource,
+    Throttle,
+    any_of,
+    build_field_query,
+    extract_year_range,
+    with_retry,
+)
 
 _ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _ESUMMARY = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+
+# NCBI allows 3 requests/s without an API key and 10/s with one, counted
+# across all E-utilities calls.  PubMed and PMC run in parallel during a
+# fan-out search, so they share this process-wide throttle.
+NCBI_THROTTLE = Throttle()
+
+
+def ncbi_interval(api_key: str) -> float:
+    """Minimum seconds between E-utilities requests for the given key state."""
+    return 0.1 if api_key else 0.34
 
 
 class PubMedSource(BaseSource):
@@ -53,10 +70,12 @@ class PubMedSource(BaseSource):
 
         if filters:
             if filters.authors:
-                for author in filters.authors:
-                    pm_query += f' AND "{author}"[au]'
+                pm_query += " AND " + any_of(
+                    (a.replace('"', "") for a in filters.authors), '"{}"[au]'
+                )
             if filters.journal:
-                pm_query += f' AND "{filters.journal}"[ta]'
+                journal = filters.journal.replace('"', "")
+                pm_query += f' AND "{journal}"[ta]'
 
         # ── step 1: esearch → PMIDs ────────────────────────────────────
         params: dict = {
@@ -77,8 +96,14 @@ class PubMedSource(BaseSource):
         if self._api_key:
             params["api_key"] = self._api_key
 
+        interval = ncbi_interval(self._api_key)
         with httpx.Client(timeout=30) as client:
-            resp = client.get(_ESEARCH, params=params)
+
+            def _esearch() -> httpx.Response:
+                NCBI_THROTTLE.wait(interval)
+                return client.get(_ESEARCH, params=params)
+
+            resp = with_retry(_esearch)
             resp.raise_for_status()
             pmids = resp.json().get("esearchresult", {}).get("idlist", [])
             if not pmids:
@@ -93,7 +118,11 @@ class PubMedSource(BaseSource):
             if self._api_key:
                 sum_data["api_key"] = self._api_key
 
-            resp2 = client.post(_ESUMMARY, data=sum_data, timeout=60)
+            def _esummary() -> httpx.Response:
+                NCBI_THROTTLE.wait(interval)
+                return client.post(_ESUMMARY, data=sum_data, timeout=60)
+
+            resp2 = with_retry(_esummary)
             resp2.raise_for_status()
             result = resp2.json().get("result", {})
 
@@ -128,7 +157,7 @@ class PubMedSource(BaseSource):
             idtype = aid.get("idtype", "")
             value = aid.get("value", "")
             if idtype == "doi" and value:
-                doi = value
+                doi = normalise_doi(value)
             elif idtype == "pmc" and value:
                 pmcid = value  # e.g. "PMC12345"
 

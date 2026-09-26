@@ -11,12 +11,19 @@ fails with a CSRF-related error; form submission does not.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, ensure_playwright
+
+log = logging.getLogger(__name__)
 
 _SD_BASE = "https://www.sciencedirect.com"
+_SESSION_EXPIRED = (
+    "session has expired — run: mosaic auth login elsevier --url https://www.sciencedirect.com"
+)
 
 
 class ScienceDirectBrowserSource(BaseSource):
@@ -47,8 +54,6 @@ class ScienceDirectBrowserSource(BaseSource):
         """Search ScienceDirect using a headless browser with a saved session.
 
         Loads the saved Playwright session and runs an async browser search.
-        Returns an empty list on any error (missing session, expired login, or
-        unexpected page structure).
 
         Args:
             query: Free-text search query.
@@ -58,19 +63,25 @@ class ScienceDirectBrowserSource(BaseSource):
                 via the form in this implementation.
 
         Returns:
-            A list of Paper objects scraped from the results page, or an empty
-            list if the session is invalid or the search fails.
-        """
-        try:
-            from mosaic.auth import _require_playwright, find_session_for_url
+            A list of Paper objects scraped from the results page; empty when
+            no session is saved or the query has no results.
 
-            _require_playwright()
-            session_name = find_session_for_url(_SD_BASE)
-            if not session_name:
-                return []
-            return asyncio.run(self._browser_search(query, max_results, session_name, filters))
-        except Exception:
+        Raises:
+            SourceError: When Playwright is missing, the session has expired,
+                ScienceDirect rejects the query, or the browser run fails.
+        """
+        from mosaic.auth import find_session_for_url
+
+        session_name = find_session_for_url(_SD_BASE)
+        if not session_name:
             return []
+        ensure_playwright()
+        try:
+            return asyncio.run(self._browser_search(query, max_results, session_name, filters))
+        except SourceError:
+            raise
+        except Exception as e:
+            raise SourceError(f"browser search failed: {e}") from e
 
     # ── async internals ───────────────────────────────────────────────────────
 
@@ -81,7 +92,8 @@ class ScienceDirectBrowserSource(BaseSource):
 
         Navigates to the ScienceDirect search form, fills the query fields,
         submits the form, and extracts result items. Detects SSO redirects
-        that indicate an expired session and prints a helpful message.
+        that indicate an expired session and raises ``SourceError`` with the
+        re-login command.
 
         Args:
             query: Free-text search query.
@@ -107,8 +119,6 @@ class ScienceDirectBrowserSource(BaseSource):
                 "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
             )
             try:
-                from rich import print as rprint
-
                 # Navigate to the search form (direct URL construction triggers
                 # a CSRF check; form submission avoids it)
                 await page.goto(
@@ -118,36 +128,23 @@ class ScienceDirectBrowserSource(BaseSource):
                 )
                 # Detect SSO redirect before even submitting the form
                 if "id.elsevier.com" in page.url:
-                    rprint(
-                        "[yellow]ScienceDirect session has expired.[/yellow] "
-                        "Run: [bold]mosaic auth login elsevier "
-                        "--url https://www.sciencedirect.com[/bold]"
-                    )
-                    return []
+                    raise SourceError(_SESSION_EXPIRED)
                 await self._fill_form(page, query, filters)
                 await page.wait_for_load_state("networkidle", timeout=30_000)
                 # Detect SSO redirect after form submission
                 if "id.elsevier.com" in page.url:
-                    rprint(
-                        "[yellow]ScienceDirect session has expired.[/yellow] "
-                        "Run: [bold]mosaic auth login elsevier "
-                        "--url https://www.sciencedirect.com[/bold]"
-                    )
-                    return []
+                    raise SourceError(_SESSION_EXPIRED)
                 try:
                     await page.wait_for_selector("li.ResultItem", timeout=12_000)
                 except Exception:
-                    pass
+                    pass  # a query without results renders no ResultItem
                 papers = await self._extract_results(page, max_results)
                 if not papers:
                     status_el = await page.query_selector(".SearchStatusMessage")
                     status = (await status_el.inner_text()).strip() if status_el else ""
                     if status and "could not be run" in status.lower():
-                        rprint(f"[yellow]ScienceDirect search error:[/yellow] {status}")
-                    else:
-                        rprint("[dim]ScienceDirect (browser): no results for this query.[/dim]")
-            except Exception:
-                pass
+                        raise SourceError(f"search could not be run: {status}")
+                    log.info("ScienceDirect (browser): no results for this query")
             finally:
                 await browser.close()
         return papers

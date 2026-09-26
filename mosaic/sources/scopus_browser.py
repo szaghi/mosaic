@@ -20,13 +20,21 @@ your name, and press Enter in the terminal.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource, build_scopus_query
+from mosaic.parsing import normalise_doi
+from mosaic.sources.base import BaseSource, build_scopus_query, ensure_playwright
+
+log = logging.getLogger(__name__)
 
 _SCOPUS_BASE = "https://www.scopus.com"
 _SEARCH_URL = f"{_SCOPUS_BASE}/search/form.uri#advanced"
+_SESSION_EXPIRED = (
+    "session has expired — run: mosaic auth login scopus --url https://www.scopus.com"
+)
 
 
 class ScopusBrowserSource(BaseSource):
@@ -60,8 +68,7 @@ class ScopusBrowserSource(BaseSource):
         """Search Scopus using a headless browser with a saved session.
 
         Loads the saved Playwright session and runs an async browser search
-        via the Scopus advanced-search form. Returns an empty list on any
-        error (missing session, expired login, or unexpected page structure).
+        via the Scopus advanced-search form.
 
         Args:
             query: Free-text search query.
@@ -71,19 +78,25 @@ class ScopusBrowserSource(BaseSource):
                 query syntax appended to the search string.
 
         Returns:
-            A list of Paper objects scraped from the results page, or an
-            empty list if the session is invalid or the search fails.
-        """
-        try:
-            from mosaic.auth import _require_playwright, find_session_for_url
+            A list of Paper objects scraped from the results page; empty when
+            no session is saved or the query has no results.
 
-            _require_playwright()
-            session_name = find_session_for_url(_SCOPUS_BASE)
-            if not session_name:
-                return []
-            return asyncio.run(self._browser_search(query, max_results, session_name, filters))
-        except Exception:
+        Raises:
+            SourceError: When Playwright is missing, the session has expired,
+                or the browser run fails.
+        """
+        from mosaic.auth import find_session_for_url
+
+        session_name = find_session_for_url(_SCOPUS_BASE)
+        if not session_name:
             return []
+        ensure_playwright()
+        try:
+            return asyncio.run(self._browser_search(query, max_results, session_name, filters))
+        except SourceError:
+            raise
+        except Exception as e:
+            raise SourceError(f"browser search failed: {e}") from e
 
     # ── async internals ───────────────────────────────────────────────────────
 
@@ -98,7 +111,8 @@ class ScopusBrowserSource(BaseSource):
 
         Navigates to the Scopus advanced-search form, fills the query
         textarea, submits, and extracts result rows. Detects SSO redirects
-        that indicate an expired session and prints a helpful message.
+        that indicate an expired session and raises ``SourceError`` with the
+        re-login command.
 
         Args:
             query: Free-text search query.
@@ -124,31 +138,19 @@ class ScopusBrowserSource(BaseSource):
                 "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
             )
             try:
-                from rich import print as rprint
-
                 await page.goto(
                     _SEARCH_URL,
                     wait_until="networkidle",
                     timeout=30_000,
                 )
                 if "id.elsevier.com" in page.url:
-                    rprint(
-                        "[yellow]Scopus session has expired.[/yellow] "
-                        "Run: [bold]mosaic auth login scopus "
-                        "--url https://www.scopus.com[/bold]"
-                    )
-                    return []
+                    raise SourceError(_SESSION_EXPIRED)
 
                 await self._fill_form(page, query, filters)
                 await page.wait_for_load_state("networkidle", timeout=30_000)
 
                 if "id.elsevier.com" in page.url:
-                    rprint(
-                        "[yellow]Scopus session has expired.[/yellow] "
-                        "Run: [bold]mosaic auth login scopus "
-                        "--url https://www.scopus.com[/bold]"
-                    )
-                    return []
+                    raise SourceError(_SESSION_EXPIRED)
 
                 try:
                     await page.wait_for_selector(
@@ -156,13 +158,11 @@ class ScopusBrowserSource(BaseSource):
                         timeout=15_000,
                     )
                 except Exception:
-                    pass
+                    pass  # a query without results renders no result rows
 
                 papers = await self._extract_results(page, max_results)
                 if not papers:
-                    rprint("[dim]Scopus (browser): no results for this query.[/dim]")
-            except Exception:
-                pass
+                    log.info("Scopus (browser): no results for this query")
             finally:
                 await browser.close()
         return papers
@@ -317,7 +317,7 @@ class ScopusBrowserSource(BaseSource):
             title=title,
             authors=authors,
             year=year,
-            doi=doi,
+            doi=normalise_doi(doi),
             journal=journal,
             url=article_url,
             source=self.name,

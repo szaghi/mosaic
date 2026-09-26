@@ -5,8 +5,8 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import extract_first, parse_year
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.parsing import extract_first, normalise_doi, parse_year
+from mosaic.sources.base import BaseSource, any_of, build_field_query, lucene_phrase, with_retry
 
 _BASE = "https://api.base-search.net/cgi-bin/BaseHttpSearchInterface.fcgi"
 
@@ -36,10 +36,9 @@ class BASESource(BaseSource):
         base_query = build_field_query(query, filters, 'dctitle:"{}"', 'dcabstract:"{}"')
         if filters:
             if filters.authors:
-                for author in filters.authors:
-                    base_query += f' AND dccreator:"{author}"'
+                base_query += " AND " + any_of(map(lucene_phrase, filters.authors), "dccreator:{}")
             if filters.journal:
-                base_query += f' AND dcsource:"{filters.journal}"'
+                base_query += f" AND dcsource:{lucene_phrase(filters.journal)}"
             if filters.years:
                 years_expr = " OR ".join(f"dcyear:{y}" for y in filters.years)
                 base_query += f" AND ({years_expr})"
@@ -48,17 +47,15 @@ class BASESource(BaseSource):
                 y_to = filters.year_to or filters.year_from
                 base_query += f" AND dcyear:[{y_from} TO {y_to}]"
 
+        params = {
+            "func": "PerformSearch",
+            "query": base_query,
+            "hits": min(max_results, 100),
+            "offset": 0,
+            "format": "json",
+        }
         with httpx.Client(timeout=30) as client:
-            resp = client.get(
-                _BASE,
-                params={
-                    "func": "PerformSearch",
-                    "query": base_query,
-                    "hits": min(max_results, 100),
-                    "offset": 0,
-                    "format": "json",
-                },
-            )
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             docs = resp.json().get("response", {}).get("docs", [])
         return [self._parse(doc) for doc in docs]
@@ -80,10 +77,11 @@ class BASESource(BaseSource):
         authors = doc.get("dccreator") or []
         if isinstance(authors, str):
             authors = [authors]
+        authors = [a for a in authors if isinstance(a, str) and a.strip()]
 
         year = parse_year(doc.get("dcyear"))
 
-        doi = doc.get("dcdoi") or None
+        doi = normalise_doi(extract_first(doc.get("dcdoi")))
         abstract = extract_first(doc.get("dcdescription"))
         journal = extract_first(doc.get("dcsource"))
         url = doc.get("dclink")

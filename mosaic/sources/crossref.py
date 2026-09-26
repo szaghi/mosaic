@@ -5,10 +5,19 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import extract_first, parse_authors_given_family, parse_year, strip_html
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import (
+    extract_first,
+    normalise_doi,
+    parse_authors_given_family,
+    parse_year,
+    strip_html,
+)
+from mosaic.sources.base import BaseSource, extract_year_range, with_retry
 
 _BASE = "https://api.crossref.org/works"
+
+# ``link.intended-application`` values that mark subscriber-only TDM copies.
+_TDM_APPLICATIONS = frozenset({"text-mining", "similarity-checking"})
 
 
 class CrossrefSource(BaseSource):
@@ -53,15 +62,18 @@ class CrossrefSource(BaseSource):
     ) -> list[Paper]:
         """Search the Crossref works endpoint.
 
-        Supports scoping to title via ``query.title`` or to bibliographic
-        fields via ``query.bibliographic``. Year, author, and journal
-        constraints are applied as post-processing only (the framework handles
-        this automatically via ``SearchFilters``).
+        Supports scoping to title via ``query.title``. Crossref has no
+        abstract-only query field (``query.bibliographic`` covers titles,
+        authors and venues, not abstracts), so abstract scoping falls back to
+        the general ``query``. Year ranges are sent as native
+        ``from-pub-date``/``until-pub-date`` filters, and author / journal
+        filters as ``query.author`` / ``query.container-title`` relevance
+        hints; the framework still post-filters on all of them.
 
         Args:
             query: Free-text search query.
             max_results: Maximum number of results to request (capped at 100).
-            filters: Optional filters for field scoping and post-processing.
+            filters: Optional filters for field scoping and native filtering.
                 ``raw_query`` overrides the default mapping if set.
 
         Returns:
@@ -71,17 +83,29 @@ class CrossrefSource(BaseSource):
             params: dict = {"query": filters.raw_query}
         elif filters and filters.field == "title":
             params = {"query.title": query}
-        elif filters and filters.field == "abstract":
-            params = {"query.bibliographic": query}
         else:
             params = {"query": query}
+
+        if filters:
+            y_from, y_to = extract_year_range(filters)
+            date_filters = []
+            if y_from:
+                date_filters.append(f"from-pub-date:{y_from}-01-01")
+            if y_to:
+                date_filters.append(f"until-pub-date:{y_to}-12-31")
+            if date_filters:
+                params["filter"] = ",".join(date_filters)
+            if filters.authors:
+                params["query.author"] = " ".join(filters.authors)
+            if filters.journal:
+                params["query.container-title"] = filters.journal
 
         params["rows"] = min(max_results, 100)
         if self._email:
             params["mailto"] = self._email
 
         with httpx.Client(timeout=30) as client:
-            resp = client.get(_BASE, params=params)
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             items = resp.json().get("message", {}).get("items", [])
         return [self._parse(item) for item in items]
@@ -95,8 +119,10 @@ class CrossrefSource(BaseSource):
                 ``container-title``, ``link``, and ``URL`` fields.
 
         Returns:
-            A Paper with ``is_open_access`` set to True when a PDF link is
-            found in the ``link`` array.
+            A Paper with ``is_open_access`` set to True only when the work
+            carries a Creative Commons license. ``pdf_url`` comes from the
+            ``link`` array, ignoring text-mining / similarity-checking links
+            (those point at paywalled full text for TDM subscribers).
         """
         # title is a list; take the first element
         title = extract_first(item.get("title")) or ""
@@ -110,7 +136,7 @@ class CrossrefSource(BaseSource):
         if date_parts and date_parts[0]:
             year = parse_year(date_parts[0][0])
 
-        doi = item.get("DOI") or None
+        doi = normalise_doi(item.get("DOI"))
 
         # abstract may contain JATS XML tags — strip them
         abstract = strip_html(item.get("abstract"))
@@ -121,14 +147,23 @@ class CrossrefSource(BaseSource):
         # URL: canonical DOI URL
         url = item.get("URL") or None
 
-        # PDF URL: find link entry with content-type == "application/pdf"
+        # Open access: a Creative Commons license is the only reliable signal.
+        is_open_access = any(
+            "creativecommons.org" in str(lic.get("URL") or "").lower()
+            for lic in item.get("license") or []
+            if isinstance(lic, dict)
+        )
+
+        # PDF URL: first application/pdf link not reserved for text mining.
         pdf_url: str | None = None
         for link in item.get("link") or []:
-            if link.get("content-type") == "application/pdf":
-                pdf_url = link.get("URL") or None
+            if link.get("content-type") != "application/pdf":
+                continue
+            if link.get("intended-application") in _TDM_APPLICATIONS:
+                continue
+            pdf_url = link.get("URL") or None
+            if pdf_url:
                 break
-
-        is_open_access = pdf_url is not None
 
         return Paper(
             title=title,

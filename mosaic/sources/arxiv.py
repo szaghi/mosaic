@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
-import time
+import re
 import xml.etree.ElementTree as ET
 
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.parsing import normalise_doi
+from mosaic.sources.base import (
+    BaseSource,
+    Throttle,
+    any_of,
+    build_field_query,
+    extract_year_range,
+    phrase_if_needed,
+    with_retry,
+)
 
 _BASE = "https://export.arxiv.org/api/query"
 _NS = {
@@ -16,13 +25,17 @@ _NS = {
     "arxiv": "http://arxiv.org/schemas/atom",
 }
 
+# arXiv asks for at most one request every 3 seconds.  The throttle is shared
+# by every ArxivSource instance because build_sources() creates a fresh one
+# for each search.
+_THROTTLE = Throttle()
+
 
 class ArxivSource(BaseSource):
     name = "arXiv"
 
     def __init__(self, delay: float = 3.0):
         self._delay = delay
-        self._last_call = 0.0
 
     def search(
         self, query: str, max_results: int = 25, filters: SearchFilters | None = None
@@ -44,33 +57,24 @@ class ArxivSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the Atom feed.
         """
-        elapsed = time.time() - self._last_call
-        if elapsed < self._delay:
-            time.sleep(self._delay - elapsed)
-
-        search_query = build_field_query(query, filters, "ti:{}", "abs:{}", "all:{}")
+        search_query = build_field_query(query, filters, "ti:{}", "abs:{}", "all:{}", phrase=True)
         if filters:
             if filters.authors:
-                for author in filters.authors:
-                    search_query += f" AND au:{author}"
+                search_query += " AND " + any_of(
+                    [phrase_if_needed(a) for a in filters.authors], "au:{}"
+                )
             if filters.journal:
-                search_query += f" AND jr:{filters.journal}"
+                search_query += f" AND jr:{phrase_if_needed(filters.journal)}"
             y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 d_from = f"{y_from or '0000'}01010000"
                 d_to = f"{y_to or '9999'}12312359"
                 search_query += f" AND submittedDate:[{d_from} TO {d_to}]"
 
+        params = {"search_query": search_query, "start": 0, "max_results": max_results}
+        _THROTTLE.wait(self._delay)
         with httpx.Client(timeout=30) as client:
-            resp = client.get(
-                _BASE,
-                params={
-                    "search_query": search_query,
-                    "start": 0,
-                    "max_results": max_results,
-                },
-            )
-        self._last_call = time.time()
+            resp = with_retry(lambda: client.get(_BASE, params=params))
         resp.raise_for_status()
 
         root = ET.fromstring(resp.text)
@@ -109,11 +113,11 @@ class ArxivSource(BaseSource):
 
         doi_el = entry.find("arxiv:doi", _NS)
         # Fall back to the canonical arXiv preprint DOI (strip version suffix).
-        _arxiv_id_base = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
-        doi = (
-            doi_el.text.strip()
-            if doi_el is not None and doi_el.text
-            else f"10.48550/arXiv.{_arxiv_id_base}"
+        # Only a trailing "v<N>" is a version: old-style IDs such as
+        # "solv-int/9901001v1" contain other "v"s.
+        _arxiv_id_base = re.sub(r"v\d+$", "", arxiv_id)
+        doi = normalise_doi(doi_el.text if doi_el is not None else None) or (
+            f"10.48550/arXiv.{_arxiv_id_base}"
         )
 
         journal_el = entry.find("arxiv:journal_ref", _NS)

@@ -7,10 +7,38 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from mosaic.models import Paper, SearchFilters
+from mosaic.parsing import redact_secrets
 from mosaic.services import merge_papers
 from mosaic.sources.base import BaseSource
 
 log = logging.getLogger(__name__)
+
+
+def _sanitise(paper: Paper) -> Paper:
+    """Drop empty / non-string author entries a source may have emitted.
+
+    A single ``None`` author would otherwise crash the post-filter
+    (``" ".join(authors)``), which runs outside the per-source error handling
+    and would abort the whole search.
+    """
+    if any(not isinstance(a, str) or not a.strip() for a in paper.authors):
+        paper.authors = [a.strip() for a in paper.authors if isinstance(a, str) and a.strip()]
+    return paper
+
+
+def _record_failure(
+    source_name: str,
+    exc: Exception,
+    errors: list[str] | None,
+    progress_callback: Callable[[str, str], None] | None,
+) -> None:
+    """Log a source failure and surface it with credentials redacted."""
+    message = redact_secrets(str(exc))
+    log.warning("Source %s failed: %s", source_name, message)
+    if errors is not None:
+        errors.append(f"{source_name}: {message}")
+    if progress_callback:
+        progress_callback(source_name, "error")
 
 
 def _query_source(
@@ -53,30 +81,22 @@ def search_all(
                     per_source[name] = len(results)
                     raw_total += len(results)
                     for paper in results:
-                        merge_papers(seen, paper)
+                        merge_papers(seen, _sanitise(paper))
                     if progress_callback:
                         progress_callback(name, "done")
                 except Exception as e:
-                    log.warning("Source %s failed: %s", source.name, e)
-                    if errors is not None:
-                        errors.append(f"{source.name}: {e}")
-                    if progress_callback:
-                        progress_callback(source.name, "error")
+                    _record_failure(source.name, e, errors, progress_callback)
     else:
         for source in active:
             try:
                 results = source.search(query, max_results=max_per_source, filters=filters)
             except Exception as e:
-                log.warning("Source %s failed: %s", source.name, e)
-                if errors is not None:
-                    errors.append(f"{source.name}: {e}")
-                if progress_callback:
-                    progress_callback(source.name, "error")
+                _record_failure(source.name, e, errors, progress_callback)
                 continue
             per_source[source.name] = len(results)
             raw_total += len(results)
             for paper in results:
-                merge_papers(seen, paper)
+                merge_papers(seen, _sanitise(paper))
             if progress_callback:
                 progress_callback(source.name, "done")
 

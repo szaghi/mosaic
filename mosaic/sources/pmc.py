@@ -5,8 +5,15 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key, parse_year_earliest
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.parsing import normalise_doi, parse_authors_name_key, parse_year_earliest
+from mosaic.sources.base import (
+    BaseSource,
+    any_of,
+    build_field_query,
+    extract_year_range,
+    with_retry,
+)
+from mosaic.sources.pubmed import NCBI_THROTTLE, ncbi_interval
 
 _ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _ESUMMARY = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
@@ -54,10 +61,12 @@ class PMCSource(BaseSource):
 
         if filters:
             if filters.authors:
-                for author in filters.authors:
-                    pmc_query += f' AND "{author}"[au]'
+                pmc_query += " AND " + any_of(
+                    (a.replace('"', "") for a in filters.authors), '"{}"[au]'
+                )
             if filters.journal:
-                pmc_query += f' AND "{filters.journal}"[ta]'
+                journal = filters.journal.replace('"', "")
+                pmc_query += f' AND "{journal}"[ta]'
 
         # ── step 1: esearch (db=pmc) → numeric PMC IDs ─────────────────
         params: dict = {
@@ -78,8 +87,14 @@ class PMCSource(BaseSource):
         if self._api_key:
             params["api_key"] = self._api_key
 
+        interval = ncbi_interval(self._api_key)
         with httpx.Client(timeout=30) as client:
-            resp = client.get(_ESEARCH, params=params)
+
+            def _esearch() -> httpx.Response:
+                NCBI_THROTTLE.wait(interval)
+                return client.get(_ESEARCH, params=params)
+
+            resp = with_retry(_esearch)
             resp.raise_for_status()
             pmc_ids = resp.json().get("esearchresult", {}).get("idlist", [])
             if not pmc_ids:
@@ -94,7 +109,11 @@ class PMCSource(BaseSource):
             if self._api_key:
                 sum_data["api_key"] = self._api_key
 
-            resp2 = client.post(_ESUMMARY, data=sum_data, timeout=60)
+            def _esummary() -> httpx.Response:
+                NCBI_THROTTLE.wait(interval)
+                return client.post(_ESUMMARY, data=sum_data, timeout=60)
+
+            resp2 = with_retry(_esummary)
             resp2.raise_for_status()
             result = resp2.json().get("result", {})
 
@@ -122,7 +141,7 @@ class PMCSource(BaseSource):
         doi: str | None = None
         for aid in item.get("articleids") or []:
             if aid.get("idtype") == "doi" and aid.get("value"):
-                doi = aid["value"]
+                doi = normalise_doi(aid["value"])
                 break
 
         uid = str(item.get("uid") or "")

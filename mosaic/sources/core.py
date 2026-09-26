@@ -5,8 +5,8 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.parsing import normalise_doi, parse_authors_name_key
+from mosaic.sources.base import BaseSource, any_of, build_field_query, lucene_phrase, with_retry
 
 _BASE = "https://api.core.ac.uk/v3/search/works/"
 
@@ -43,10 +43,11 @@ class CORESource(BaseSource):
         core_query = build_field_query(query, filters, 'title:"{}"', 'abstract:"{}"')
         if filters:
             if filters.authors:
-                for author in filters.authors:
-                    core_query += f' AND authors.name:"{author}"'
+                core_query += " AND " + any_of(
+                    map(lucene_phrase, filters.authors), "authors.name:{}"
+                )
             if filters.journal:
-                core_query += f' AND journals.title:"{filters.journal}"'
+                core_query += f" AND journals.title:{lucene_phrase(filters.journal)}"
             if filters.years:
                 y_min, y_max = min(filters.years), max(filters.years)
                 core_query += f" AND yearPublished>={y_min} AND yearPublished<={y_max}"
@@ -55,15 +56,9 @@ class CORESource(BaseSource):
                 y_to = filters.year_to or filters.year_from
                 core_query += f" AND yearPublished>={y_from} AND yearPublished<={y_to}"
 
+        params = {"q": core_query, "limit": min(max_results, 100), "offset": 0}
         with httpx.Client(timeout=30, headers=self._headers) as client:
-            resp = client.get(
-                _BASE,
-                params={
-                    "q": core_query,
-                    "limit": min(max_results, 100),
-                    "offset": 0,
-                },
-            )
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             results = resp.json().get("results", [])
         return [self._parse(item) for item in results]
@@ -92,7 +87,7 @@ class CORESource(BaseSource):
             title=item.get("title") or "",
             authors=authors,
             year=item.get("yearPublished"),
-            doi=item.get("doi") or None,
+            doi=normalise_doi(item.get("doi")),
             abstract=item.get("abstract"),
             journal=journal,
             pdf_url=item.get("downloadUrl") or None,

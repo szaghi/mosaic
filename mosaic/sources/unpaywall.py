@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import httpx
+
+from mosaic.parsing import normalise_doi
 
 _BASE = "https://api.unpaywall.org/v2/{doi}"
 
 
 def resolve(doi: str, email: str) -> str | None:
     """Return the best OA PDF URL for a DOI, or None if not found."""
+    doi = normalise_doi(doi) or ""
     if not doi or not email:
         return None
     try:
-        resp = httpx.get(_BASE.format(doi=doi), params={"email": email}, timeout=15)
+        # DOIs may contain "#", "?" or "%", which would corrupt the path; the
+        # "/" separating prefix and suffix is kept as Unpaywall expects it.
+        resp = httpx.get(
+            _BASE.format(doi=quote(doi, safe="/")), params={"email": email}, timeout=15
+        )
         if resp.status_code != 200:
             return None
         data = resp.json()

@@ -5,8 +5,15 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key, parse_year, strip_html
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.parsing import normalise_doi, parse_authors_name_key, parse_year, strip_html
+from mosaic.sources.base import (
+    BaseSource,
+    any_of,
+    build_field_query,
+    extract_year_range,
+    lucene_phrase,
+    with_retry,
+)
 
 _BASE = "https://zenodo.org/api/records"
 
@@ -67,7 +74,7 @@ class ZenodoSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``hits.hits`` array.
         """
-        q = build_field_query(query, filters, "title:{}", "description:{}")
+        q = build_field_query(query, filters, "title:{}", "description:{}", phrase=True)
 
         # year filter
         if filters:
@@ -77,10 +84,9 @@ class ZenodoSource(BaseSource):
                 y_hi = f"{y_to or y_from}-12-31"
                 q += f" AND publication_date:[{y_lo} TO {y_hi}]"
             if filters.authors:
-                for author in filters.authors:
-                    q += f' AND creators.name:"{author}"'
+                q += " AND " + any_of(map(lucene_phrase, filters.authors), "creators.name:{}")
             if filters.journal:
-                q += f' AND journal.title:"{filters.journal}"'
+                q += f" AND journal.title:{lucene_phrase(filters.journal)}"
 
         params: dict = {
             "q": q,
@@ -88,11 +94,12 @@ class ZenodoSource(BaseSource):
             "type": "publication",
             "sort": "bestmatch",
         }
-        if self._token:
-            params["access_token"] = self._token
+        # Send the token as a header, never in the URL: httpx error messages
+        # embed the full URL and would otherwise leak it.
+        headers = {"Authorization": f"Bearer {self._token}"} if self._token else {}
 
-        with httpx.Client(timeout=30) as client:
-            resp = client.get(_BASE, params=params)
+        with httpx.Client(timeout=30, headers=headers) as client:
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             hits = resp.json().get("hits", {}).get("hits", [])
         return [self._parse(hit) for hit in hits]
@@ -107,8 +114,9 @@ class ZenodoSource(BaseSource):
                 ``journal``, and optionally a ``files`` list.
 
         Returns:
-            A Paper with all open-access Zenodo records marked as OA.
-            PDF URL is set when a ``.pdf`` file entry is found in ``files``.
+            A Paper marked as OA when ``metadata.access_right`` is ``"open"``
+            (or absent).  PDF URL is set when a ``.pdf`` file entry is found
+            in ``files`` of an open record.
         """
         meta = hit.get("metadata", {})
 
@@ -118,7 +126,7 @@ class ZenodoSource(BaseSource):
 
         year = parse_year(meta.get("publication_date"))
 
-        doi = meta.get("doi") or None
+        doi = normalise_doi(meta.get("doi"))
 
         # description may contain HTML — strip tags for a plain-text abstract
         abstract = strip_html(meta.get("description"))
@@ -128,14 +136,18 @@ class ZenodoSource(BaseSource):
 
         url = hit.get("links", {}).get("html") or None
 
+        # Zenodo also hosts embargoed, restricted and closed records; only
+        # "open" ones have publicly downloadable files.
+        is_oa = (meta.get("access_right") or "open") == "open"
+
         # PDF: first file entry whose key ends with .pdf
         pdf_url: str | None = None
-        for f in hit.get("files") or []:
-            if str(f.get("key", "")).lower().endswith(".pdf"):
-                pdf_url = f.get("links", {}).get("self") or None
-                break
+        if is_oa:
+            for f in hit.get("files") or []:
+                if str(f.get("key", "")).lower().endswith(".pdf"):
+                    pdf_url = f.get("links", {}).get("self") or None
+                    break
 
-        # all Zenodo records are open access by definition
         return Paper(
             title=title,
             authors=authors,
@@ -146,5 +158,5 @@ class ZenodoSource(BaseSource):
             url=url,
             pdf_url=pdf_url,
             source=self.name,
-            is_open_access=True,
+            is_open_access=is_oa,
         )

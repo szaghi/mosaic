@@ -12,8 +12,8 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_authors_name_key, parse_year
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.parsing import normalise_doi, parse_authors_name_key, parse_year
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, with_retry
 
 _BASE = "https://api.springernature.com/openaccess/json"
 
@@ -79,15 +79,11 @@ class SpringerAPISource(BaseSource):
             if y_from or y_to:
                 q += f" date:{y_from or y_to}-{y_to or y_from}"
 
+        # The Springer API only accepts the key as a query parameter;
+        # search_all redacts it from error messages.
+        params = {"q": q, "p": min(max_results, 100), "api_key": self._api_key}
         with httpx.Client(timeout=30) as client:
-            resp = client.get(
-                _BASE,
-                params={
-                    "q": q,
-                    "p": min(max_results, 100),
-                    "api_key": self._api_key,
-                },
-            )
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             records = resp.json().get("records", [])
         return [self._parse(r) for r in records]
@@ -114,7 +110,7 @@ class SpringerAPISource(BaseSource):
 
         year = parse_year(record.get("publicationDate"))
 
-        doi = record.get("doi") or None
+        doi = normalise_doi(record.get("doi"))
 
         abstract = record.get("abstract") or None
 

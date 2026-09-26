@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import urllib.parse
 
 import httpx
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.parsing import normalise_doi
+from mosaic.sources.base import BaseSource, with_retry
+
+log = logging.getLogger(__name__)
 
 _BASE_API = "https://api.biorxiv.org/details"
-# Extract DOI (without version suffix) from href="/content/10.1101/..."
-_DOI_HREF_RE = re.compile(r'href="/content/(10\.1101/\d{4}\.\d{2}\.\d{2}\.\d+)(?:v\d+)?"')
+# Extract DOI (without version suffix) from href="/content/10.1101/...".
+# Date-style DOIs (10.1101/2023.01.15.524150) date from Dec 2019; older
+# preprints use a bare serial number (10.1101/052928).
+_DOI_HREF_RE = re.compile(
+    r'href="/content/(10\.1101/(?:\d{4}\.\d{2}\.\d{2}\.)?\d+)(?:v\d+)?(?:\.[a-z-]+)?"'
+)
 
 
 class BioRxivSource(BaseSource):
@@ -51,15 +60,23 @@ class BioRxivSource(BaseSource):
 
         Returns:
             A list of ``Paper`` objects (always ``is_open_access=True``).
+
+        Raises:
+            SourceError: When both servers fail.  A failure on only one
+                server is logged and the other server's results are returned.
         """
         search_query = self._build_query(query, filters)
         papers: list[Paper] = []
+        failures: list[str] = []
         with httpx.Client(timeout=30) as client:
             for server in ("biorxiv", "medrxiv"):
                 try:
                     papers.extend(self._search_server(client, server, search_query, max_results))
-                except Exception:
-                    continue
+                except Exception as e:
+                    log.warning("%s search failed: %s", server, e)
+                    failures.append(f"{server}: {e}")
+        if len(failures) == 2:
+            raise SourceError("; ".join(failures))
         # Post-process: author / journal filters (not supported natively)
         if filters:
             papers = [p for p in papers if filters.match(p)]
@@ -80,9 +97,14 @@ class BioRxivSource(BaseSource):
                 parts.append(f"after:{y_from - 1}-12-31")
             if y_to:
                 parts.append(f"before:{y_to + 1}-01-01")
-            for author in filters.authors:
-                last = author.split()[-1] if author.split() else author
-                parts.append(f"author1:{last}")
+            # The site search has no OR between author operators: several
+            # authors would require all of them, while ``-a`` means "any of".
+            # Only a single author is sent natively; the post-filter covers
+            # the rest.
+            if len(filters.authors) == 1:
+                words = filters.authors[0].split()
+                if words:
+                    parts.append(f"author1:{words[-1]}")
         return " ".join(parts)
 
     def _search_server(
@@ -97,13 +119,13 @@ class BioRxivSource(BaseSource):
             f"https://www.{server}.org/search/"
             f"{encoded}%20numresults%3A{max_results}%20sort%3Arelevance-rank"
         )
-        resp = client.get(
-            url,
-            headers={"User-Agent": "MOSAIC/1.0"},
-            follow_redirects=True,
+        resp = with_retry(
+            lambda: client.get(url, headers={"User-Agent": "MOSAIC/1.0"}, follow_redirects=True)
         )
-        if resp.status_code != 200:
+        if resp.status_code == 404:
             return []
+        if resp.status_code != 200:
+            raise SourceError(f"search page returned HTTP {resp.status_code}")
 
         # Extract unique DOIs from the search-result page
         seen: set[str] = set()
@@ -127,7 +149,7 @@ class BioRxivSource(BaseSource):
         """Fetch metadata for a single preprint from the bioRxiv content API."""
         url = f"{_BASE_API}/{server}/{doi}/0/json"
         try:
-            resp = client.get(url, timeout=15)
+            resp = with_retry(lambda: client.get(url, timeout=15))
             if resp.status_code != 200:
                 return None
             items = resp.json().get("collection", [])
@@ -139,7 +161,7 @@ class BioRxivSource(BaseSource):
         return self._parse(items[-1], server)
 
     def _parse(self, item: dict, server: str) -> Paper:
-        doi = item.get("doi") or ""
+        doi = normalise_doi(item.get("doi")) or ""
         date_str = item.get("date") or ""  # "YYYY-MM-DD"
         year: int | None = None
         if date_str and len(date_str) >= 4 and date_str[:4].isdigit():

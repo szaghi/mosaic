@@ -7,6 +7,7 @@ year extraction, author normalisation, HTML stripping, and safe accessors.
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote
 
 
 def parse_year(value: str | int | None) -> int | None:
@@ -94,10 +95,21 @@ def strip_html(text: str | None) -> str | None:
     return cleaned or None
 
 
+_DOI_URL_PREFIX_RE = re.compile(r"^https?://(?:dx\.|www\.)?doi\.org/", re.IGNORECASE)
+_DOI_SCHEME_PREFIX_RE = re.compile(r"^doi:\s*", re.IGNORECASE)
+
+
 def normalise_doi(doi_raw: str | None) -> str | None:
-    """Strip common URL prefixes from a DOI string.
+    """Strip common URL / scheme prefixes and surrounding whitespace from a DOI.
+
+    Handles ``https://doi.org/``, ``http://dx.doi.org/``, ``https://www.doi.org/``
+    (any case) and the ``doi:`` scheme.  Percent-encoded URL forms are decoded.
 
     >>> normalise_doi("https://doi.org/10.1234/foo")
+    '10.1234/foo'
+    >>> normalise_doi("HTTP://DX.DOI.ORG/10.1234/foo")
+    '10.1234/foo'
+    >>> normalise_doi("doi:10.1234/foo")
     '10.1234/foo'
     >>> normalise_doi("10.1234/foo")
     '10.1234/foo'
@@ -106,10 +118,33 @@ def normalise_doi(doi_raw: str | None) -> str | None:
     """
     if not doi_raw:
         return None
-    cleaned = doi_raw.strip()
-    for prefix in ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/"):
-        cleaned = cleaned.removeprefix(prefix)
+    cleaned = str(doi_raw).strip()
+    if _DOI_URL_PREFIX_RE.match(cleaned):
+        cleaned = unquote(_DOI_URL_PREFIX_RE.sub("", cleaned))
+    cleaned = _DOI_SCHEME_PREFIX_RE.sub("", cleaned).strip()
     return cleaned or None
+
+
+# Query-string parameters whose values must never reach logs or user-facing
+# error messages (API keys, tokens, contact emails).
+_SECRET_PARAM_RE = re.compile(
+    r"([?&](?:api[_-]?key|apikey|access[_-]?token|token|inst[_-]?token|key|email|mailto)=)"
+    r"[^&\s'\"#]+",
+    re.IGNORECASE,
+)
+
+
+def redact_secrets(text: str) -> str:
+    """Mask credential-bearing query parameters inside *text*.
+
+    httpx embeds the full request URL in ``HTTPStatusError`` messages, so an
+    error from a source that authenticates via query string would otherwise
+    leak the key into ``--json`` output, logs and the web UI.
+
+    >>> redact_secrets("error for url 'https://x.org/s?q=a&apikey=SECRET&n=1'")
+    "error for url 'https://x.org/s?q=a&apikey=***&n=1'"
+    """
+    return _SECRET_PARAM_RE.sub(r"\1***", text)
 
 
 def parse_authors_name_key(items: list[dict], key: str = "name") -> list[str]:

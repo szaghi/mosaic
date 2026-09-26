@@ -5,8 +5,15 @@ from __future__ import annotations
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.parsing import parse_year, split_authors
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.parsing import normalise_doi, parse_year, split_authors
+from mosaic.sources.base import (
+    BaseSource,
+    any_of,
+    build_field_query,
+    extract_year_range,
+    lucene_phrase,
+    with_retry,
+)
 
 _BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 
@@ -35,23 +42,20 @@ class EuropePMCSource(BaseSource):
         epmc_query = build_field_query(query, filters, 'TITLE:"{}"', 'ABSTRACT:"{}"')
         if filters:
             if filters.authors:
-                for author in filters.authors:
-                    epmc_query += f' AND AUTH:"{author}"'
+                epmc_query += " AND " + any_of(map(lucene_phrase, filters.authors), "AUTH:{}")
             if filters.journal:
-                epmc_query += f' AND JOURNAL:"{filters.journal}"'
+                epmc_query += f" AND JOURNAL:{lucene_phrase(filters.journal)}"
             y_from, y_to = extract_year_range(filters)
             if y_from or y_to:
                 epmc_query += f" AND PUB_YEAR:[{y_from or y_to} TO {y_to or y_from}]"
+        params = {
+            "query": epmc_query,
+            "pageSize": min(max_results, 100),
+            "resultType": "core",
+            "format": "json",
+        }
         with httpx.Client(timeout=30) as client:
-            resp = client.get(
-                _BASE,
-                params={
-                    "query": epmc_query,
-                    "pageSize": min(max_results, 100),
-                    "resultType": "core",
-                    "format": "json",
-                },
-            )
+            resp = with_retry(lambda: client.get(_BASE, params=params))
             resp.raise_for_status()
             data = resp.json()
         return [self._parse(item) for item in data.get("resultList", {}).get("result", [])]
@@ -84,7 +88,7 @@ class EuropePMCSource(BaseSource):
             title=item.get("title") or "",
             authors=authors,
             year=year,
-            doi=item.get("doi"),
+            doi=normalise_doi(item.get("doi")),
             abstract=item.get("abstractText"),
             journal=item.get("journalTitle"),
             volume=item.get("journalVolume"),
