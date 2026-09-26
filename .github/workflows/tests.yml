@@ -26,7 +26,8 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e ".[dev,ui]"
+        # rag/analysis extras: without sqlite-vec the vector-index tests are skipped
+        run: pip install -e ".[dev,ui,rag,analysis]"
 
       - name: Run tests with coverage
         run: pytest
