@@ -565,6 +565,8 @@ mosaic ui [OPTIONS]
 | `--port` | int | `5555` | Port number |
 | `--no-browser` | flag | off | Don't auto-open the browser |
 | `--debug` | flag | off | Use Flask dev server with hot-reload |
+| `--token` | str | | Access token required by the UI (env `MOSAIC_UI_TOKEN`); a random one is generated when `--host` is not loopback |
+| `--no-auth` | flag | off | Disable the access token even on a network-reachable address |
 
 Requires the `ui` extra: `pip install 'mosaic-search[ui]'`.
 
@@ -573,7 +575,7 @@ By default, the server uses [Waitress](https://docs.pylonsproject.org/projects/w
 ```bash
 mosaic ui                          # default: http://127.0.0.1:5555
 mosaic ui --port 8080              # custom port
-mosaic ui --host 0.0.0.0           # accessible on LAN
+mosaic ui --host 0.0.0.0           # accessible on LAN, prints a URL with ?token=…
 mosaic ui --debug                  # development mode
 ```
 

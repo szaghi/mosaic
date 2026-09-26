@@ -34,10 +34,12 @@ This starts a local Waitress server (production-grade, multi-threaded) and opens
 | `--host` | `127.0.0.1` | Bind address (`0.0.0.0` for LAN access — see [Security](#security)) |
 | `--no-browser` | off | Don't auto-open the browser |
 | `--debug` | off | Use Flask dev server with hot-reload |
+| `--token` | random off-loopback | Access token (env `MOSAIC_UI_TOKEN`) |
+| `--no-auth` | off | Disable the access token on a network-reachable address |
 
 ```bash
 mosaic ui --port 8080                 # custom port
-mosaic ui --host 0.0.0.0             # accessible on LAN
+mosaic ui --host 0.0.0.0             # accessible on LAN (token-protected)
 mosaic ui --no-browser                # headless / remote
 mosaic ui --debug                     # development mode (hot-reload)
 ```
@@ -138,12 +140,15 @@ Saved secrets are never sent back to the browser: leave a field blank to keep th
 
 ## Security
 
-The web UI has **no login**. It is meant for `127.0.0.1`:
+On `127.0.0.1` (the default) the web UI has no login, like any local desktop tool. In every mode:
 
 - Requests whose `Host` header is not a loopback name (or the address passed to `--host`) are rejected, which blocks DNS-rebinding attacks.
 - State-changing requests coming from another site (`Origin` / `Sec-Fetch-Site`) are rejected, so a web page cannot silently change your configuration.
+- Saved API keys are never sent back to the browser.
 
-Binding to `0.0.0.0` exposes your library, API keys and downloads to everyone on the network (the Host check is disabled for wildcard addresses); only do it on a trusted network.
+When `--host` is not a loopback address (e.g. `0.0.0.0` for LAN access), the UI requires an **access token**. `mosaic ui` generates a random one and prints the URL to open (`http://HOST:PORT/?token=…`); the browser keeps a session cookie afterwards and the token is removed from the address bar. Scripts can send `Authorization: Bearer <token>` instead. Use `--token` (or `MOSAIC_UI_TOKEN`) to choose the token, or `--no-auth` to disable it — only on a network you fully trust, since anyone who can reach the port can read your library and change your configuration.
+
+The Host check is disabled for wildcard bind addresses such as `0.0.0.0`. Traffic is plain HTTP; use an SSH tunnel or a reverse proxy with TLS if you need to reach the UI across untrusted networks.
 
 ## Keyboard Shortcuts
 

@@ -210,3 +210,32 @@ class TestAuthAndNotebook:
             result = runner.invoke(app, ["notebook", "create", "NB", "--query", "q"])
         assert result.exit_code == 1
         assert "notebooklm login" in result.output
+
+
+class TestUiCommand:
+    def _run(self, *args):
+        server = MagicMock()
+        with (
+            patch("mosaic.ui.create_app") as create_app,
+            patch("waitress.create_server", return_value=server),
+        ):
+            result = runner.invoke(app, ["ui", "--no-browser", *args])
+        return result, create_app
+
+    def test_loopback_has_no_token(self):
+        result, create_app = self._run()
+        assert result.exit_code == 0, result.output
+        assert create_app.call_args.kwargs["access_token"] is None
+
+    def test_network_bind_generates_token(self):
+        result, create_app = self._run("--host", "0.0.0.0")
+        token = create_app.call_args.kwargs["access_token"]
+        assert token and len(token) >= 24
+        assert f"?token={token}" in result.output.replace("\n", "")
+
+    def test_explicit_token_and_no_auth(self):
+        _, create_app = self._run("--host", "0.0.0.0", "--token", "mine")
+        assert create_app.call_args.kwargs["access_token"] == "mine"
+        result, create_app = self._run("--host", "0.0.0.0", "--no-auth")
+        assert create_app.call_args.kwargs["access_token"] is None
+        assert "--no-auth" in result.output

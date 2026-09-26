@@ -474,3 +474,26 @@ class TestRagPages:
             html = client.get(url).data
             assert b"nomic-embed-text" in html
             assert b"Not configured" not in html
+
+
+class TestAccessToken:
+    def test_loopback_needs_no_token_by_default(self, client):
+        assert client.get("/").status_code == 200
+
+    def test_token_required_when_configured(self, base_cfg):
+        client = _make_app(base_cfg, bind_host="0.0.0.0", access_token="s3cret").test_client()
+        assert client.get("/").status_code == 401
+        assert client.get("/?token=wrong").status_code == 401
+
+    def test_token_in_url_sets_session_and_is_stripped(self, base_cfg):
+        client = _make_app(base_cfg, bind_host="0.0.0.0", access_token="s3cret").test_client()
+        resp = client.get("/library?q=graph&token=s3cret")
+        assert resp.status_code == 302
+        assert resp.headers["Location"] == "/library?q=graph"
+        assert client.get("/config").status_code == 200  # session cookie now suffices
+
+    def test_bearer_header_for_scripts(self, base_cfg):
+        client = _make_app(base_cfg, bind_host="0.0.0.0", access_token="s3cret").test_client()
+        headers = {"Authorization": "Bearer s3cret"}
+        assert client.get("/", headers=headers).status_code == 200
+        assert client.get("/", headers={"Authorization": "Bearer nope"}).status_code == 401

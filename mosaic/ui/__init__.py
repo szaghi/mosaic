@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 import sys
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
-from flask import Flask, request
+from flask import Flask, redirect, request, session
 
 import mosaic.config as cfg_mod
 from mosaic.db import Cache
@@ -62,7 +63,24 @@ def _is_cross_origin() -> bool:
     return urlsplit(source).netloc.lower() != request.host.lower()
 
 
-def create_app(*, bind_host: str = "127.0.0.1") -> Flask:
+def is_loopback(bind_host: str) -> bool:
+    """True when *bind_host* only accepts connections from this machine."""
+    return bind_host.strip().strip("[]").lower() in _LOOPBACK_HOSTS
+
+
+_AUTH_REQUIRED_PAGE = (
+    "<!doctype html><title>MOSAIC — access token required</title>"
+    "<h1>Access token required</h1>"
+    "<p>This MOSAIC web UI is reachable from the network and requires an access token. "
+    "Open the URL printed by <code>mosaic ui</code> (it ends with <code>?token=…</code>).</p>"
+)
+
+
+def _token_matches(candidate: str | None, token: str) -> bool:
+    return bool(candidate) and hmac.compare_digest(candidate.encode(), token.encode())
+
+
+def create_app(*, bind_host: str = "127.0.0.1", access_token: str | None = None) -> Flask:
     base = _ui_base_path()
     app = Flask(
         __name__,
@@ -83,6 +101,18 @@ def create_app(*, bind_host: str = "127.0.0.1") -> Flask:
         allowed = app.config.get("ALLOWED_HOSTS")
         if allowed is not None and _hostname(request.host) not in allowed:
             return "Forbidden: unexpected Host header.", 403
+        if access_token and not session.get("mosaic_auth"):
+            # Scripts may send the token as a bearer header on every request;
+            # browsers present it once as ?token=… and then use the session cookie.
+            bearer = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+            if not _token_matches(bearer, access_token):
+                if not _token_matches(request.args.get("token"), access_token):
+                    return _AUTH_REQUIRED_PAGE, 401
+                session["mosaic_auth"] = True
+                # Drop the token from the address bar (history, Referer headers)
+                args = {k: v for k, v in request.args.items(multi=True) if k != "token"}
+                query = f"?{urlencode(args)}" if args else ""
+                return redirect(f"{request.path}{query}")
         # The UI has no login: refuse state-changing requests coming from
         # other origins (CSRF), e.g. a web page posting to /config.
         if request.method not in _SAFE_METHODS and _is_cross_origin():
