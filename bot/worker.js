@@ -18,6 +18,7 @@
 const REPO     = "szaghi/mosaic";
 const DOCS_URL = "https://szaghi.github.io/mosaic";
 const PYPI_URL = "https://pypi.org/project/mosaic-search";
+const PYPI_JSON_URL = "https://pypi.org/pypi/mosaic-search/json"; // /project/... serves HTML
 const GH_URL   = `https://github.com/${REPO}`;
 
 // ── Telegram helpers ──────────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ async function ghGet(path, githubToken) {
 }
 
 async function pypiVersion() {
-  const resp = await fetch(`${PYPI_URL}/json`);
+  const resp = await fetch(PYPI_JSON_URL);
   const data = await resp.json();
   return data.info.version;
 }

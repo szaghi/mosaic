@@ -29,17 +29,33 @@ OFFSET_FILE = os.environ.get("OFFSET_FILE", "offset.txt")
 DOCS_URL = "https://szaghi.github.io/mosaic"
 GITHUB_URL = f"https://github.com/{REPO}"
 PYPI_URL = "https://pypi.org/project/mosaic-search"
+PYPI_JSON_URL = "https://pypi.org/pypi/mosaic-search/json"  # /project/... serves HTML
+
+
+# ── HTTP ──────────────────────────────────────────────────────────────────────
+
+
+def fetch_json(url, data=None, headers=None):
+    """GET (or POST when *data* is given) *url* and decode the JSON response.
+
+    The single place that opens URLs: the https-only check below is what
+    makes the S310 suppressions safe (no file:// or custom schemes).
+    """
+    if urllib.parse.urlsplit(url).scheme != "https":
+        raise ValueError(f"refusing non-https URL: {url}")
+    req = urllib.request.Request(url, data=data, headers=headers or {})  # noqa: S310
+    with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+        return json.loads(resp.read())
 
 
 # ── Telegram helpers ──────────────────────────────────────────────────────────
+
 
 def tg(method, payload=None):
     url = f"https://api.telegram.org/bot{TOKEN}/{method}"
     data = json.dumps(payload).encode() if payload else None
     headers = {"Content-Type": "application/json"} if data else {}
-    req = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        return json.loads(resp.read())
+    return fetch_json(url, data=data, headers=headers)
 
 
 def send(chat_id, text, reply_to=None):
@@ -56,6 +72,7 @@ def send(chat_id, text, reply_to=None):
 
 # ── GitHub / PyPI helpers ─────────────────────────────────────────────────────
 
+
 def gh_get(path):
     url = f"https://api.github.com/repos/{REPO}/{path}"
     headers = {
@@ -64,14 +81,11 @@ def gh_get(path):
     }
     if GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        return json.loads(resp.read())
+    return fetch_json(url, headers=headers)
 
 
 def pypi_version():
-    with urllib.request.urlopen(f"{PYPI_URL}/json", timeout=10) as resp:
-        return json.loads(resp.read())["info"]["version"]
+    return fetch_json(PYPI_JSON_URL)["info"]["version"]
 
 
 def html_escape(s):
@@ -80,31 +94,40 @@ def html_escape(s):
 
 # ── Bot commands ──────────────────────────────────────────────────────────────
 
+
 def cmd_help(chat_id, msg_id):
-    send(chat_id, (
-        "🤖 <b>MOSAIC Support Bot</b>\n\n"
-        "/help — this message\n"
-        "/install — installation instructions\n"
-        "/version — latest release on PyPI\n"
-        "/docs — documentation\n"
-        "/sources — supported search sources\n"
-        "/changelog — recent release notes\n"
-        "/bug — how to report a bug\n"
-        "/roadmap — open issues and milestones"
-    ), reply_to=msg_id)
+    send(
+        chat_id,
+        (
+            "🤖 <b>MOSAIC Support Bot</b>\n\n"
+            "/help — this message\n"
+            "/install — installation instructions\n"
+            "/version — latest release on PyPI\n"
+            "/docs — documentation\n"
+            "/sources — supported search sources\n"
+            "/changelog — recent release notes\n"
+            "/bug — how to report a bug\n"
+            "/roadmap — open issues and milestones"
+        ),
+        reply_to=msg_id,
+    )
 
 
 def cmd_install(chat_id, msg_id):
-    send(chat_id, (
-        "📦 <b>Install MOSAIC</b>\n\n"
-        "Recommended (isolated environment):\n"
-        "<code>pipx install mosaic-search</code>\n\n"
-        "Or with pip:\n"
-        "<code>pip install mosaic-search</code>\n\n"
-        "Quick test:\n"
-        "<code>mosaic search \"transformer attention\" --max 5</code>\n\n"
-        f'📘 <a href="{DOCS_URL}/guide/getting-started">Getting started</a>'
-    ), reply_to=msg_id)
+    send(
+        chat_id,
+        (
+            "📦 <b>Install MOSAIC</b>\n\n"
+            "Recommended (isolated environment):\n"
+            "<code>pipx install mosaic-search</code>\n\n"
+            "Or with pip:\n"
+            "<code>pip install mosaic-search</code>\n\n"
+            "Quick test:\n"
+            '<code>mosaic search "transformer attention" --max 5</code>\n\n'
+            f'📘 <a href="{DOCS_URL}/guide/getting-started">Getting started</a>'
+        ),
+        reply_to=msg_id,
+    )
 
 
 def cmd_version(chat_id, msg_id):
@@ -122,35 +145,55 @@ def cmd_version(chat_id, msg_id):
 
 
 def cmd_docs(chat_id, msg_id):
-    send(chat_id, (
-        f"📘 <b>MOSAIC Documentation</b>\n\n"
-        f'<a href="{DOCS_URL}">{DOCS_URL}</a>\n\n'
-        "Covers: getting started, configuration, all 21 sources, "
-        "CLI reference, Zotero/Obsidian integrations, and changelog."
-    ), reply_to=msg_id)
+    send(
+        chat_id,
+        (
+            f"📘 <b>MOSAIC Documentation</b>\n\n"
+            f'<a href="{DOCS_URL}">{DOCS_URL}</a>\n\n'
+            "Covers: getting started, configuration, all 21 sources, "
+            "CLI reference, Zotero/Obsidian integrations, and changelog."
+        ),
+        reply_to=msg_id,
+    )
 
 
 _SOURCES_FREE = [
-    "arXiv", "Semantic Scholar", "OpenAlex", "Europe PMC",
-    "PubMed", "PubMed Central", "bioRxiv/medRxiv",
-    "DOAJ", "Crossref", "Zenodo", "DBLP", "HAL", "PEDRO",
+    "arXiv",
+    "Semantic Scholar",
+    "OpenAlex",
+    "Europe PMC",
+    "PubMed",
+    "PubMed Central",
+    "bioRxiv/medRxiv",
+    "DOAJ",
+    "Crossref",
+    "Zenodo",
+    "DBLP",
+    "HAL",
+    "PEDRO",
     "BASE Search",
 ]
 _SOURCES_KEY = [
-    "IEEE Xplore", "Springer", "ScienceDirect", "CORE",
-    "NASA ADS", "Scopus",
+    "IEEE Xplore",
+    "Springer",
+    "ScienceDirect",
+    "CORE",
+    "NASA ADS",
+    "Scopus",
 ]
 
 
 def cmd_sources(chat_id, msg_id):
-    send(chat_id, (
-        f"🔍 <b>MOSAIC sources ({len(_SOURCES_FREE) + len(_SOURCES_KEY)} total)</b>\n\n"
-        "<b>No auth required:</b>\n"
-        + ", ".join(_SOURCES_FREE) + "\n\n"
-        "<b>Free API key / browser session:</b>\n"
-        + ", ".join(_SOURCES_KEY) + "\n\n"
-        f'📘 <a href="{DOCS_URL}/guide/sources">Source docs</a>'
-    ), reply_to=msg_id)
+    send(
+        chat_id,
+        (
+            f"🔍 <b>MOSAIC sources ({len(_SOURCES_FREE) + len(_SOURCES_KEY)} total)</b>\n\n"
+            "<b>No auth required:</b>\n" + ", ".join(_SOURCES_FREE) + "\n\n"
+            "<b>Free API key / browser session:</b>\n" + ", ".join(_SOURCES_KEY) + "\n\n"
+            f'📘 <a href="{DOCS_URL}/guide/sources">Source docs</a>'
+        ),
+        reply_to=msg_id,
+    )
 
 
 def cmd_changelog(chat_id, msg_id):
@@ -170,41 +213,42 @@ def cmd_changelog(chat_id, msg_id):
 
 
 def cmd_bug(chat_id, msg_id):
-    send(chat_id, (
-        "🐛 <b>Report a Bug</b>\n\n"
-        "Please open a GitHub issue and include:\n"
-        "• MOSAIC version — <code>mosaic --version</code>\n"
-        "• The exact command you ran\n"
-        "• Error message or unexpected output\n"
-        "• OS and Python version\n\n"
-        f'🔗 <a href="{GITHUB_URL}/issues/new?labels=bug&template=bug_report.md">'
-        "Open a bug report →</a>"
-    ), reply_to=msg_id)
+    send(
+        chat_id,
+        (
+            "🐛 <b>Report a Bug</b>\n\n"
+            "Please open a GitHub issue and include:\n"
+            "• MOSAIC version — <code>mosaic --version</code>\n"
+            "• The exact command you ran\n"
+            "• Error message or unexpected output\n"
+            "• OS and Python version\n\n"
+            f'🔗 <a href="{GITHUB_URL}/issues/new?labels=bug&template=bug_report.md">'
+            "Open a bug report →</a>"
+        ),
+        reply_to=msg_id,
+    )
 
 
 def cmd_roadmap(chat_id, msg_id):
     try:
         milestones = gh_get("milestones?state=open&per_page=5")
         issues = gh_get(
-            "issues?state=open&labels=enhancement"
-            "&per_page=8&sort=created&direction=desc"
+            "issues?state=open&labels=enhancement&per_page=8&sort=created&direction=desc"
         )
-        lines = [f"🗺️ <b>MOSAIC Roadmap</b>\n"]
+        lines = ["🗺️ <b>MOSAIC Roadmap</b>\n"]
         if milestones:
             lines.append("<b>Milestones:</b>")
             for m in milestones[:3]:
                 open_n = m["open_issues"]
                 lines.append(
-                    f'  · <a href="{m["html_url"]}">{html_escape(m["title"])}</a>'
-                    f" ({open_n} open)"
+                    f'  · <a href="{m["html_url"]}">{html_escape(m["title"])}</a> ({open_n} open)'
                 )
             lines.append("")
         if issues:
             lines.append("<b>Planned enhancements:</b>")
             for i in issues[:6]:
                 lines.append(
-                    f'  · <a href="{i["html_url"]}">#{i["number"]}</a>'
-                    f" {html_escape(i['title'])}"
+                    f'  · <a href="{i["html_url"]}">#{i["number"]}</a> {html_escape(i["title"])}'
                 )
         if not milestones and not issues:
             lines.append("No open milestones or enhancements found.")
@@ -316,21 +360,26 @@ def faq_reply(chat_id, msg_id, text_lower):
 
 # ── New-member welcome ────────────────────────────────────────────────────────
 
+
 def welcome(chat_id, members):
     names = ", ".join(m.get("first_name", "there") for m in members)
-    send(chat_id, (
-        f"👋 Welcome, <b>{html_escape(names)}</b>!\n\n"
-        "This is the official MOSAIC support group.\n\n"
-        "🔍 <b>MOSAIC</b> — Multi-source Scientific Article Indexer and Collector\n"
-        "<i>A vivid mosaic of open scientific literature, assembled in seconds</i>\n\n"
-        f"📦 <code>pipx install mosaic-search</code>\n"
-        f'📘 <a href="{DOCS_URL}">Docs</a>  ·  '
-        f'🐙 <a href="{GITHUB_URL}">GitHub</a>  ·  '
-        "/help for bot commands"
-    ))
+    send(
+        chat_id,
+        (
+            f"👋 Welcome, <b>{html_escape(names)}</b>!\n\n"
+            "This is the official MOSAIC support group.\n\n"
+            "🔍 <b>MOSAIC</b> — Multi-source Scientific Article Indexer and Collector\n"
+            "<i>A vivid mosaic of open scientific literature, assembled in seconds</i>\n\n"
+            f"📦 <code>pipx install mosaic-search</code>\n"
+            f'📘 <a href="{DOCS_URL}">Docs</a>  ·  '
+            f'🐙 <a href="{GITHUB_URL}">GitHub</a>  ·  '
+            "/help for bot commands"
+        ),
+    )
 
 
 # ── Update processing ─────────────────────────────────────────────────────────
+
 
 def process(update):
     msg = update.get("message") or update.get("edited_message")
@@ -367,6 +416,7 @@ def process(update):
 
 # ── Offset persistence ────────────────────────────────────────────────────────
 
+
 def load_offset():
     if os.path.exists(OFFSET_FILE):
         try:
@@ -382,6 +432,7 @@ def save_offset(offset):
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def main():
     offset = load_offset()
