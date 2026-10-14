@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.9.0] — 2026-10-14
+### Added
+- **import**: File user-downloaded PDFs into the library; Enter no longer skips a finishing hand-off
+
+
 ## [1.8.0] — 2026-10-14
 ### Added
 - **get**: --handoff to the user's own browser; fix Elsevier landing URL
