@@ -28,6 +28,12 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev,ui]"
 
+      # Extras are not installed above; resolve them all so an unsatisfiable
+      # pin (e.g. notebooklm-py>=0.10, which never existed) fails CI instead of
+      # silently pinning `pip install mosaic-search[all]` users to an old release.
+      - name: Check all extras resolve
+        run: pip install --dry-run ".[all,notebooklm,browser,rag,analysis,desktop]"
+
       - name: Run tests with coverage
         run: pytest
 
