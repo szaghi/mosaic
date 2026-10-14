@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.7.0] — 2026-10-14
+### Added
+- **search**: Add --summarise for LLM synthesis of results
+
+
 ## [1.6.0] — 2026-10-14
 ### Added
 - Watch searches, rate-limit retry, Cochrane source; fix PDF validation and NotebookLM jobs
