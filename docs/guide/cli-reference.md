@@ -330,6 +330,7 @@ mosaic get [OPTIONS] [DOI]
 | `--zotero` | flag | off | Export downloaded paper(s) to Zotero |
 | `--zotero-collection` | str | | Zotero collection name (created if missing) |
 | `--zotero-local` | flag | off | Force local API even when a web API key is configured |
+| `--interactive` / `-i` | flag | off | Retry failed papers in a visible browser where you can log in or solve checks; see [Interactive download](./authenticated-access#interactive-download-interactive) |
 
 Provide either a `DOI` positional argument (single download) or `--from <file>` (bulk download) — not both.
 

@@ -600,6 +600,14 @@ def get(
         str,
         typer.Option("--obsidian-folder", help="Override Obsidian vault subfolder for this run"),
     ] = "",
+    interactive: Annotated[
+        bool,
+        typer.Option(
+            "--interactive",
+            "-i",
+            help="Retry failed papers in a visible browser where you can log in or solve checks",
+        ),
+    ] = False,
 ):
     """Download a paper by DOI, or bulk-download all DOIs from a .bib/.csv file."""
     cfg = cfg_mod.load()
@@ -622,6 +630,7 @@ def get(
             zotero_local=zotero_local,
             obsidian=obsidian,
             obsidian_folder=obsidian_folder,
+            interactive=interactive,
         )
         return
 
@@ -641,10 +650,16 @@ def get(
         cfg.get("unpaywall", {}).get("email", ""),
         cfg.get("filename_pattern", "{year}_{source}_{author}_{title}"),
     )
+    if not path and interactive:
+        path = _interactive_retry([paper], cfg, cache).get(paper.uid)
     if path:
         rprint(f"[green]Saved:[/green] {path}")
     else:
         rprint("[red]Could not find a downloadable PDF for this DOI.[/red]")
+        if not interactive:
+            rprint(
+                "[dim]Have access? Retry with --interactive to download it in a browser window.[/dim]"
+            )
 
     if zotero:
         pdf_map = {paper.uid: path} if path else {}
@@ -1553,6 +1568,39 @@ def _emit_json(
     print(_json.dumps(result, indent=2, default=str))
 
 
+def _interactive_retry(papers: list, cfg: dict, cache: Cache) -> dict[str, str]:
+    """Retry *papers* in a visible browser; return uid -> saved path."""
+    from mosaic.auth import interactive_download
+    from mosaic.errors import DependencyError
+
+    pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
+    dest_dir = Path(cfg["download_dir"])
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    by_key = {(p.doi or p.uid): p for p in papers}
+    items = [
+        (key, p.url or f"https://doi.org/{p.doi}", str(dest_dir / p.safe_filename(pattern)))
+        for key, p in by_key.items()
+    ]
+
+    def report(key: str, path: str | None) -> None:
+        if path:
+            cache.set_download(by_key[key].uid, path, "ok")
+            rprint(f"  [green]✓[/green] {Path(path).name}")
+        else:
+            rprint("  [dim]– skipped[/dim]")
+
+    rprint(
+        f"\n[bold]Interactive retry of {len(items)} paper(s)[/bold] — a browser window will open, "
+        "loaded with your saved sessions."
+    )
+    try:
+        saved = asyncio.run(interactive_download(items, on_result=report))
+    except (DependencyError, RuntimeError) as e:
+        rprint(f"[red]{e}[/red]")
+        return {}
+    return {by_key[k].uid: v for k, v in saved.items()}
+
+
 def _bulk_download(
     from_file: Path,
     cfg: dict,
@@ -1563,6 +1611,7 @@ def _bulk_download(
     zotero_local: bool = False,
     obsidian: bool = False,
     obsidian_folder: str = "",
+    interactive: bool = False,
 ) -> None:
     from mosaic.bulk import read_dois
     from mosaic.cite import paper_for_download
@@ -1589,6 +1638,7 @@ def _bulk_download(
     ok = fail = skip = 0
     papers_list: list = []
     pdf_map: dict[str, str] = {}
+    failed: list = []
 
     with Progress(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False
@@ -1605,10 +1655,25 @@ def _bulk_download(
                 rprint(f"  [green]✓[/green] {Path(path).name}")
             elif oa_only:
                 skip += 1
+                failed.append(paper)
                 rprint(f"  [dim]–[/dim] {doi} (no OA copy)")
             else:
                 fail += 1
+                failed.append(paper)
                 rprint(f"  [red]✗[/red] {doi}")
+
+    if interactive and failed:
+        rescued = _interactive_retry(failed, cfg, cache)
+        pdf_map.update(rescued)
+        ok += len(rescued)
+        if oa_only:
+            skip -= len(rescued)
+        else:
+            fail -= len(rescued)
+    elif failed and not oa_only:
+        rprint(
+            "\n[dim]Have access to these? Retry with --interactive to download them in a browser window.[/dim]"
+        )
 
     parts = [f"[bold]{ok}[/bold] downloaded"]
     if fail:
@@ -2541,12 +2606,22 @@ def auth_status() -> None:
     table.add_column("Name", style="bold")
     table.add_column("Domain")
     table.add_column("Saved")
-    table.add_column("Valid")
+    table.add_column("Login")
     table.add_column("Path", style="dim")
+    cells = {
+        "fresh": "[green]✓ saved < 1 day ago[/green]",
+        "stale": "[dark_orange]? probably logged out[/dark_orange]",
+        "missing": "[red]✗ missing[/red]",
+    }
     for s in sessions:
-        valid_cell = "[green]✓[/green]" if s["valid"] else "[red]✗ expired[/red]"
-        table.add_row(s["name"], s["domain"], s["saved"], valid_cell, s["path"])
+        table.add_row(s["name"], s["domain"], s["saved"], cells[s["health"]], s["path"])
     console.print(table)
+    if any(s["health"] == "stale" for s in sessions):
+        rprint(
+            "[dim]Publisher logins are session cookies that expire within hours or days. "
+            "Refresh with [bold]mosaic auth login <name> --url <url>[/bold], or run "
+            "[bold]mosaic get --interactive[/bold], which saves a new login back.[/dim]"
+        )
 
 
 # ── mosaic cache subcommands ──────────────────────────────────────────────────

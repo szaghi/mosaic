@@ -7,6 +7,7 @@ import datetime
 import json
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -87,6 +88,26 @@ def session_is_valid(name: str) -> bool:
         return True  # Assume valid if file can't be parsed
 
 
+_STALE_AFTER_S = 24 * 3600
+
+
+def session_health(name: str) -> str:
+    """Best-effort login state of a saved session, for display.
+
+    Publisher logins (Elsevier ``sd_session_id``, Springer ``idp_session``,
+    Shibboleth ``_shibsession_*``) are session-only cookies that the server
+    drops within hours or days, while the same file carries year-long
+    analytics cookies. Cookie expiry therefore proves nothing, and only the
+    save time is informative: ``"fresh"`` (saved within a day), ``"stale"``
+    (older, probably logged out) or ``"missing"``. Only opening the
+    publisher site proves the login.
+    """
+    path = session_path(name)
+    if not path.exists():
+        return "missing"
+    return "fresh" if time.time() - path.stat().st_mtime < _STALE_AFTER_S else "stale"
+
+
 # ── session listing / deletion ────────────────────────────────────────────────
 
 
@@ -106,6 +127,7 @@ def list_sessions() -> list[dict]:
                 "saved": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
                 "domain": meta.get("domain", "—"),
                 "valid": session_is_valid(f.stem),
+                "health": session_health(f.stem),
                 "path": str(f),
             }
         )
@@ -288,6 +310,170 @@ async def _navigate_pdf(page, pdf_url: str, dest: str, timeout_ms: int = 45_000)
     except Exception:
         log.debug("No PDF download from navigating to %s", pdf_url, exc_info=True)
         return False
+
+
+# ── interactive (headed) download ─────────────────────────────────────────────
+
+
+def _human_seconds(seconds: float) -> str:
+    return f"{seconds / 60:g} min" if seconds >= 120 else f"{seconds:g} s"
+
+
+def _merged_storage_state() -> tuple[dict, list[str]]:
+    """Merge all saved sessions into one storage state (cookies are domain-scoped)."""
+    cookies: dict[tuple, dict] = {}
+    origins: dict[str, dict] = {}
+    names: list[str] = []
+    for sess in list_sessions():
+        try:
+            data = json.loads(session_path(sess["name"]).read_text())
+        except Exception:
+            log.debug("Skipping unreadable session %s", sess["name"], exc_info=True)
+            continue
+        names.append(sess["name"])
+        for c in data.get("cookies", []):
+            cookies[(c.get("name"), c.get("domain"), c.get("path", "/"))] = c
+        for o in data.get("origins", []):
+            origins[o.get("origin")] = o
+    return {"cookies": list(cookies.values()), "origins": list(origins.values())}, names
+
+
+async def interactive_download(
+    items: list[tuple[str, str, str]],
+    *,
+    auto_wait_s: float = 20,
+    user_wait_s: float = 300,
+    on_result: Callable[[str, str | None], None] | None = None,
+) -> dict[str, str]:
+    """Download papers in a visible browser, with the user's help when needed.
+
+    For publishers that refuse headless browsers (IOP) or whose saved login
+    has lapsed. One window, loaded with every saved session, visits each
+    paper. MOSAIC first follows the PDF link itself; if no PDF arrives, the
+    user logs in, solves the check, or clicks Download in the window, and
+    the PDF is captured either as a download or as a PDF response shown in
+    the browser's viewer. Pressing Enter in the terminal skips a paper.
+    Cookies from the window, including a fresh login, are saved back to the
+    sessions afterwards so later headless runs can use them.
+
+    Parameters
+    ----------
+    items : list of (key, landing_url, dest)
+        *key* identifies the paper in the result; *dest* is the target path.
+    on_result : callable, optional
+        Called as ``on_result(key, path_or_None)`` after each paper.
+
+    Returns
+    -------
+    dict
+        *key* -> saved path, for the papers that were downloaded.
+    """
+    import sys
+
+    _require_playwright()
+    from playwright.async_api import async_playwright
+    from rich import print as rprint
+
+    state, session_names = _merged_storage_state()
+    saved: dict[str, str] = {}
+    pdfs: asyncio.Queue[bytes] = asyncio.Queue()
+
+    async def on_response(response) -> None:
+        if "pdf" not in response.headers.get("content-type", "").lower():
+            return
+        try:
+            body = await response.body()
+        except Exception:
+            return  # e.g. a redirect or a streamed download: handled by on_download
+        if has_pdf_header(body):
+            pdfs.put_nowait(body)
+
+    async def on_download(download) -> None:
+        try:
+            tmp = await download.path()
+        except Exception:
+            return
+        if tmp:
+            body = Path(tmp).read_bytes()
+            if has_pdf_header(body):
+                pdfs.put_nowait(body)
+
+    def watch(page) -> None:
+        page.on("response", on_response)
+        page.on("download", on_download)
+
+    async def wait_for_pdf(timeout: float, allow_skip: bool) -> bytes | None:
+        loop = asyncio.get_running_loop()
+        skip = loop.create_future()
+        if allow_skip and sys.stdin.isatty():
+
+            def _on_stdin() -> None:
+                sys.stdin.readline()
+                if not skip.done():
+                    skip.set_result(None)
+
+            loop.add_reader(sys.stdin, _on_stdin)
+        getter = asyncio.ensure_future(pdfs.get())
+        try:
+            done, _ = await asyncio.wait(
+                {getter, skip}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+            )
+            return getter.result() if getter in done else None
+        finally:
+            getter.cancel()
+            if allow_skip and sys.stdin.isatty():
+                loop.remove_reader(sys.stdin)
+
+    async with async_playwright() as p:
+        browser = await _launch_browser(p, headless=False)
+        context = await browser.new_context(storage_state=state, accept_downloads=True)
+        context.on("page", watch)
+        try:
+            for n, (key, landing_url, dest) in enumerate(items, 1):
+                while not pdfs.empty():  # drop anything left over from the previous paper
+                    pdfs.get_nowait()
+                rprint(f"\n[bold]\\[{n}/{len(items)}][/bold] {key}")
+                page = await context.new_page()
+                try:
+                    await page.goto(landing_url, wait_until="domcontentloaded", timeout=45_000)
+                except Exception:
+                    log.debug("Landing page did not finish loading: %s", landing_url, exc_info=True)
+                # Some landing URLs serve the PDF directly.
+                body = await wait_for_pdf(min(2.0, auto_wait_s), allow_skip=False)
+                if body is None:
+                    pdf_url = await _find_pdf_url(page)
+                    if pdf_url:
+                        try:
+                            await page.goto(pdf_url, timeout=45_000)
+                        except Exception:
+                            pass  # aborted because it became a download
+                        body = await wait_for_pdf(auto_wait_s, allow_skip=False)
+                if body is None:
+                    rprint(
+                        "  [yellow]Your turn:[/yellow] in the browser window, log in or solve the "
+                        "check if asked, then open the PDF or click its Download link.\n"
+                        f"  [dim]Waiting up to {_human_seconds(user_wait_s)}; press Enter here to skip.[/dim]"
+                    )
+                    body = await wait_for_pdf(user_wait_s, allow_skip=True)
+                path = dest if body is not None and _save_pdf(body, dest) else None
+                if path:
+                    saved[key] = path
+                if on_result:
+                    on_result(key, path)
+                await page.close()
+        finally:
+            if session_names and saved:
+                # A PDF the user is entitled to arrived, so the window holds a
+                # working login: write it back for later headless runs (and
+                # `auth status`). Without a download nothing is written, which
+                # would make a dead session look freshly saved.
+                fresh = await context.storage_state()
+                for name in session_names:
+                    out = session_path(name)
+                    out.write_text(json.dumps(fresh))
+                    out.chmod(0o600)
+            await browser.close()
+    return saved
 
 
 async def _find_pdf_url(page) -> str | None:

@@ -59,6 +59,27 @@ tries three strategies in order:
 No extra flags are needed — the browser step runs silently whenever saved
 sessions are found and the other methods come up empty.
 
+### Interactive download (`--interactive`)
+
+The automatic browser step is headless and unattended, so it fails when:
+
+- your saved login has lapsed (see `auth status` above), or
+- the publisher refuses headless browsers or shows a CAPTCHA (e.g. IOP), or
+- a single sign-on page needs you to log in again.
+
+`mosaic get --interactive` (`-i`) retries the papers that failed in **one visible browser window**, loaded with all your saved sessions:
+
+```bash
+mosaic get --from refs.bib --interactive
+mosaic get 10.1088/1361-6595/ab46c5 -i
+```
+
+For each paper MOSAIC opens the article page and follows the PDF link itself. A visible browser gets through some walls that block headless ones; in testing, an MDPI paper that failed every scripted method downloaded this way without help. If no PDF arrives within about 20 s, the terminal says **Your turn**: log in, solve the check, or click the PDF/Download link in the window. MOSAIC captures the PDF whether the browser downloads it or shows it in its viewer, checks that it really is a PDF, and moves on. Press **Enter** in the terminal to skip a paper. Each paper waits up to 5 minutes.
+
+If at least one paper downloads, the window's cookies, including a login you just completed, are written back to your saved sessions, so later headless runs can use them.
+
+Requires the `[browser]` extra and a display. On WSL2 this works through WSLg, as `mosaic auth login` does.
+
 ### Domain matching
 
 Each session is associated with the domain of the `--url` you passed at
@@ -171,14 +192,17 @@ mosaic auth status
 ```
 
 ```
- Name       Domain               Saved             Valid  Path
- elsevier   www.sciencedirect…   2026-03-09 11:21  ✓      ~/.config/mosaic/sessions/elsevier.json
- springer   link.springer.com    2026-03-09 10:14  ✓      ~/.config/mosaic/sessions/springer.json
- myuni      library.myuni.edu    2026-02-01 09:15  ✗ exp  ~/.config/mosaic/sessions/myuni.json
+ Name       Domain               Saved             Login                   Path
+ elsevier   www.sciencedirect…   2026-03-23 19:41  ? probably logged out   ~/.config/mosaic/sessions/elsevier.json
+ springer   link.springer.com    2026-10-14 16:40  ✓ saved < 1 day ago     ~/.config/mosaic/sessions/springer.json
 ```
 
 - **Domain** — which URLs the session will be tried for during automatic download.
-- **Valid** — MOSAIC inspects cookie expiry timestamps in the saved file. ✓ means at least one timed cookie is still active; ✗ expired means all timed cookies have passed their expiry date and the session will be excluded from active sources until refreshed.
+- **Login** — based on when the session was saved, because that is the only reliable signal in the file. Publisher logins (`sd_session_id` on ScienceDirect, `idp_session` on Springer, Shibboleth `_shibsession_*` for institutional SSO) are *session cookies* that the publisher ends within hours or days. The same file also holds analytics and consent cookies that last a year, so their expiry dates say nothing about being logged in. A session older than a day is shown as **probably logged out**. Only opening the publisher's site proves it.
+
+::: tip Refreshing a login
+Run `mosaic auth login <name> --url <url>` again, or download with `mosaic get --interactive`. When an interactive download succeeds, the fresh login from that window is saved back to your sessions.
+:::
 
 ![Auth status demo](/gifs/06_auth_status.gif)
 
