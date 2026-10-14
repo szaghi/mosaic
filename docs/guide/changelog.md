@@ -2,6 +2,15 @@
 title: Changelog
 ---
 
+## [1.6.0] — 2026-10-14
+### Added
+- Watch searches, rate-limit retry, Cochrane source; fix PDF validation and NotebookLM jobs
+
+
+### Fixed
+- **bot**: Resolve ruff errors and use PyPI JSON API URL
+
+
 ## [1.5.5] — 2026-04-13
 ### Added
 - **rag**: Add full-text PDF chunking with multi-vector indexing
@@ -169,10 +178,6 @@ title: Changelog
 
 ## [1.3.0] — 2026-03-11
 ### Added
-- **ui**: Add web interface with Waitress server, parallel search, and HTMX dashboard
-
-- **build**: Add PyInstaller packaging for standalone macOS/Linux/Windows executables
-
 - **build**: Add PyInstaller packaging for standalone macOS/Linux/Windows executables
 
 - **desktop**: Replace browser launch with native pywebview window
@@ -188,6 +193,13 @@ title: Changelog
 - **ci**: Install UI deps in test job so test_ui.py can import Flask
 
 - **ci**: Install UI extra so test_ui.py can import Flask
+
+
+## [1.2.18-rc1] — 2026-03-10
+### Added
+- **ui**: Add web interface with Waitress server, parallel search, and HTMX dashboard
+
+- **build**: Add PyInstaller packaging for standalone macOS/Linux/Windows executables
 
 
 ## [1.2.18] — 2026-03-10
