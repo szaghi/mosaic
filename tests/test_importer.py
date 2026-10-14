@@ -24,6 +24,28 @@ class TestDetectDoi:
         )
         assert detect_doi(f) == ("10.1016/j.paerosci.2006.01.001", "metadata")
 
+    def test_metadata_near_end_of_large_file_is_found(self, tmp_path):
+        """Elsevier writes XMP near the end (3.08 MB into a 3.35 MB file)."""
+        from mosaic import importer
+
+        filler = b"x" * (importer._SCAN_BYTES + 1_000_000)
+        f = _pdf(
+            tmp_path / "Title-words_2018_Acta-Astronau.pdf",
+            filler + b"<prism:doi>10.1016/j.actaastro.2017.12.041</prism:doi>",
+        )
+        assert detect_doi(f) == ("10.1016/j.actaastro.2017.12.041", "metadata")
+
+    def test_doi_straddling_a_chunk_boundary_is_found(self, tmp_path, monkeypatch):
+        from mosaic import importer
+
+        monkeypatch.setattr(importer, "_CHUNK", 64)
+        field = b"<prism:doi>10.1016/j.actaastro.2017.12.041</prism:doi>"
+        f = tmp_path / "x.pdf"
+        f.write_bytes(
+            b"%PDF-1.5\n" + b"y" * (64 - 9 - 10) + field
+        )  # field starts 10 bytes before the boundary
+        assert detect_doi(f) == ("10.1016/j.actaastro.2017.12.041", "metadata")
+
     def test_info_dict_doi_with_closing_paren(self, tmp_path):
         """Elsevier writes /doi (10.1016/...) in the Info dictionary."""
         f = _pdf(tmp_path / "x.pdf", b"/doi (10.1016/j.paerosci.2006.01.001)")
