@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import httpx
@@ -102,15 +103,36 @@ def download(
     return None
 
 
-def _resolve_redirect(url: str) -> str:
-    """Follow HTTP redirects and return the final URL (e.g. doi.org → publisher)."""
+# Elsevier DOIs resolve over HTTP only as far as linkinghub, whose page jumps to
+# ScienceDirect via a delayed <meta refresh>. The PII in its path determines the
+# ScienceDirect article URL, so map it directly instead of following the page.
+_LINKINGHUB_PII = re.compile(r"^https?://linkinghub\.elsevier\.com/retrieve/pii/([A-Z0-9]+)", re.I)
+
+
+def _publisher_landing(url: str) -> str:
+    """Map known interstitial URLs to the publisher's article page."""
+    m = _LINKINGHUB_PII.match(url)
+    if m:
+        return f"https://www.sciencedirect.com/science/article/pii/{m.group(1).upper()}"
+    return url
+
+
+def resolve_landing(url: str) -> str:
+    """Follow HTTP redirects (e.g. doi.org -> publisher) and known interstitials.
+
+    Returns the article page a browser would end up on, so domain matching
+    against saved sessions works. Falls back to *url* on network errors.
+    """
     try:
         with httpx.Client(follow_redirects=True, timeout=10) as client:
-            r = client.head(url)
-            return str(r.url)
+            url = str(client.head(url).url)
     except Exception:
         log.debug("Redirect resolution failed for %s", url, exc_info=True)
-        return url
+    return _publisher_landing(url)
+
+
+# Backwards-compatible name used by callers and tests.
+_resolve_redirect = resolve_landing
 
 
 def _fetch(url: str, dest: str) -> None:

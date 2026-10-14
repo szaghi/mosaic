@@ -264,3 +264,42 @@ class TestUnpaywallFallthrough:
         ):
             download(p, str(tmp_path), tmp_cache, unpaywall_email="me@uni.edu")
         assert fetched == ["https://pub.org/p.pdf"]
+
+
+class TestResolveLanding:
+    """Elsevier DOIs stop at linkinghub over HTTP; its page reaches ScienceDirect
+    only through a delayed <meta refresh>, so map the PII directly."""
+
+    def test_linkinghub_mapped_to_sciencedirect(self):
+        from mosaic.downloader import _publisher_landing
+
+        url = "https://linkinghub.elsevier.com/retrieve/pii/S0094576517312663"
+        assert _publisher_landing(url) == (
+            "https://www.sciencedirect.com/science/article/pii/S0094576517312663"
+        )
+
+    def test_other_urls_unchanged(self):
+        from mosaic.downloader import _publisher_landing
+
+        url = "https://link.springer.com/10.1007/s44205-024-00079-w"
+        assert _publisher_landing(url) == url
+
+    def test_doi_resolution_ends_on_sciencedirect(self):
+        from unittest.mock import MagicMock
+
+        from mosaic.downloader import resolve_landing
+
+        resp = MagicMock()
+        resp.url = "https://linkinghub.elsevier.com/retrieve/pii/S0094576517312663"
+        client = MagicMock()
+        client.__enter__.return_value.head.return_value = resp
+        with patch("mosaic.downloader.httpx.Client", return_value=client):
+            got = resolve_landing("https://doi.org/10.1016/j.actaastro.2018.07.007")
+        assert got == "https://www.sciencedirect.com/science/article/pii/S0094576517312663"
+
+    def test_network_failure_still_maps_known_interstitial(self):
+        from mosaic.downloader import resolve_landing
+
+        with patch("mosaic.downloader.httpx.Client", side_effect=OSError("offline")):
+            got = resolve_landing("https://linkinghub.elsevier.com/retrieve/pii/S0094576517312663")
+        assert got.startswith("https://www.sciencedirect.com/science/article/pii/")

@@ -278,6 +278,7 @@ class TestGetInteractiveCli:
             ),
             patch("mosaic.cli.dl_paper", return_value=None),
             patch("mosaic.auth.interactive_download", side_effect=fake_interactive) as interactive,
+            patch("mosaic.downloader.resolve_landing", side_effect=lambda u: u),
         ):
             result = CliRunner().invoke(app, ["get", "--from", str(csv), *args])
         return result, interactive

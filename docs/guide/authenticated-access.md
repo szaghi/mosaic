@@ -80,6 +80,35 @@ If at least one paper downloads, the window's cookies, including a login you jus
 
 Requires the `[browser]` extra and a display. On WSL2 this works through WSLg, as `mosaic auth login` does.
 
+### Hand-off to your own browser (`--handoff`)
+
+Some publishers block **every** automated browser, visible or not. **ScienceDirect (Elsevier)** answers any browser driven by Playwright with *HTTP 403, "There was a problem providing the content you requested"*, whether or not you are logged in, because such browsers announce themselves (`navigator.webdriver`). No saved session or `--interactive` run can get past that, and MOSAIC does not try to disguise its automation.
+
+`--handoff` uses **your normal browser** instead, with the logins you already have there:
+
+```bash
+mosaic get --from refs.bib --handoff
+mosaic get 10.1016/j.actaastro.2018.07.007 --handoff
+```
+
+For each paper that failed automatically, MOSAIC opens the article in your default browser (on WSL, your **Windows** browser) and watches your Downloads folder. Click the PDF/Download button as you normally would. As soon as the download finishes, MOSAIC checks that it is a PDF, files it in the download directory under the usual name, and opens the next paper:
+
+```
+Hand-off of 3 paper(s) to your browser — watching /mnt/c/Users/me/Downloads for each PDF you download (one paper at a time).
+
+[1/3] Low-temperature plasma simulation of a Hall thruster (2018)
+  https://www.sciencedirect.com/science/article/pii/S0094576517312663
+  Opened in your browser: download the PDF there. Enter here skips.
+  ✓ 1-s2.0-S0094576517312663-main.pdf → 2018_Crossref_Acta_Astronautica_….pdf
+```
+
+- **One paper at a time.** Only a PDF that appears *after* a paper is opened is filed for it, so files are never mixed up. Press **Enter** to skip a paper; each one waits up to 5 minutes.
+- **Downloads folder.** Detected automatically: on WSL, MOSAIC asks Windows for its Downloads folder (even if it has been moved, e.g. into OneDrive); on Linux it uses `xdg-user-dir`. Override it with `--watch-dir PATH`.
+- **The file is moved**, not copied, out of Downloads. Unfinished downloads (`.crdownload`, `.part`) and non-PDF files are ignored. If Windows keeps the original locked (e.g. while antivirus scans it), your filed copy is kept and the original is left in Downloads.
+- Nothing is automated in your browser: it is an ordinary download that you make yourself.
+
+Combine both modes with `-i --handoff`: the automated window handles what it can, and your own browser gets the rest.
+
 ### Domain matching
 
 Each session is associated with the domain of the `--url` you passed at

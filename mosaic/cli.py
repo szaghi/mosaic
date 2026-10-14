@@ -608,6 +608,20 @@ def get(
             help="Retry failed papers in a visible browser where you can log in or solve checks",
         ),
     ] = False,
+    handoff: Annotated[
+        bool,
+        typer.Option(
+            "--handoff",
+            help="Open failed papers in your own browser and file the PDFs you download "
+            "(works where publishers block automated browsers, e.g. Elsevier)",
+        ),
+    ] = False,
+    watch_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--watch-dir", help="Browser download folder for --handoff (default: auto-detect)"
+        ),
+    ] = None,
 ):
     """Download a paper by DOI, or bulk-download all DOIs from a .bib/.csv file."""
     cfg = cfg_mod.load()
@@ -631,6 +645,8 @@ def get(
             obsidian=obsidian,
             obsidian_folder=obsidian_folder,
             interactive=interactive,
+            handoff=handoff,
+            watch_dir=watch_dir,
         )
         return
 
@@ -652,14 +668,14 @@ def get(
     )
     if not path and interactive:
         path = _interactive_retry([paper], cfg, cache).get(paper.uid)
+    if not path and handoff:
+        path = _handoff_retry([paper], cfg, cache, watch_dir).get(paper.uid)
     if path:
         rprint(f"[green]Saved:[/green] {path}")
     else:
         rprint("[red]Could not find a downloadable PDF for this DOI.[/red]")
-        if not interactive:
-            rprint(
-                "[dim]Have access? Retry with --interactive to download it in a browser window.[/dim]"
-            )
+        if not (interactive or handoff):
+            rprint(f"[dim]{_RETRY_HINT}[/dim]")
 
     if zotero:
         pdf_map = {paper.uid: path} if path else {}
@@ -1568,6 +1584,57 @@ def _emit_json(
     print(_json.dumps(result, indent=2, default=str))
 
 
+_RETRY_HINT = (
+    "Have access? Retry with --handoff (your own browser; works for Elsevier) "
+    "or --interactive (a browser window mosaic drives)."
+)
+
+
+def _handoff_retry(papers: list, cfg: dict, cache: Cache, watch_dir: Path | None) -> dict[str, str]:
+    """Hand *papers* to the user's own browser; return uid -> saved path."""
+    from mosaic.downloader import resolve_landing
+    from mosaic.handoff import default_downloads_dir, handoff_download
+
+    folder = watch_dir or default_downloads_dir()
+    if folder is None or not Path(folder).is_dir():
+        rprint(
+            "[red]Could not find your browser's download folder.[/red] "
+            "Pass it with [bold]--watch-dir PATH[/bold]."
+        )
+        return {}
+
+    pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
+    dest_dir = Path(cfg["download_dir"])
+    by_key = {(p.doi or p.uid): p for p in papers}
+    items = [
+        (
+            key,
+            f"{p.title[:90]} ({p.year or 'n.d.'})" if p.source != "manual" else key,
+            resolve_landing(p.url or f"https://doi.org/{p.doi}"),
+            str(dest_dir / p.safe_filename(pattern)),
+        )
+        for key, p in by_key.items()
+    ]
+
+    def announce(n: int, total: int, label: str, url: str) -> None:
+        rprint(f"\n[bold]\\[{n}/{total}][/bold] {label}\n  [dim]{url}[/dim]")
+        rprint("  Opened in your browser: download the PDF there. [dim]Enter here skips.[/dim]")
+
+    def report(key: str, path: str | None, original: str | None) -> None:
+        if path:
+            cache.set_download(by_key[key].uid, path, "ok")
+            rprint(f"  [green]✓[/green] {original} → {Path(path).name}")
+        else:
+            rprint("  [dim]– skipped[/dim]")
+
+    rprint(
+        f"\n[bold]Hand-off of {len(items)} paper(s) to your browser[/bold] — "
+        f"watching [cyan]{folder}[/cyan] for each PDF you download (one paper at a time)."
+    )
+    saved = handoff_download(items, Path(folder), on_result=report, announce=announce)
+    return {by_key[k].uid: v for k, v in saved.items()}
+
+
 def _interactive_retry(papers: list, cfg: dict, cache: Cache) -> dict[str, str]:
     """Retry *papers* in a visible browser; return uid -> saved path."""
     from mosaic.auth import interactive_download
@@ -1577,8 +1644,16 @@ def _interactive_retry(papers: list, cfg: dict, cache: Cache) -> dict[str, str]:
     dest_dir = Path(cfg["download_dir"])
     dest_dir.mkdir(parents=True, exist_ok=True)
     by_key = {(p.doi or p.uid): p for p in papers}
+    from mosaic.downloader import resolve_landing
+
+    # Resolve DOIs to the article page first: Elsevier's linkinghub interstitial
+    # only reaches ScienceDirect through a delayed meta refresh.
     items = [
-        (key, p.url or f"https://doi.org/{p.doi}", str(dest_dir / p.safe_filename(pattern)))
+        (
+            key,
+            resolve_landing(p.url or f"https://doi.org/{p.doi}"),
+            str(dest_dir / p.safe_filename(pattern)),
+        )
         for key, p in by_key.items()
     ]
 
@@ -1612,6 +1687,8 @@ def _bulk_download(
     obsidian: bool = False,
     obsidian_folder: str = "",
     interactive: bool = False,
+    handoff: bool = False,
+    watch_dir: Path | None = None,
 ) -> None:
     from mosaic.bulk import read_dois
     from mosaic.cite import paper_for_download
@@ -1662,18 +1739,20 @@ def _bulk_download(
                 failed.append(paper)
                 rprint(f"  [red]✗[/red] {doi}")
 
+    rescued: dict[str, str] = {}
     if interactive and failed:
-        rescued = _interactive_retry(failed, cfg, cache)
-        pdf_map.update(rescued)
-        ok += len(rescued)
-        if oa_only:
-            skip -= len(rescued)
-        else:
-            fail -= len(rescued)
-    elif failed and not oa_only:
-        rprint(
-            "\n[dim]Have access to these? Retry with --interactive to download them in a browser window.[/dim]"
-        )
+        rescued.update(_interactive_retry(failed, cfg, cache))
+    remaining = [p for p in failed if p.uid not in rescued]
+    if handoff and remaining:
+        rescued.update(_handoff_retry(remaining, cfg, cache, watch_dir))
+    pdf_map.update(rescued)
+    ok += len(rescued)
+    if oa_only:
+        skip -= len(rescued)
+    else:
+        fail -= len(rescued)
+    if failed and not (interactive or handoff) and not oa_only:
+        rprint(f"\n[dim]{_RETRY_HINT}[/dim]")
 
     parts = [f"[bold]{ok}[/bold] downloaded"]
     if fail:

@@ -331,6 +331,8 @@ mosaic get [OPTIONS] [DOI]
 | `--zotero-collection` | str | | Zotero collection name (created if missing) |
 | `--zotero-local` | flag | off | Force local API even when a web API key is configured |
 | `--interactive` / `-i` | flag | off | Retry failed papers in a visible browser where you can log in or solve checks; see [Interactive download](./authenticated-access#interactive-download-interactive) |
+| `--handoff` | flag | off | Open failed papers in **your own** browser and file the PDFs you download from the Downloads folder; works where publishers block automated browsers (e.g. Elsevier). See [Hand-off](./authenticated-access#hand-off-to-your-own-browser-handoff) |
+| `--watch-dir` | path | auto | Downloads folder watched by `--handoff` |
 
 Provide either a `DOI` positional argument (single download) or `--from <file>` (bulk download) — not both.
 
