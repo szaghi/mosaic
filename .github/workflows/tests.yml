@@ -51,6 +51,12 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
+    # Pages accepts one deployment at a time: queue back-to-back pushes
+    # (e.g. a fix followed by its release commit) instead of failing.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+
     permissions:
       contents: read
       pages: write
