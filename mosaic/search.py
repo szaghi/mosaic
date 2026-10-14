@@ -57,7 +57,10 @@ def search_all(
                     if progress_callback:
                         progress_callback(name, "done")
                 except Exception as e:
-                    log.warning("Source %s failed: %s", source.name, e)
+                    # the caller reports collected errors itself: log them only once
+                    (log.debug if errors is not None else log.warning)(
+                        "Source %s failed: %s", source.name, e
+                    )
                     if errors is not None:
                         errors.append(f"{source.name}: {describe_http_error(e)}")
                     if progress_callback:
@@ -67,7 +70,9 @@ def search_all(
             try:
                 results = source.search(query, max_results=max_per_source, filters=filters)
             except Exception as e:
-                log.warning("Source %s failed: %s", source.name, e)
+                (log.debug if errors is not None else log.warning)(
+                    "Source %s failed: %s", source.name, e
+                )
                 if errors is not None:
                     errors.append(f"{source.name}: {describe_http_error(e)}")
                 if progress_callback:

@@ -272,3 +272,26 @@ class TestFormatJsonOutput:
         data = json.loads(format_json_output(papers, rows, ["method"]))
         assert data[0]["#"] == 1
         assert data[1]["#"] == 2
+
+
+class TestCompareFromFile:
+    def test_from_bib_selects_cached_papers_by_doi(self, tmp_path):
+        from typer.testing import CliRunner
+
+        from mosaic.cli import app
+        from mosaic.db import Cache
+
+        db = tmp_path / "c.db"
+        cache = Cache(str(db))
+        cache.save(Paper(title="Listed paper", doi="10.1/listed", source="arXiv", year=2021))
+        cache.save(Paper(title="Other paper", doi="10.1/other", source="arXiv", year=2022))
+        bib = tmp_path / "refs.bib"
+        bib.write_text("@article{a, title={Listed}, doi={10.1/LISTED}}\n")
+        cfg = {"db_path": str(db), "llm": {}}
+        with patch("mosaic.cli.cfg_mod.load", return_value=cfg):
+            result = CliRunner().invoke(
+                app, ["compare", "--from", str(bib)], env={"COLUMNS": "200"}
+            )
+        assert result.exit_code == 0, result.output
+        assert "Listed paper" in result.output
+        assert "Other paper" not in result.output

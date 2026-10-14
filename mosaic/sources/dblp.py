@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mosaic.errors import SourceError
 from mosaic.models import Paper, SearchFilters
 from mosaic.sources.base import BaseSource, build_field_query, http_client
 
@@ -74,7 +75,14 @@ class DBLPSource(BaseSource):
         with http_client(timeout=30) as client:
             resp = client.get(_BASE, params=params)
             resp.raise_for_status()
-            hits = resp.json().get("result", {}).get("hits", {})
+            try:
+                data = resp.json()
+            except ValueError:
+                # dblp.org sometimes answers scripts with a "not a bot" check page
+                raise SourceError(
+                    "answered with a web page instead of JSON (a bot check); try again later"
+                ) from None
+            hits = data.get("result", {}).get("hits", {})
             raw_hits = hits.get("hit", [])
         if not raw_hits:
             return []

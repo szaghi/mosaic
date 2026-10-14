@@ -92,7 +92,7 @@ def _llm_score(query: str, papers: list[Paper], cfg: dict) -> list[Paper]:
 def _parse_float_list(content: str, expected: int) -> list[float]:
     """Extract a list of *expected* floats from an LLM JSON response."""
     try:
-        data = json.loads(content)
+        data = llm.loads_json(content)
     except json.JSONDecodeError as exc:
         raise ValueError(f"LLM returned non-JSON: {content[:200]!r}") from exc
 

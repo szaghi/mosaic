@@ -86,6 +86,11 @@ class TestMatch:
         f = SearchFilters(authors=["Jones", "Smith"])
         assert f.match(self._paper(authors=["Alice Smith"]))
 
+    def test_author_ignores_accents_and_ligatures(self):
+        assert SearchFilters(authors=["Boeuf"]).match(self._paper(authors=["Jean-Pierre Bœuf"]))
+        assert SearchFilters(authors=["garrigues"]).match(self._paper(authors=["L. Garrigués"]))
+        assert SearchFilters(authors=["Müller"]).match(self._paper(authors=["Hans Muller"]))
+
     def test_journal_substring_match(self):
         f = SearchFilters(journal="nature")
         assert f.match(self._paper(journal="Nature Communications"))

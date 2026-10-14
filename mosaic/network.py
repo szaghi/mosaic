@@ -152,16 +152,18 @@ def louvain_clusters(nodes: set[str], adj: dict[str, list[str]]) -> list[set[str
         import networkx as nx
         from networkx.algorithms.community import louvain_communities
 
+        # Louvain depends on the order nodes and edges are added: sort them, so the same
+        # graph gives the same clusters in every process (set order varies with hashing).
         g: nx.Graph = nx.Graph()
-        g.add_nodes_from(nodes)
+        g.add_nodes_from(sorted(nodes))
         undir = _undirected(adj, nodes)
-        for node in nodes:
-            for nbr in undir.get(node, set()):
+        for node in sorted(nodes):
+            for nbr in sorted(undir.get(node, set())):
                 g.add_edge(node, nbr)
 
         parts = louvain_communities(g, seed=42)
         result = [c & nodes for c in parts if c & nodes]
-        result.sort(key=len, reverse=True)
+        result.sort(key=lambda c: (-len(c), min(c)))
         return result
     except ImportError:
         _log.debug("networkx not available — falling back to connected_components")

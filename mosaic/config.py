@@ -58,7 +58,13 @@ _DEFAULTS: dict = {
         "wikilinks": True,
     },
     "custom_sources": [],
-    "llm": {"provider": "", "api_key": "", "model": "", "base_url": ""},
+    "llm": {
+        "provider": "",
+        "api_key": "",
+        "model": "",
+        "base_url": "",
+        "timeout": 0,
+    },  # 0: built-in
     "rag": {
         "embedding_provider": "",  # "openai" or leave empty (inherits llm.provider)
         "embedding_model": "",  # e.g. "snowflake-arctic-embed2", "text-embedding-3-small"

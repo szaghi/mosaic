@@ -285,7 +285,7 @@ class TestGetInteractiveCli:
 
     def test_failures_retried_interactively_and_counted(self, tmp_path, tmp_cache):
         r, interactive = self._invoke(tmp_path, tmp_cache, ["--interactive"], rescued={"10.1/b"})
-        assert r.exit_code == 0, r.output
+        assert r.exit_code == 1, r.output  # one paper still failed
         (items,) = interactive.call_args.args
         assert [k for k, _, _ in items] == ["10.1/a", "10.1/b"]
         assert "1 downloaded" in r.output and "1 failed" in r.output

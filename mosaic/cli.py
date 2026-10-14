@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -77,6 +78,13 @@ def main(
 console = Console()
 
 
+def _tilde(path: str | Path) -> str:
+    """*path* with the home directory shown as ``~``: shorter, and the same for every user."""
+    home = str(Path.home())
+    text = str(path)
+    return "~" + text[len(home) :] if text == home or text.startswith(home + "/") else text
+
+
 def warn(msg: str) -> None:
     """Print a warning — only when --verbose is active."""
     if _verbose:
@@ -101,7 +109,7 @@ def search(
         typer.Option(
             "--source",
             "-s",
-            help="Limit to one source (arxiv, ss, sd, sp, springer, doaj, epmc, oa, base, core, ads, ieee, zenodo, crossref, dblp, hal, pubmed, pmc, rxiv, pedro, scopus)",
+            help="Limit to one source (arxiv, ss, sd, sp, springer, doaj, epmc, cochrane, oa, base, core, ads, ieee, zenodo, crossref, dblp, hal, pubmed, pmc, rxiv, pedro, scopus)",
             autocompletion=lambda: list(SRC_MAP.keys()),
         ),
     ] = "",
@@ -246,10 +254,13 @@ def search(
                 rprint(f"[red]{e}[/red]")
                 raise typer.Exit(1) from None
             except ValueError as e:
+                from mosaic.embeddings import EmbeddingError
+
                 rprint(f"[red]{e}[/red]")
-                rprint(
-                    "[dim]Hint: run mosaic config --embedding-model <model> to configure an embedding model.[/dim]"
-                )
+                if not isinstance(e, EmbeddingError):
+                    rprint(
+                        "[dim]Hint: run mosaic config --embedding-model <model> to configure an embedding model.[/dim]"
+                    )
                 raise typer.Exit(1) from None
             if filters:
                 papers = [p for p in papers if filters.match(p)]
@@ -257,7 +268,9 @@ def search(
             # semantic ordering with BM25, so treat it as no sort.
             effective_sort = sort_by if sort_by in ("citations", "year") else ""
             if json_output:
-                _emit_search_json(papers, query, cfg, summarise=summarise)
+                _emit_local_json(
+                    papers, query, cfg, effective_sort, oa_only, pdf_only, output, summarise
+                )
                 return
             _post_process(
                 papers,
@@ -287,7 +300,7 @@ def search(
                 dld = cache.get_downloaded_uids()
                 papers = [p for p in papers if p.uid in dld]
             if json_output:
-                _emit_search_json(papers, query, cfg, summarise=summarise)
+                _emit_local_json(papers, query, cfg, sort_by, oa_only, pdf_only, output, summarise)
                 return
             _post_process(
                 papers,
@@ -317,7 +330,8 @@ def search(
             rprint(f"[red]Unknown source '{source}'. Use: {', '.join(SRC_MAP.keys())}[/red]")
             raise typer.Exit(1)
         name = SRC_MAP[key]
-        sources = [s for s in sources if s.name == name]
+        # a source without its key is built but unavailable: say so instead of "No results"
+        sources = [s for s in sources if s.name == name and s.available()]
         if not sources:
             rprint(
                 f"[dark_orange]Source '{source}' is not active (missing API key or disabled in config).[/dark_orange]"
@@ -363,6 +377,14 @@ def search(
     if not json_output:
         for err in errors:
             warn(f"[dark_orange]Warning:[/dark_orange] {err}")
+    cache.save_search(
+        query=query,
+        filters_json=json.dumps(
+            {"year": year, "author": list(author), "journal": journal, "field": field}
+        ),
+        sources_json=json.dumps([s.name for s in sources]),
+        result_count=len(papers),
+    )
 
     if prefer_cache:
         rich = cache.rich_uids()
@@ -634,7 +656,7 @@ def get(
         raise typer.Exit(1)
 
     if from_file:
-        _bulk_download(
+        failed = _bulk_download(
             from_file,
             cfg,
             cache,
@@ -648,6 +670,8 @@ def get(
             handoff=handoff,
             watch_dir=watch_dir,
         )
+        if failed:  # a script can tell; papers skipped with --oa-only do not count
+            raise typer.Exit(1)
         return
 
     if doi is None:
@@ -658,7 +682,7 @@ def get(
 
     paper = paper_for_download(doi, cache, cfg.get("unpaywall", {}).get("email", ""))
     if paper.source != "manual":
-        rprint(f"[dim]{paper.title[:80]} ({paper.year or 'n.d.'})[/dim]")
+        rprint(f"[dim]{paper.title} ({paper.year or 'n.d.'})[/dim]")
     path = dl_paper(
         paper,
         cfg["download_dir"],
@@ -671,9 +695,11 @@ def get(
     if not path and handoff:
         path = _handoff_retry([paper], cfg, cache, watch_dir).get(paper.uid)
     if path:
-        rprint(f"[green]Saved:[/green] {path}")
+        console.print(f"[green]Saved:[/green] {_tilde(path)}", soft_wrap=True)
     else:
         rprint("[red]Could not find a downloadable PDF for this DOI.[/red]")
+        if _no_email(cfg):
+            rprint(f"[yellow]{_EMAIL_HINT}[/yellow]")
         if not (interactive or handoff):
             rprint(f"[dim]{_RETRY_HINT}[/dim]")
 
@@ -697,6 +723,8 @@ def get(
             index_papers([paper], cfg, cache, progress=False)
         except Exception:
             pass  # auto-index failures are always silent
+    if not path:
+        raise typer.Exit(1)
 
 
 @app.command("import")
@@ -741,10 +769,11 @@ def import_cmd(
             if res.original_removed or res.dest == f
             else " [dim](original left in place: file locked)[/dim]"
         )
-        rprint(
-            f"  [green]✓[/green] {f.name} → {res.dest}"
-            f"\n    [dim]{res.paper.title[:90]} ({res.paper.year or 'n.d.'}) — DOI {res.paper.doi}, "
-            f"found via {res.doi_source}[/dim]{note}"
+        console.print(
+            f"  [green]✓[/green] {f.name}\n    → {_tilde(res.dest)}"
+            f"\n    [dim]{res.paper.title} ({res.paper.year or 'n.d.'}), DOI {res.paper.doi}, "
+            f"found via {res.doi_source}[/dim]{note}",
+            soft_wrap=True,
         )
     if failures:
         raise typer.Exit(1)
@@ -862,17 +891,7 @@ def index(
     if from_file:
         from mosaic.bulk import read_dois
 
-        dois = read_dois(from_file)
-        papers_from_file = []
-        for doi in dois:
-            papers_from_file.extend(cache.search_local(doi))
-        seen: set[str] = set()
-        unique: list = []
-        for p in papers_from_file:
-            if p.uid not in seen:
-                seen.add(p.uid)
-                unique.append(p)
-        papers = unique
+        papers = cache.get_by_dois(read_dois(from_file))
     elif query:
         papers = cache.search_local(query)
     else:
@@ -891,20 +910,29 @@ def index(
             "Falling back to metadata-only indexing.[/yellow]"
         )
 
+    want_citations = enrich_citations or cfg.get("rag", {}).get("citations", {}).get(
+        "enabled", False
+    )
     rprint(f"[cyan]Indexing {len(papers)} papers…[/cyan]")
+    index_failed = False
     try:
-        newly, skipped, full_text = index_papers(papers, cfg, cache, reindex=reindex)
+        newly, skipped, full_text = index_papers(
+            papers, cfg, cache, reindex=reindex, batch_size=batch_size
+        )
         rprint(f"[green]Indexed {newly} new paper(s).[/green] {skipped} already indexed.")
         if full_text:
             rprint(
                 f"  [dim]└─ {full_text} full-text (PDF), {newly - full_text} metadata-only[/dim]"
             )
-    except ValueError as e:
+    except (ValueError, RuntimeError) as e:  # no embedding model, server error, no sqlite-vec
         rprint(f"[red]{e}[/red]")
-        raise typer.Exit(1) from None
+        if not want_citations:
+            raise typer.Exit(1) from None
+        index_failed = True
+        rprint("[dim]Continuing with the citation graph, which needs no embeddings.[/dim]")
 
     # ── Citation enrichment ───────────────────────────────────────────────────
-    if enrich_citations or cfg.get("rag", {}).get("citations", {}).get("enabled", False):
+    if want_citations:
         from mosaic.citations.enrichment import enrich_citations as _enrich
 
         rprint(f"[cyan]Enriching citation graph for {len(papers)} papers…[/cyan]")
@@ -916,6 +944,8 @@ def index(
             )
         except Exception as e:
             rprint(f"[yellow]Citation enrichment warning: {e}[/yellow]")
+    if index_failed:
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -961,11 +991,7 @@ def ask(
     if from_file:
         from mosaic.bulk import read_dois
 
-        dois = read_dois(from_file)
-        papers_from_file = []
-        for doi in dois:
-            papers_from_file.extend(cache.search_local(doi))
-        pre_filter = list({p.uid for p in papers_from_file})
+        pre_filter = [p.uid for p in cache.get_by_dois(read_dois(from_file))]
     elif query:
         filtered = cache.search_local(query)
         pre_filter = [p.uid for p in filtered]
@@ -1069,11 +1095,7 @@ def chat(
     if from_file:
         from mosaic.bulk import read_dois
 
-        dois = read_dois(from_file)
-        papers_from_file = []
-        for doi in dois:
-            papers_from_file.extend(cache.search_local(doi))
-        pre_filter = list({p.uid for p in papers_from_file})
+        pre_filter = [p.uid for p in cache.get_by_dois(read_dois(from_file))]
     elif query:
         filtered = cache.search_local(query)
         pre_filter = [p.uid for p in filtered]
@@ -1277,6 +1299,13 @@ def config(
             help="Base URL for a local OpenAI-compatible server (e.g. http://localhost:11434/v1)",
         ),
     ] = "",
+    llm_timeout: Annotated[
+        float | None,
+        typer.Option(
+            "--llm-timeout",
+            help="Seconds to wait for one LLM answer (raise it for large local models)",
+        ),
+    ] = None,
     # --- rag / embeddings ---
     embedding_model: Annotated[
         str,
@@ -1438,7 +1467,11 @@ def config(
         cfg["llm"]["model"] = llm_model
     if llm_base_url:
         cfg["llm"]["base_url"] = llm_base_url
-    _llm_changed = any([llm_provider, llm_api_key, llm_model, llm_base_url])
+    if llm_timeout is not None:
+        cfg["llm"]["timeout"] = llm_timeout
+    _llm_changed = any(
+        [llm_provider, llm_api_key, llm_model, llm_base_url, llm_timeout is not None]
+    )
     if _llm_changed:
         rprint("[green]LLM config updated.[/green]")
 
@@ -1639,6 +1672,14 @@ _RETRY_HINT = (
     "Have access? Retry with --handoff (your own browser; works for Elsevier) "
     "or --interactive (a browser window mosaic drives)."
 )
+_EMAIL_HINT = (
+    "Unpaywall was not asked for open copies: it needs an e-mail address. "
+    "Run: mosaic config --unpaywall-email you@example.org"
+)
+
+
+def _no_email(cfg: dict) -> bool:
+    return not cfg.get("unpaywall", {}).get("email", "")
 
 
 def _handoff_retry(papers: list, cfg: dict, cache: Cache, watch_dir: Path | None) -> dict[str, str]:
@@ -1660,7 +1701,7 @@ def _handoff_retry(papers: list, cfg: dict, cache: Cache, watch_dir: Path | None
     items = [
         (
             key,
-            f"{p.title[:90]} ({p.year or 'n.d.'})" if p.source != "manual" else key,
+            f"{_clip(p.title, 90)} ({p.year or 'n.d.'})" if p.source != "manual" else key,
             resolve_landing(p.url or f"https://doi.org/{p.doi}"),
             str(dest_dir / p.safe_filename(pattern)),
         )
@@ -1677,13 +1718,14 @@ def _handoff_retry(papers: list, cfg: dict, cache: Cache, watch_dir: Path | None
     def report(key: str, path: str | None, original: str | None) -> None:
         if path:
             cache.set_download(by_key[key].uid, path, "ok")
-            rprint(f"  [green]✓[/green] {original} → {Path(path).name}")
+            console.print(f"  [green]✓[/green] {original} → {Path(path).name}", soft_wrap=True)
         else:
             rprint("  [dim]– skipped[/dim]")
 
-    rprint(
-        f"\n[bold]Hand-off of {len(items)} paper(s) to your browser[/bold] — "
-        f"watching [cyan]{folder}[/cyan] for each PDF you download (one paper at a time)."
+    console.print(
+        f"\n[bold]Hand-off of {len(items)} paper(s) to your browser[/bold]: "
+        f"watching [cyan]{_tilde(folder)}[/cyan] for each PDF you download (one paper at a time).",
+        soft_wrap=True,
     )
     saved = handoff_download(items, Path(folder), on_result=report, announce=announce)
     return {by_key[k].uid: v for k, v in saved.items()}
@@ -1743,7 +1785,7 @@ def _bulk_download(
     interactive: bool = False,
     handoff: bool = False,
     watch_dir: Path | None = None,
-) -> None:
+) -> int:
     from mosaic.bulk import read_dois
     from mosaic.cite import paper_for_download
 
@@ -1805,6 +1847,8 @@ def _bulk_download(
         skip -= len(rescued)
     else:
         fail -= len(rescued)
+    if failed and _no_email(cfg):
+        rprint(f"\n[yellow]{_EMAIL_HINT}[/yellow]")
     if failed and not (interactive or handoff) and not oa_only:
         rprint(f"\n[dim]{_RETRY_HINT}[/dim]")
 
@@ -1834,6 +1878,7 @@ def _bulk_download(
             index_papers(papers_list, cfg, cache, progress=False)
         except Exception:
             pass  # auto-index failures are always silent
+    return fail
 
 
 def _print_search_stats(stats: dict, filters) -> None:
@@ -1976,6 +2021,33 @@ def _complete_session_names() -> list[str]:
     return [s["name"] for s in list_sessions()]
 
 
+def _emit_local_json(
+    papers: list,
+    query: str,
+    cfg: dict,
+    sort_by: str,
+    oa_only: bool,
+    pdf_only: bool,
+    output: list | None,
+    summarise: bool,
+) -> None:
+    """``--json`` for ``--cached``/``--semantic``: filter, sort and export as a live search does."""
+    papers = filter_papers(
+        papers,
+        oa_only=oa_only,
+        pdf_only=pdf_only,
+        sort_by=sort_by if sort_by != "relevance" else "",
+    )
+    if sort_by == "relevance":
+        papers = sort_by_relevance(query, papers, cfg)
+    if output:
+        from mosaic.exporter import export
+
+        for path in list(output):
+            export(papers, path)
+    _emit_search_json(papers, query, cfg, summarise=summarise)
+
+
 def _print_results(papers: list, show_relevance: bool = False, score_label: str = "Rel.") -> None:
     show_citations = any(p.citation_count is not None for p in papers)
 
@@ -1987,11 +2059,13 @@ def _print_results(papers: list, show_relevance: bool = False, score_label: str 
         expand=True,
     )
     table.add_column("#", width=3)
-    table.add_column("Title", min_width=30, ratio=3)
-    table.add_column("Authors", ratio=2)
-    table.add_column("Year", width=6)
-    table.add_column("DOI", min_width=20, overflow="fold")
-    table.add_column("Source", width=16)
+    # Every flexible column has a ratio: Rich would otherwise give the DOI its
+    # full length first and squeeze the title into a few characters.
+    table.add_column("Title", min_width=24, ratio=5)
+    table.add_column("Authors", min_width=10, ratio=2)
+    table.add_column("Year", width=4)
+    table.add_column("DOI", min_width=14, ratio=3, overflow="fold")
+    table.add_column("Source", width=12, overflow="fold")
     table.add_column("OA", width=4)
     table.add_column("PDF", width=5)
     if show_citations:
@@ -2008,7 +2082,7 @@ def _print_results(papers: list, show_relevance: bool = False, score_label: str 
         source = f"[{src_color}]{p.source}[/{src_color}]"
         row = [
             f"[{color}]{i}[/{color}]",
-            p.title[:80],
+            _clip(p.title, 80),
             p.short_authors,
             str(p.year or ""),
             doi,
@@ -2052,9 +2126,11 @@ def _download_all(papers: list, cfg: dict, cache: Cache) -> dict[str, str]:
                 rprint(f"  [green]✓[/green] {Path(path).name}")
             else:
                 fail += 1
-                rprint(f"  [red]✗[/red] {p.title[:60]}")
+                rprint(f"  [red]✗[/red] {_clip(p.title, 70)}")
 
     console.print(f"\n[bold]Done:[/bold] {ok} downloaded, {fail} failed, {skip} skipped (no PDF)")
+    if fail and _no_email(cfg):
+        rprint(f"[yellow]{_EMAIL_HINT}[/yellow]")
     return pdf_map
 
 
@@ -2438,7 +2514,7 @@ def _print_network(
             max_deg = deg.get(sorted_uids[0], 0) if sorted_uids else 0
 
             sample = papers_map.get(sorted_uids[0]) if sorted_uids else None
-            label = sample.title[:35] if sample else f"Cluster {i}"
+            label = _clip(sample.title, 50) if sample else f"Cluster {i}"
 
             console.print(Rule(f"[bold]Cluster {i}[/bold] — {label} ({len(comp)} papers)"))
 
@@ -2453,7 +2529,7 @@ def _print_network(
                 p = papers_map.get(uid)
                 is_hub = deg.get(uid, 0) == max_deg and max_deg > 0
                 hub_mark = "[bold cyan]Hub[/bold cyan]" if is_hub else ""
-                title = p.title[:65] if p else uid
+                title = _clip(p.title, 90) if p else uid
                 authors = p.short_authors if p else ""
                 year = str(p.year or "") if p else ""
                 d_val = deg.get(uid, 0)
@@ -2483,7 +2559,7 @@ def _print_network(
             color = _RAINBOW[(i - 1) % len(_RAINBOW)]
             tbl.add_row(
                 f"[{color}]{i}[/{color}]",
-                (p.title[:70] if p else uid),
+                (_clip(p.title, 90) if p else uid),
                 (p.short_authors if p else ""),
                 str(p.year or "") if p else "",
                 str(deg.get(uid, 0)),
@@ -2535,7 +2611,7 @@ def compare(
 
     Examples::
 
-        mosaic compare "diffusion models" --sort citations -n 15 --output comparison.md
+        mosaic compare --query "diffusion models" --sort citations -n 15 --output comparison.md
         mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
     """
     from mosaic.compare import (
@@ -2553,14 +2629,7 @@ def compare(
     if from_file:
         from mosaic.bulk import read_dois
 
-        dois = read_dois(from_file)
-        seen: set[str] = set()
-        papers: list = []
-        for doi in dois:
-            for p in cache.search_local(doi):
-                if p.uid not in seen:
-                    seen.add(p.uid)
-                    papers.append(p)
+        papers = cache.get_by_dois(read_dois(from_file))
     elif query:
         papers = cache.search_local(query)
     else:
@@ -2615,6 +2684,13 @@ def compare(
     _print_compare_table(papers, rows, dims)
 
 
+def _clip(text: str, limit: int) -> str:
+    """*text* cut at a word boundary to at most *limit* characters, marked with an ellipsis."""
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+
+
 def _print_compare_table(papers: list, rows: list, dims: list) -> None:
     """Render the comparison as a Rich table in the terminal."""
     tbl = Table(
@@ -2625,20 +2701,20 @@ def _print_compare_table(papers: list, rows: list, dims: list) -> None:
         expand=True,
     )
     tbl.add_column("#", width=3)
-    tbl.add_column("Title", min_width=20, ratio=2)
-    tbl.add_column("Year", width=6)
-    tbl.add_column("Authors", min_width=12, ratio=1)
+    tbl.add_column("Title", min_width=20, ratio=2, overflow="fold")
+    tbl.add_column("Year", width=4)
+    tbl.add_column("Authors", min_width=12, ratio=1, overflow="fold")
     for dim in dims:
-        tbl.add_column(dim.title(), min_width=10, ratio=1)
+        tbl.add_column(dim.title(), min_width=10, ratio=2, overflow="fold")
 
     for i, (p, row) in enumerate(zip(papers, rows, strict=False), 1):
         color = _RAINBOW[(i - 1) % len(_RAINBOW)]
         cells = [
             f"[{color}]{i}[/{color}]",
-            p.title[:55],
+            _clip(p.title, 80),
             str(p.year or "–"),
             p.short_authors,
-        ] + [row.get(d, "–")[:40] for d in dims]
+        ] + [_clip(str(row.get(d, "–")), 160) for d in dims]
         tbl.add_row(*cells)
 
     console.print(tbl)
@@ -2820,7 +2896,7 @@ def cache_list(
         abstract = "[green]✓[/green]" if p.abstract else "[dim]–[/dim]"
         table.add_row(
             f"[{color}]{i}[/{color}]",
-            p.title[:80],
+            _clip(p.title, 80),
             p.short_authors,
             str(p.year or ""),
             p.source,

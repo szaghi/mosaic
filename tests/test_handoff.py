@@ -214,7 +214,7 @@ class TestGetHandoffCli:
             r = CliRunner().invoke(
                 app, ["get", "--from", str(csv), "--handoff", "--watch-dir", str(tmp_path)]
             )
-        assert r.exit_code == 0, r.output
+        assert r.exit_code == 1, r.output  # one paper still failed
         ho.assert_called_once()
         assert "1 downloaded" in r.output and "1 failed" in r.output
         assert tmp_cache.get_download(Paper(title="x", doi="10.1016/a").uid)["status"] == "ok"

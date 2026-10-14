@@ -152,6 +152,7 @@ def index_papers(
     *,
     reindex: bool = False,
     progress: bool = True,
+    batch_size: int = 96,
 ) -> tuple[int, int, int]:
     """
     Embed and store papers not yet in the chunk index.
@@ -205,7 +206,6 @@ def index_papers(
             "Run: pipx inject mosaic-search pymupdf"
         )
 
-    batch_size = 96
     full_text_count = 0
 
     if progress:
@@ -257,7 +257,7 @@ def index_papers(
         for i in range(0, len(all_chunk_rows), batch_size):
             batch = all_chunk_rows[i : i + batch_size]
             texts = [r[3] for r in batch]
-            embeddings = embed_texts(texts, emb_cfg)
+            embeddings = embed_texts(texts, emb_cfg, batch_size=batch_size)
             dim = len(embeddings[0])
             rows = [
                 (r[1], r[0].uid, r[2], r[3], r[4], r[5], emb)
@@ -397,6 +397,16 @@ def _retrieve_impl(
     return papers, chunk_texts
 
 
+def _best_chunk_per_paper(hits: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """Reduce ``(chunk_id, distance)`` hits to ``(uid, best distance)``, closest first."""
+    best: dict[str, float] = {}
+    for chunk_id, dist in hits:
+        uid = chunk_id.rsplit("::", 1)[0]
+        if uid not in best or dist < best[uid]:
+            best[uid] = dist
+    return sorted(best.items(), key=lambda kv: kv[1])
+
+
 def semantic_search(
     query: str,
     cache: Cache,
@@ -422,16 +432,21 @@ def semantic_search(
         return []
     query_vec = vecs[0]
 
-    # Over-fetch when filtering by download status to absorb the loss.
-    fetch_k = k * 4 if downloaded_only else k
+    # Over-fetch: a paper has several chunks, and filtering by download status loses some.
+    fetch_k = k * (40 if downloaded_only else 10)
     try:
-        scored = cache.vector_search_scored(query_vec, fetch_k)
+        scored = _best_chunk_per_paper(cache.vector_search_chunks(query_vec, fetch_k))
     except Exception as exc:
-        if "no such table" in str(exc).lower():
-            raise RuntimeError(
-                "No vector index found. Run 'mosaic index' first to build the semantic search index."
-            ) from exc
-        raise
+        if "no such table" not in str(exc).lower():
+            raise
+        try:  # an index built before chunking: one vector per paper
+            scored = cache.vector_search_scored(query_vec, fetch_k)
+        except Exception as exc2:
+            if "no such table" in str(exc2).lower():
+                raise RuntimeError(
+                    "No vector index found. Run 'mosaic index' first to build the semantic search index."
+                ) from exc2
+            raise
 
     if downloaded_only:
         downloaded = cache.get_downloaded_uids()

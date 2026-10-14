@@ -24,6 +24,7 @@ def _make_embedding_response(embeddings: list[list[float]]) -> MagicMock:
     """Build a mock httpx response that looks like an OpenAI /v1/embeddings reply."""
     m = MagicMock()
     m.raise_for_status = MagicMock()
+    m.is_error = False
     m.json.return_value = {
         "data": [{"index": i, "embedding": emb} for i, emb in enumerate(embeddings)]
     }
@@ -399,11 +400,36 @@ _CFG_EMB = {
 def _make_emb_response(vecs: list[list[float]]) -> MagicMock:
     m = MagicMock()
     m.raise_for_status = MagicMock()
+    m.is_error = False
     m.json.return_value = {"data": [{"index": i, "embedding": v} for i, v in enumerate(vecs)]}
     return m
 
 
 class TestSemanticSearch:
+    def test_uses_the_chunk_index_built_by_mosaic_index(self, tmp_path):
+        """mosaic index writes vec_chunks only: semantic search must read it, one row per paper."""
+        pytest.importorskip("sqlite_vec")
+        from mosaic.db import Cache
+        from mosaic.rag import semantic_search
+
+        cache = Cache(str(tmp_path / "chunks.db"))
+        p1 = _paper("Paper Alpha", abstract="alpha")
+        p2 = _paper("Paper Beta", abstract="beta")
+        cache.save(p1)
+        cache.save(p2)
+        cache.upsert_chunks_batch(
+            [
+                (f"{p1.uid}::0", p1.uid, 0, "alpha", 0, 5, [1.0, 0.0]),
+                (f"{p1.uid}::1", p1.uid, 1, "alpha 2", 5, 12, [0.9, 0.1]),
+                (f"{p2.uid}::0", p2.uid, 0, "beta", 0, 4, [0.0, 1.0]),
+            ],
+            2,
+        )
+        with patch("httpx.post", return_value=_make_emb_response([[1.0, 0.0]])):
+            results = semantic_search("alpha query", cache, _CFG_EMB, k=5)
+        assert [p.uid for p in results] == [p1.uid, p2.uid]
+        assert results[0].relevance_score == pytest.approx(1.0)
+
     def test_returns_papers_with_scores(self, tmp_path):
         """semantic_search scores each paper and sorts by similarity."""
         try:
@@ -490,6 +516,7 @@ class TestSemanticSearch:
         cache = Cache(str(tmp_path / "noemb.db"))
         m = MagicMock()
         m.raise_for_status = MagicMock()
+        m.is_error = False
         m.json.return_value = {"data": []}
         with patch("httpx.post", return_value=m):
             results = semantic_search("query", cache, _CFG_EMB, k=5)
@@ -580,7 +607,7 @@ class TestIndexPapersChunks:
             patch("mosaic.pdf.extract_text", return_value=long_text),
             patch(
                 "mosaic.embeddings.embed_texts",
-                side_effect=lambda texts, cfg: [[0.1, 0.2]] * len(texts),
+                side_effect=lambda texts, cfg, **kw: [[0.1, 0.2]] * len(texts),
             ),
             patch("mosaic.db.Cache.get_rag_meta", return_value=None),
             patch.object(tmp_cache, "upsert_chunks_batch"),

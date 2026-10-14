@@ -43,6 +43,9 @@ def compare_papers(
             return _llm_extract(papers, dimensions, cfg)
         except Exception as exc:
             _log.warning("LLM comparison failed (%s) — using metadata fallback", exc)
+            from rich import print as rprint
+
+            rprint(f"[yellow]The LLM comparison failed ({exc}); showing metadata only.[/yellow]")
     return _metadata_fallback(papers, dimensions)
 
 
@@ -105,7 +108,7 @@ def _llm_extract(
         for i in range(0, len(papers), batch_size):
             batch = papers[i : i + batch_size]
             snippets = "\n".join(
-                f"{j + 1}. Title: {p.title}\n   Abstract: {(p.abstract or '')[:300]}"
+                f"{j + 1}. Title: {p.title}\n   Abstract: {(p.abstract or '')[:1000]}"
                 for j, p in enumerate(batch)
             )
             prompt = (
@@ -146,7 +149,7 @@ def _parse_obj_list(
         ValueError: If the content is not valid JSON.
     """
     try:
-        data = json.loads(content)
+        data = llm.loads_json(content)
     except json.JSONDecodeError as exc:
         raise ValueError(f"LLM returned non-JSON: {content[:200]!r}") from exc
 

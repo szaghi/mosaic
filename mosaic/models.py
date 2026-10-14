@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
+
+# Letters NFKD does not decompose into a base letter plus accents.
+_FOLD = str.maketrans({"œ": "oe", "æ": "ae", "ß": "ss", "ø": "o", "ł": "l", "đ": "d", "ı": "i"})
+
+
+def fold(text: str) -> str:
+    """Lower-case *text* and drop accents, for matching names: "Bœuf" -> "boeuf"."""
+    text = unicodedata.normalize("NFKD", text.lower().translate(_FOLD))
+    return "".join(c for c in text if not unicodedata.combining(c))
 
 
 @dataclass
@@ -31,8 +41,8 @@ class SearchFilters:
                 if self.year_to is not None and paper.year > self.year_to:
                     return False
         if self.authors:
-            combined = " ".join(paper.authors).lower()
-            if not any(a.lower() in combined for a in self.authors):
+            combined = fold(" ".join(paper.authors))
+            if not any(fold(a) in combined for a in self.authors):
                 return False
         return not (
             self.journal

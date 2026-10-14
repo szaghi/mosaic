@@ -224,3 +224,20 @@ class TestSearchStats:
         assert stats["raw_total"] == 0
         assert stats["unique"] == 0
         assert stats["merged"] == 0
+
+
+def test_source_without_its_key_is_reported_inactive(tmp_path):
+    from unittest.mock import patch
+
+    from typer.testing import CliRunner
+
+    from mosaic import config as cfg_mod
+    from mosaic.cli import app
+
+    cfg = cfg_mod._merge(cfg_mod._DEFAULTS, {"db_path": str(tmp_path / "c.db")})
+    with patch("mosaic.cli.cfg_mod.load", return_value=cfg):
+        result = CliRunner().invoke(
+            app, ["search", "x", "--source", "core"], env={"COLUMNS": "200"}
+        )
+    assert result.exit_code == 1
+    assert "not active" in result.output

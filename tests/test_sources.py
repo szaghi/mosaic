@@ -1444,6 +1444,15 @@ class TestDBLPSource:
         assert p.url == "https://dblp.org/rec/conf/nips/VaswaniSPUJGKP17"
         assert p.source == "DBLP"
 
+    def test_bot_check_page_is_a_clear_error(self):
+        from mosaic.errors import SourceError
+
+        resp = _mock_get(json_data={})
+        resp.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+        cls, _ = _mock_client(get_return=resp)
+        with patch("httpx.Client", cls), pytest.raises(SourceError, match="bot check"):
+            self._source().search("attention")
+
     def test_single_author_parsed_as_list(self):
         hit = {
             "info": {

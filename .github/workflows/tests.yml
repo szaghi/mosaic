@@ -26,9 +26,9 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e ".[dev,ui]"
+        run: pip install -e ".[dev,ui,rag]"   # rag: sqlite-vec, so the vector-index tests run
 
-      # Extras are not installed above; resolve them all so an unsatisfiable
+      # Most extras are not installed above; resolve them all so an unsatisfiable
       # pin (e.g. notebooklm-py>=0.10, which never existed) fails CI instead of
       # silently pinning `pip install mosaic-search[all]` users to an old release.
       - name: Check all extras resolve

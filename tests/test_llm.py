@@ -155,3 +155,79 @@ class TestServerErrors:
         from mosaic.errors import MosaicError
 
         assert issubclass(llm.LLMRequestError, MosaicError)
+
+
+class TestOpenAIUrl:
+    def test_versioned_and_bare_base_urls(self):
+        from mosaic.llm import openai_url
+
+        assert (
+            openai_url("http://localhost:11434/v1", "embeddings")
+            == "http://localhost:11434/v1/embeddings"
+        )
+        assert (
+            openai_url("http://localhost:11434/v1/", "embeddings")
+            == "http://localhost:11434/v1/embeddings"
+        )
+        assert openai_url("http://localhost:11434", "chat/completions") == (
+            "http://localhost:11434/v1/chat/completions"
+        )
+        assert openai_url("https://example.org/v1beta/openai", "embeddings") == (
+            "https://example.org/v1beta/openai/embeddings"
+        )
+
+
+class TestTimeout:
+    def _ok(self) -> MagicMock:
+        resp = MagicMock(is_error=False)
+        resp.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+        return resp
+
+    def test_config_timeout_replaces_the_callers(self):
+        cfg = {
+            "llm": {"provider": "openai", "api_key": "k", "base_url": "http://h/v1", "timeout": 900}
+        }
+        with patch("mosaic.llm.httpx.post", return_value=self._ok()) as post:
+            llm.complete("hi", cfg, timeout=120)
+        assert post.call_args.kwargs["timeout"] == 900
+
+    def test_zero_keeps_the_callers(self):
+        cfg = {
+            "llm": {"provider": "openai", "api_key": "k", "base_url": "http://h/v1", "timeout": 0}
+        }
+        with patch("mosaic.llm.httpx.post", return_value=self._ok()) as post:
+            llm.complete("hi", cfg, timeout=120)
+        assert post.call_args.kwargs["timeout"] == 120
+
+    def test_config_flag_saves_it(self):
+        from typer.testing import CliRunner
+
+        from mosaic import config as cfg_mod
+        from mosaic.cli import app
+
+        cfg = cfg_mod._merge(cfg_mod._DEFAULTS, {})
+        with (
+            patch("mosaic.cli.cfg_mod.load", return_value=cfg),
+            patch("mosaic.cli.cfg_mod.save") as save,
+        ):
+            result = CliRunner().invoke(app, ["config", "--llm-timeout", "600"])
+        assert result.exit_code == 0, result.output
+        assert save.call_args.args[0]["llm"]["timeout"] == 600
+
+
+class TestLoadsJson:
+    def test_plain(self):
+        assert llm.loads_json('[{"a": 1}]') == [{"a": 1}]
+
+    def test_markdown_fence(self):
+        assert llm.loads_json('```json\n[{"a": 1}]\n```') == [{"a": 1}]
+
+    def test_think_block_and_prose(self):
+        text = '<think>the user wants</think>\nHere you are: {"scores": [0.5, 1]} Hope it helps.'
+        assert llm.loads_json(text) == {"scores": [0.5, 1]}
+
+    def test_no_json_raises(self):
+        import json
+
+        with pytest.raises(json.JSONDecodeError):
+            llm.loads_json("I cannot help with that.")

@@ -1,5 +1,7 @@
 """Tests for the SQLite cache layer."""
 
+import pytest
+
 from mosaic.models import Paper
 
 
@@ -83,14 +85,45 @@ class TestLocalSearch:
         tmp_cache.save(_paper(title="Something Else"))
         assert tmp_cache.search_local("QuantumComputing99") == []
 
+    def test_every_word_must_match_not_the_phrase(self, tmp_cache):
+        tmp_cache.save(
+            _paper(title="PIC simulation of a Hall thruster", abstract="particle-in-cell")
+        )
+        tmp_cache.save(_paper(doi="10.1/b", title="Hall effect in metals"))
+        results = tmp_cache.search_local("hall thruster particle-in-cell")
+        assert [p.doi for p in results] == ["10.1/test"]
+        assert tmp_cache.count_papers("hall thruster particle-in-cell") == 1
+        assert len(tmp_cache.list_papers(query="HALL")) == 2
+
+    def test_empty_query_matches_all(self, tmp_cache):
+        tmp_cache.save(_paper())
+        tmp_cache.save(_paper(doi="10.1/b"))
+        assert len(tmp_cache.search_local("")) == 2
+
+
+class TestGetByDois:
+    def test_finds_papers_by_doi_case_insensitively(self, tmp_cache):
+        tmp_cache.save(_paper(doi="10.1/ABC", title="One"))
+        tmp_cache.save(_paper(doi="10.1/other", title="Two"))
+        found = tmp_cache.get_by_dois(["10.1/abc", "10.9/missing"])
+        assert [p.title for p in found] == ["One"]
+
+    def test_arxiv_doi_matches_arxiv_uid(self, tmp_cache):
+        tmp_cache.save(Paper(title="Attention", arxiv_id="1706.03762", source="arXiv"))
+        found = tmp_cache.get_by_dois(["10.48550/arXiv.1706.03762"])
+        assert [p.title for p in found] == ["Attention"]
+
+    def test_duplicates_and_blanks(self, tmp_cache):
+        tmp_cache.save(_paper(doi="10.1/a"))
+        assert len(tmp_cache.get_by_dois(["10.1/a", "10.1/A", " "])) == 1
+        assert tmp_cache.get_by_dois([]) == []
+
 
 class TestVectorSearchScored:
     def test_returns_uid_and_float_distance(self, tmp_cache):
         try:
             import sqlite_vec  # noqa: F401
         except ImportError:
-            import pytest
-
             pytest.skip("sqlite-vec not installed")
 
         dim = 3
@@ -110,8 +143,6 @@ class TestVectorSearchScored:
         try:
             import sqlite_vec  # noqa: F401
         except ImportError:
-            import pytest
-
             pytest.skip("sqlite-vec not installed")
 
         # No embeddings inserted — vec_papers table does not exist yet.
@@ -124,8 +155,6 @@ class TestVectorSearchScored:
         try:
             import sqlite_vec  # noqa: F401
         except ImportError:
-            import pytest
-
             pytest.skip("sqlite-vec not installed")
 
         dim = 2

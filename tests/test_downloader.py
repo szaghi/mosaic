@@ -303,3 +303,28 @@ class TestResolveLanding:
         with patch("mosaic.downloader.httpx.Client", side_effect=OSError("offline")):
             got = resolve_landing("https://linkinghub.elsevier.com/retrieve/pii/S0094576517312663")
         assert got.startswith("https://www.sciencedirect.com/science/article/pii/")
+
+
+def test_get_without_unpaywall_email_says_why(tmp_path):
+    """A failed `get` with no Unpaywall e-mail must say Unpaywall was not asked."""
+    from unittest.mock import patch
+
+    from typer.testing import CliRunner
+
+    from mosaic.cli import app
+    from mosaic.models import Paper
+
+    cfg = {
+        "db_path": str(tmp_path / "c.db"),
+        "download_dir": str(tmp_path),
+        "unpaywall": {"email": ""},
+    }
+    stub = Paper(title="T", doi="10.1/x", source="Crossref", year=2020)
+    with (
+        patch("mosaic.cli.cfg_mod.load", return_value=cfg),
+        patch("mosaic.cite.paper_for_download", return_value=stub),
+        patch("mosaic.cli.dl_paper", return_value=None),
+    ):
+        result = CliRunner().invoke(app, ["get", "10.1/x"], env={"COLUMNS": "200"})
+    assert "Could not find a downloadable PDF" in result.output
+    assert "--unpaywall-email" in result.output

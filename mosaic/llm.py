@@ -7,7 +7,10 @@ under the ``[llm]`` section: ``provider``, ``api_key``, ``model``, ``base_url``.
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -30,6 +33,52 @@ class LLMConfigError(ConfigError, ValueError):
 
     Also a ValueError so existing ``except ValueError`` handlers keep working.
     """
+
+
+def openai_url(base_url: str, path: str) -> str:
+    """URL of *path* (``chat/completions``, ``embeddings``) on an OpenAI-compatible server.
+
+    Base URLs are written with their API version (``http://localhost:11434/v1``,
+    ``https://openrouter.ai/api/v1``); one without a version segment
+    (``http://localhost:11434``) gets ``/v1``, so both spellings work.
+    """
+    base = base_url.rstrip("/")
+    if not re.search(r"/v\d", base):
+        base += "/v1"
+    return f"{base}/{path}"
+
+
+_FENCE = re.compile(r"^```[A-Za-z]*\s*\n?(.*?)\n?```$", re.DOTALL)
+_THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def loads_json(text: str) -> Any:
+    """Parse the JSON in a model's answer.
+
+    Local models ignore ``json_mode`` and often wrap the JSON in a Markdown
+    fence (```json ... ```), prefix a ``<think>`` block, or add a sentence
+    around it; all of these are removed before parsing.
+
+    Raises
+    ------
+    json.JSONDecodeError
+        If no JSON value can be found.
+    """
+    body = _THINK.sub("", text).strip()
+    fenced = _FENCE.match(body)
+    if fenced:
+        body = fenced.group(1).strip()
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        starts = [i for i in (body.find("["), body.find("{")) if i >= 0]
+        if not starts:
+            raise
+        first = min(starts)
+        last = body.rfind("]" if body[first] == "[" else "}")
+        if last <= first:
+            raise
+        return json.loads(body[first : last + 1])
 
 
 class LLMRequestError(MosaicError):
@@ -120,7 +169,8 @@ def complete(
         Request a JSON response. Honoured only by cloud OpenAI: many local
         servers reject ``response_format``, and Anthropic has no equivalent.
     timeout : float
-        HTTP timeout in seconds.
+        HTTP timeout in seconds; ``llm.timeout`` in the config, when set, replaces it
+        (large local models can need minutes for one answer).
 
     Returns
     -------
@@ -137,10 +187,11 @@ def complete(
         On transport errors (connection refused, timeout).
     """
     s = resolve(cfg)
+    timeout = float(cfg.get("llm", {}).get("timeout") or timeout)
     messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
 
     if s.openai_compatible:
-        url = f"{s.base_url}/chat/completions" if s.base_url else _OPENAI_URL
+        url = openai_url(s.base_url, "chat/completions") if s.base_url else _OPENAI_URL
         headers = {"Authorization": f"Bearer {s.api_key}", "Content-Type": "application/json"}
         payload: dict = {"model": s.model, "messages": messages}
         if json_mode and not s.base_url:

@@ -250,6 +250,19 @@ def row_to_paper(row: sqlite3.Row) -> Paper:
     )
 
 
+def _text_filter(query: str) -> tuple[str, list[str]]:
+    """SQL condition and parameters: every word of *query* in the title or the abstract.
+
+    A paper matches "hall thruster simulation" when each word appears somewhere,
+    not only when the exact phrase does. LIKE is case-insensitive for ASCII.
+    """
+    words = query.split()
+    if not words:
+        return "1", []
+    cond = " AND ".join("(title LIKE ? OR abstract LIKE ?)" for _ in words)
+    return cond, [p for w in words for p in (f"%{w}%", f"%{w}%")]
+
+
 class Cache:
     """Thread-safe SQLite cache.
 
@@ -285,10 +298,24 @@ class Cache:
             return row_to_paper(row) if row else None
 
     def search_local(self, query: str) -> list[Paper]:
+        """Return cached papers whose title or abstract contains every word of *query*."""
+        where, params = _text_filter(query)
+        with self._lock:
+            rows = self.con.execute(f"SELECT * FROM papers WHERE {where}", params).fetchall()  # noqa: S608
+            return [row_to_paper(r) for r in rows]
+
+    def get_by_dois(self, dois: list[str]) -> list[Paper]:
+        """Return the cached papers with the given DOIs (unknown DOIs are skipped)."""
+        uids = list(dict.fromkeys(Paper(title="", doi=d.strip()).uid for d in dois if d.strip()))
+        if not uids:
+            return []
+        lowered = [d.strip().lower() for d in dois]
+        marks = ",".join("?" * len(uids))
+        dmarks = ",".join("?" * len(lowered))
         with self._lock:
             rows = self.con.execute(
-                "SELECT * FROM papers WHERE title LIKE ? OR abstract LIKE ?",
-                (f"%{query}%", f"%{query}%"),
+                f"SELECT * FROM papers WHERE uid IN ({marks}) OR lower(doi) IN ({dmarks})",  # noqa: S608
+                [*uids, *lowered],
             ).fetchall()
             return [row_to_paper(r) for r in rows]
 
@@ -435,13 +462,13 @@ class Cache:
         }
 
     def list_papers(self, limit: int = 50, offset: int = 0, query: str = "") -> list[Paper]:
-        """Return cached papers, newest-first, with optional substring filter."""
+        """Return cached papers, newest-first, optionally those matching every word of *query*."""
         with self._lock:
             if query:
+                where, params = _text_filter(query)
                 rows = self.con.execute(
-                    "SELECT * FROM papers WHERE title LIKE ? OR abstract LIKE ? "
-                    "ORDER BY rowid DESC LIMIT ? OFFSET ?",
-                    (f"%{query}%", f"%{query}%", limit, offset),
+                    f"SELECT * FROM papers WHERE {where} ORDER BY rowid DESC LIMIT ? OFFSET ?",  # noqa: S608
+                    [*params, limit, offset],
                 ).fetchall()
             else:
                 rows = self.con.execute(
@@ -454,9 +481,10 @@ class Cache:
         """Total number of papers matching *query* (or all papers if empty)."""
         with self._lock:
             if query:
+                where, params = _text_filter(query)
                 return self.con.execute(
-                    "SELECT COUNT(*) FROM papers WHERE title LIKE ? OR abstract LIKE ?",
-                    (f"%{query}%", f"%{query}%"),
+                    f"SELECT COUNT(*) FROM papers WHERE {where}",  # noqa: S608
+                    params,
                 ).fetchone()[0]
             return self.con.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
 
@@ -566,8 +594,10 @@ class Cache:
     def upsert_embedding(self, uid: str, embedding: list[float], dim: int) -> None:
         with self._lock:
             self._ensure_vec_table(dim)
+            # vec0 tables ignore OR REPLACE: delete, then insert
+            self._conn.execute("DELETE FROM vec_papers WHERE uid = ?", (uid,))
             self._conn.execute(
-                "INSERT OR REPLACE INTO vec_papers(uid, embedding) VALUES (?, ?)",
+                "INSERT INTO vec_papers(uid, embedding) VALUES (?, ?)",
                 (uid, json.dumps(embedding)),
             )
             self._conn.commit()
@@ -577,7 +607,10 @@ class Cache:
         with self._lock:
             self._ensure_vec_table(dim)
             self._conn.executemany(
-                "INSERT OR REPLACE INTO vec_papers(uid, embedding) VALUES (?, ?)",
+                "DELETE FROM vec_papers WHERE uid = ?", [(uid,) for uid, _ in rows]
+            )
+            self._conn.executemany(
+                "INSERT INTO vec_papers(uid, embedding) VALUES (?, ?)",
                 [(uid, json.dumps(emb)) for uid, emb in rows],
             )
             self._conn.commit()
@@ -675,8 +708,12 @@ class Cache:
                 "VALUES (?,?,?,?,?,?)",
                 [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows],
             )
+            # vec0 tables ignore OR REPLACE: delete, then insert
             self._conn.executemany(
-                "INSERT OR REPLACE INTO vec_chunks(chunk_id, embedding) VALUES (?,?)",
+                "DELETE FROM vec_chunks WHERE chunk_id = ?", [(r[0],) for r in rows]
+            )
+            self._conn.executemany(
+                "INSERT INTO vec_chunks(chunk_id, embedding) VALUES (?,?)",
                 [(r[0], json.dumps(r[6])) for r in rows],
             )
             self._conn.commit()

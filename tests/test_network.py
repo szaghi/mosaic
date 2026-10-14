@@ -343,3 +343,29 @@ class TestDbIntegration:
         tmp_cache.upsert_citation_edges(edges_in)
         edges_out = tmp_cache.get_all_citation_edges()
         assert len(edges_out) == 2
+
+
+def test_louvain_clusters_do_not_depend_on_hash_order():
+    """The same graph gives the same clusters in every process (set order varies with PYTHONHASHSEED)."""
+    import os
+    import subprocess
+    import sys
+
+    pytest.importorskip("networkx")
+    code = (
+        "from mosaic.network import louvain_clusters\n"
+        "nodes = {f'n{i}' for i in range(60)}\n"
+        "adj = {f'n{i}': [f'n{(i * 7 + k) % 60}' for k in (1, 2, 3)] for i in range(60)}\n"
+        "print([sorted(c) for c in louvain_clusters(nodes, adj)])\n"
+    )
+    outputs = {
+        subprocess.run(
+            [sys.executable, "-c", code],
+            env={**os.environ, "PYTHONHASHSEED": seed},
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        for seed in ("1", "2", "3")
+    }
+    assert len(outputs) == 1
