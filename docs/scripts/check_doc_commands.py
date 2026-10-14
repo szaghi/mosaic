@@ -18,8 +18,8 @@ import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-import click
 import typer.main
 
 from mosaic.cli import app
@@ -80,19 +80,19 @@ def _tokens(command: str) -> list[str]:
     return tokens
 
 
-def _known(cmd: click.Command, token: str) -> bool:
+def _known(cmd: Any, token: str) -> bool:
     name = token.split("=")[0]
     if name == "--help":
         return True
     return any(name in p.opts or name in getattr(p, "secondary_opts", []) for p in cmd.params)
 
 
-def check(command: str, root: click.Group) -> str | None:
+def check(command: str, root: Any) -> str | None:
     """Return what is wrong with *command*, or None."""
     tokens = _tokens(command)
-    cmd: click.Command = root
+    cmd = root
     k = 1
-    while isinstance(cmd, click.Group):
+    while hasattr(cmd, "commands"):  # a group (typer >= 0.27 ships its own click)
         # global options come before the command
         while k < len(tokens) and tokens[k].startswith("-"):
             if not _known(cmd, tokens[k]):

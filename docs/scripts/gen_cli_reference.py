@@ -18,8 +18,8 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
-import click
 import typer.main
 
 from mosaic.cli import app
@@ -38,12 +38,21 @@ AREAS = {
 }
 
 
+# Duck typing, not isinstance(click.Group): typer >= 0.27 ships its own copy of click.
+def _is_group(cmd: Any) -> bool:
+    return hasattr(cmd, "commands")
+
+
+def _is_option(p: Any) -> bool:
+    return p.param_type_name == "option"
+
+
 def page(name: str) -> str:
     """Page of a command: ``index`` would clash with the map of the commands."""
     return "index-command" if name == "index" else name
 
 
-def root() -> click.Group:
+def root() -> Any:
     return typer.main.get_command(app)
 
 
@@ -53,14 +62,18 @@ def _cell(text: str) -> str:
     return re.sub(r"(?<!`)(https?://[^\s)`]+)", r"`\1`", text)
 
 
-def _value(p: click.Parameter) -> str:
-    if isinstance(p, click.Option) and (p.is_flag or p.count):
+# click and typer's vendored click name the same types differently (INTEGER / INT)
+_TYPES = {"STR": "TEXT", "STRING": "TEXT", "INT": "INTEGER", "BOOL": "BOOLEAN"}
+
+
+def _value(p: Any) -> str:
+    if _is_option(p) and (p.is_flag or p.count):
         return ""
-    name = p.type.name.upper() if p.type.name else "TEXT"
-    return f"`{name}`"
+    name = (p.type.name or "TEXT").upper()
+    return f"`{_TYPES.get(name, name)}`"
 
 
-def _default(p: click.Parameter) -> str:
+def _default(p: Any) -> str:
     d = p.default
     if callable(d) or d is None or d == "" or d is False or d == () or d == []:
         return ""
@@ -69,22 +82,27 @@ def _default(p: click.Parameter) -> str:
     return f"`{d}`"
 
 
-def _help(p: click.Parameter) -> str:
+def _help(p: Any) -> str:
     text = getattr(p, "help", None) or ""
-    if isinstance(p, click.Option) and p.multiple and "repeatable" not in text:
+    if _is_option(p) and p.multiple and "repeatable" not in text:
         text = text.rstrip(".") + " (repeatable)"
     return _cell(text)
 
 
-def _usage(cmd: click.Command, path: list[str]) -> str:
-    ctx = click.Context(cmd, info_name=" ".join(path))
-    return " ".join([*path, *cmd.collect_usage_pieces(ctx)])
+def _usage(cmd: Any, path: list[str]) -> str:
+    """``mosaic CMD [OPTIONS] ARG [OPT_ARG] MANY...``, built here: click versions render it differently."""
+    pieces = ["[OPTIONS]"]  # --help, at least
+    for a in (p for p in cmd.params if p.param_type_name == "argument"):
+        name = a.name.upper()
+        name = f"[{name}]" if not a.required else name
+        pieces.append(f"{name}..." if a.nargs == -1 else name)
+    return " ".join([*path, *pieces])
 
 
-def _params(cmd: click.Command) -> list[str]:
+def _params(cmd: Any) -> list[str]:
     out: list[str] = []
-    args = [p for p in cmd.params if isinstance(p, click.Argument)]
-    opts = [p for p in cmd.params if isinstance(p, click.Option) and not p.hidden]
+    args = [p for p in cmd.params if p.param_type_name == "argument"]
+    opts = [p for p in cmd.params if _is_option(p) and not p.hidden]
     if args:
         out += ["| Argument | Value | Description |", "|---|---|---|"]
         for a in args:
@@ -100,9 +118,9 @@ def _params(cmd: click.Command) -> list[str]:
     return out
 
 
-def section(name: str, cmd: click.Command) -> str:
+def section(name: str, cmd: Any) -> str:
     lines = [NOTE, ""]
-    if isinstance(cmd, click.Group):
+    if _is_group(cmd):
         for sub_name, sub in sorted(cmd.commands.items()):
             path = ["mosaic", name, sub_name]
             lines += [f"### `{' '.join(path)}`", "", _cell(sub.get_short_help_str(200)), ""]
@@ -114,7 +132,7 @@ def section(name: str, cmd: click.Command) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def index_section(group: click.Group) -> str:
+def index_section(group: Any) -> str:
     lines = [NOTE, ""]
     for area, names in AREAS.items():
         lines += [f"## {area}", "", "| Command | What it does |", "|---|---|"]
