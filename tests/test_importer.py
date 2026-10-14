@@ -140,8 +140,11 @@ class TestImportCli:
         ):
             r = CliRunner().invoke(app, ["import", str(good), str(bad)])
         assert r.exit_code == 1
-        assert "good.pdf →" in r.output and "found via metadata" in r.output
-        assert "not a PDF" in r.output
+        # Rich wraps at 80 columns, and where depends on the tmp path length
+        # (it differs on CI), so compare whitespace-normalised output.
+        out = " ".join(r.output.split())
+        assert "good.pdf →" in out and "found via metadata" in out
+        assert "not a PDF" in out
 
     def test_doi_with_several_files_rejected(self, tmp_path):
         from typer.testing import CliRunner
