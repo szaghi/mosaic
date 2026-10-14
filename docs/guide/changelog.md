@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.10.1] — 2026-10-14
+### Fixed
+- **docs**: Make the docs checks work with typer's vendored click
+
+
 ## [1.10.0] — 2026-10-14
 ### Documentation
 - Rebuild the documentation as tutorial, cookbook, guides and reference

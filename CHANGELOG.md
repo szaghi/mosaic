@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.10.1] — 2026-10-14
+### Fixed
+- **docs**: Make the docs checks work with typer's vendored click
+
+
 ## [1.10.0] — 2026-10-14
 ### Documentation
 - Rebuild the documentation as tutorial, cookbook, guides and reference
