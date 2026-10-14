@@ -210,6 +210,11 @@ async def browser_download(landing_url: str, dest: str, session_name: str) -> bo
     """
     Navigate to landing_url using a saved session, find the PDF link, and
     save it to dest. Returns True on success.
+
+    The PDF is fetched first with the context's request API (fast, shares the
+    session cookies). Publisher walls that need JavaScript (e.g. Springer)
+    answer that with an HTML challenge, so the fallback navigates the real
+    page to the PDF URL and captures the resulting download.
     """
     state_file = session_path(session_name)
     if not state_file.exists():
@@ -220,35 +225,69 @@ async def browser_download(landing_url: str, dest: str, session_name: str) -> bo
 
     async with async_playwright() as p:
         browser = await _launch_browser(p, headless=True)
-        context = await browser.new_context(storage_state=str(state_file))
+        context = await browser.new_context(storage_state=str(state_file), accept_downloads=True)
         page = await context.new_page()
         try:
             await page.goto(landing_url, wait_until="domcontentloaded", timeout=30_000)
             pdf_url = await _find_pdf_url(page)
             if not pdf_url:
                 return False
-            response = await context.request.get(pdf_url, timeout=120_000)
-            if not response.ok:
-                return False
-            body = await response.body()
-            if not has_pdf_header(body):
-                # Publisher walls answer 200 with an HTML challenge page.
-                log.debug(
-                    "Browser download for %s is not a PDF (%s)",
-                    pdf_url,
-                    response.headers.get("content-type", "unknown"),
-                )
-                return False
-            Path(dest).parent.mkdir(parents=True, exist_ok=True)
-            part = Path(dest).with_name(Path(dest).name + ".part")
-            part.write_bytes(body)
-            part.replace(dest)
-            return True
+            return await _request_pdf(context, pdf_url, dest) or await _navigate_pdf(
+                page, pdf_url, dest
+            )
         except Exception:
             log.debug("Browser download failed for %s", landing_url, exc_info=True)
             return False
         finally:
             await browser.close()
+
+
+def _save_pdf(body: bytes, dest: str) -> bool:
+    """Write *body* to *dest* via a ``.part`` file if it is a PDF."""
+    if not has_pdf_header(body):
+        return False
+    Path(dest).parent.mkdir(parents=True, exist_ok=True)
+    part = Path(dest).with_name(Path(dest).name + ".part")
+    part.write_bytes(body)
+    part.replace(dest)
+    return True
+
+
+async def _request_pdf(context, pdf_url: str, dest: str) -> bool:
+    """Fetch *pdf_url* with the context request API (no JavaScript)."""
+    try:
+        response = await context.request.get(pdf_url, timeout=120_000)
+        if response.ok and _save_pdf(await response.body(), dest):
+            return True
+        log.debug(
+            "Request API got no PDF for %s (%s %s)",
+            pdf_url,
+            response.status,
+            response.headers.get("content-type", "unknown"),
+        )
+    except Exception:
+        log.debug("Request API failed for %s", pdf_url, exc_info=True)
+    return False
+
+
+async def _navigate_pdf(page, pdf_url: str, dest: str, timeout_ms: int = 45_000) -> bool:
+    """Navigate *page* to *pdf_url* and capture the download it triggers.
+
+    Headless Chromium has no PDF viewer, so a PDF response becomes a download
+    once any JavaScript challenge in front of it has run.
+    """
+    try:
+        async with page.expect_download(timeout=timeout_ms) as info:
+            try:
+                await page.goto(pdf_url, timeout=timeout_ms)
+            except Exception:
+                pass  # goto aborts with net::ERR_ABORTED when it turns into a download
+        download = await info.value
+        tmp = await download.path()
+        return _save_pdf(Path(tmp).read_bytes(), dest) if tmp else False
+    except Exception:
+        log.debug("No PDF download from navigating to %s", pdf_url, exc_info=True)
+        return False
 
 
 async def _find_pdf_url(page) -> str | None:

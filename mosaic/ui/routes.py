@@ -1069,8 +1069,10 @@ def _run_bulk_download(dois, cfg, db_path):
     ok = fail = 0
     results = []
 
+    from mosaic.cite import paper_for_download
+
     for doi in dois:
-        paper = Paper(title=doi, doi=doi, source="manual")
+        paper = paper_for_download(doi, cache, email)
         path = dl_paper(paper, download_dir, cache, email, pattern)
         if path:
             ok += 1

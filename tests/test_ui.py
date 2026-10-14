@@ -132,9 +132,12 @@ class TestDownload:
 
             current_app.config["MOSAIC_CACHE"].save(paper)
 
-        resp = client.post(f"/download/{paper.uid}")
+        # Only the submission is under test; running the job would hit the network.
+        with patch("mosaic.ui.jobs.JobManager.submit", return_value="jid123") as submit:
+            resp = client.post(f"/download/{paper.uid}")
         assert resp.status_code == 200
         assert b"Downloading" in resp.data
+        submit.assert_called_once()
 
 
 class TestConfig:

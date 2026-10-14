@@ -389,7 +389,10 @@ class TestBrowserDownload:
 class TestBrowserDownloadContentCheck:
     """Issue #42: a 200 HTML challenge page from the browser must not be saved."""
 
-    def _download(self, tmp_path, body: bytes) -> bool:
+    def _download(self, tmp_path, body: bytes, nav_body: bytes | None = None) -> bool:
+        """Run browser_download; *body* is the request-API response, *nav_body*
+        what navigating the page to the PDF downloads (None: no download)."""
+        import contextlib
         import sys
 
         import mosaic.auth as auth_mod
@@ -402,6 +405,24 @@ class TestBrowserDownloadContentCheck:
         mock_page = AsyncMock()
         mock_page.url = "https://sciencedirect.com/article/123"
         mock_page.goto = AsyncMock()
+
+        @contextlib.asynccontextmanager
+        async def expect_download(timeout=None):
+            info = MagicMock()
+            if nav_body is None:
+                fut = asyncio.get_running_loop().create_future()
+                fut.set_exception(TimeoutError("no download"))
+            else:
+                saved = tmp_path / "nav-download.bin"
+                saved.write_bytes(nav_body)
+                download = MagicMock()
+                download.path = AsyncMock(return_value=str(saved))
+                fut = asyncio.get_running_loop().create_future()
+                fut.set_result(download)
+            info.value = fut
+            yield info
+
+        mock_page.expect_download = expect_download
 
         mock_context = AsyncMock()
         mock_context.new_page = AsyncMock(return_value=mock_page)
@@ -444,3 +465,14 @@ class TestBrowserDownloadContentCheck:
         assert self._download(tmp_path, b"%PDF-1.7 body") is True
         assert (tmp_path / "out.pdf").read_bytes() == b"%PDF-1.7 body"
         assert not (tmp_path / "out.pdf.part").exists()
+
+    def test_js_wall_falls_back_to_page_navigation_download(self, tmp_path):
+        """Springer: the request API gets an HTML challenge, a real navigation gets the PDF."""
+        html = b"<html>Client Challenge</html>"
+        assert self._download(tmp_path, html, nav_body=b"%PDF-1.5 real") is True
+        assert (tmp_path / "out.pdf").read_bytes() == b"%PDF-1.5 real"
+
+    def test_navigation_download_that_is_not_pdf_rejected(self, tmp_path):
+        html = b"<html>Client Challenge</html>"
+        assert self._download(tmp_path, html, nav_body=b"<html>still a wall</html>") is False
+        assert not (tmp_path / "out.pdf").exists()

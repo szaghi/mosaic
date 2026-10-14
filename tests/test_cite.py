@@ -415,3 +415,41 @@ class TestResolvePaper:
         ):
             with pytest.raises(httpx.HTTPStatusError):
                 resolve_paper("10.9999/bad", mock_cache)
+
+
+class TestPaperForDownload:
+    """DOI downloads are named from real metadata, never blocked by a lookup failure."""
+
+    def test_cache_hit_makes_no_request(self, tmp_cache, paper):
+        from mosaic.cite import paper_for_download
+
+        tmp_cache.save(paper)
+        with patch("mosaic.cite.fetch_paper_by_doi") as fetch:
+            got = paper_for_download(paper.doi, tmp_cache)
+        fetch.assert_not_called()
+        assert got.title == paper.title
+
+    def test_crossref_metadata_used_and_cached(self, tmp_cache):
+        from mosaic.cite import paper_for_download
+        from mosaic.models import Paper
+
+        real = Paper(
+            title="Hall thruster PIC benchmark",
+            doi="10.1/x",
+            year=2019,
+            authors=["Charoy T"],
+            source="Crossref",
+        )
+        with patch("mosaic.cite.fetch_paper_by_doi", return_value=real):
+            got = paper_for_download("10.1/x", tmp_cache, "me@uni.edu")
+        assert (got.title, got.year) == ("Hall thruster PIC benchmark", 2019)
+        assert tmp_cache.get_by_uid(real.uid) is not None
+
+    def test_lookup_failure_returns_stub(self, tmp_cache):
+        import httpx
+
+        from mosaic.cite import paper_for_download
+
+        with patch("mosaic.cite.fetch_paper_by_doi", side_effect=httpx.ConnectError("down")):
+            got = paper_for_download("10.1/x", tmp_cache)
+        assert (got.title, got.doi, got.source) == ("10.1/x", "10.1/x", "manual")

@@ -101,7 +101,7 @@ mosaic get --from refs.bib --oa-only
 mosaic get --from refs.bib --download-dir ~/papers
 ```
 
-MOSAIC extracts every `doi = {…}` field from `.bib` files (no extra dependency) or reads the `doi` column from `.csv` files, deduplicates, and prints a per-entry result followed by a summary:
+MOSAIC extracts every `doi = {…}` field from `.bib` files (no extra dependency) or reads the `doi` column from `.csv` files, and deduplicates. Each DOI's title, authors and year are looked up on Crossref (cached papers skip the lookup), so files are named as in a normal search rather than after the bare DOI. It then prints a per-entry result followed by a summary:
 
 ```
 Found 42 DOI(s) in refs.bib

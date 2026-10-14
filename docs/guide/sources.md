@@ -647,7 +647,9 @@ Unpaywall is not a search source — it is a resolver used during download. For 
 GET https://api.unpaywall.org/v2/{doi}?email=you@example.com
 ```
 
-Unpaywall checks 50 000+ repositories (PubMed Central, institutional repos, author pages, preprint servers) and returns the `best_oa_location.url_for_pdf` if a legal copy exists.
+Unpaywall checks 50 000+ repositories (PubMed Central, institutional repos, author pages, preprint servers) and lists every legal open-access copy it knows. MOSAIC tries them in order, best location first, then the others, until one returns a PDF. Publisher-hosted copies are often behind bot walls (MDPI, Springer and IOP block scripted downloads even for open-access papers), while a repository copy of the same paper usually downloads fine. HAL landing pages (`hal.science/hal-…`) are mapped to their `/document` PDF.
+
+When every open-access copy is walled, the browser-session step ([Authenticated Access](./authenticated-access)) navigates a real headless browser to the PDF, which gets past JavaScript challenges such as Springer's. IOP serves headless browsers an HTML page instead, so IOP PDFs need a manual download.
 
 Every download, whatever its origin, is checked for the PDF signature (`%PDF-`) before it is saved. Publisher bot-checks and landing pages often answer `200 OK` with HTML; those are rejected, MOSAIC tries the next strategy, and the failure is recorded as `error: not a pdf (text/html)` rather than as a successful download.
 

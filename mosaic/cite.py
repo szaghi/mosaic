@@ -135,6 +135,21 @@ def resolve_paper(doi: str, cache: object, email: str = "") -> Paper:
     return paper
 
 
+def paper_for_download(doi: str, cache: object, email: str = "") -> Paper:
+    """Like :func:`resolve_paper`, but never raises.
+
+    Used before downloading by DOI so the file is named from real metadata
+    (year, author, title) instead of ``0000_manual_..._Unknown_<doi>``. If
+    Crossref is unreachable or does not know the DOI, a stub is returned and
+    the download proceeds anyway.
+    """
+    try:
+        return resolve_paper(doi, cache, email)
+    except Exception:
+        _log.debug("No Crossref metadata for %s; downloading with a stub", doi, exc_info=True)
+        return Paper(title=doi, doi=doi, source="manual")
+
+
 # ---------------------------------------------------------------------------
 # Citation formatting
 # ---------------------------------------------------------------------------

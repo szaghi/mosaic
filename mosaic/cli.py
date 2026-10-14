@@ -629,12 +629,11 @@ def get(
         rprint("[red]Provide a DOI argument or use --from <file> for bulk download.[/red]")
         raise typer.Exit(1)
 
-    from mosaic.models import Paper
+    from mosaic.cite import paper_for_download
 
-    _bare = Paper(title=doi, doi=doi, source="manual")
-    paper = cache.get_by_uid(_bare.uid) or _bare
-    if paper is not _bare:
-        rprint(f"[dim]Found in local cache: {paper.title[:80]}[/dim]")
+    paper = paper_for_download(doi, cache, cfg.get("unpaywall", {}).get("email", ""))
+    if paper.source != "manual":
+        rprint(f"[dim]{paper.title[:80]} ({paper.year or 'n.d.'})[/dim]")
     path = dl_paper(
         paper,
         cfg["download_dir"],
@@ -1566,7 +1565,7 @@ def _bulk_download(
     obsidian_folder: str = "",
 ) -> None:
     from mosaic.bulk import read_dois
-    from mosaic.models import Paper
+    from mosaic.cite import paper_for_download
 
     if not from_file.exists():
         rprint(f"[red]File not found: {from_file}[/red]")
@@ -1595,8 +1594,7 @@ def _bulk_download(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=False
     ) as prog:
         for doi in dois:
-            _bare = Paper(title=doi, doi=doi, source="manual")
-            paper = cache.get_by_uid(_bare.uid) or _bare
+            paper = paper_for_download(doi, cache, email)
             papers_list.append(paper)
             task = prog.add_task(f"{doi}…")
             path = dl_paper(paper, download_dir, cache, email, pattern)

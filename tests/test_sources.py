@@ -3,6 +3,8 @@
 import contextlib
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from mosaic.models import SearchFilters
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -1519,6 +1521,59 @@ class TestUnpaywall:
         from mosaic.sources.unpaywall import resolve
 
         assert resolve("10.1/x", "") is None
+
+    def test_candidates_include_every_oa_location_in_order(self):
+        """Publisher copies are often bot-walled; repository copies must be tried too."""
+        from mosaic.sources.unpaywall import candidates
+
+        data = {
+            "is_oa": True,
+            "best_oa_location": {
+                "url_for_pdf": "https://www.mdpi.com/x/pdf",
+                "url": "https://www.mdpi.com/x/pdf",
+            },
+            "oa_locations": [
+                {"url_for_pdf": "https://www.mdpi.com/x/pdf"},
+                {"url_for_pdf": "https://arpi.unipi.it/bitstream/1/a.pdf"},
+                {"url_for_pdf": None, "url": "https://example.org/landing"},
+            ],
+        }
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            urls = candidates("10.3390/x", "test@example.com")
+        assert urls == ["https://www.mdpi.com/x/pdf", "https://arpi.unipi.it/bitstream/1/a.pdf"]
+
+    @pytest.mark.parametrize(
+        ("landing", "expected"),
+        [
+            ("https://hal.science/hal-02877468", "https://hal.science/hal-02877468/document"),
+            ("https://hal.science/hal-02877468v2/", "https://hal.science/hal-02877468v2/document"),
+            (
+                "https://hal.archives-ouvertes.fr/tel-01234567",
+                "https://hal.archives-ouvertes.fr/tel-01234567/document",
+            ),
+            ("https://hal.science/search/index", None),
+            ("https://nothal.science.example.com/hal-02877468", None),
+        ],
+    )
+    def test_hal_landing_page_mapped_to_document(self, landing, expected):
+        from mosaic.sources.unpaywall import _hal_document
+
+        assert _hal_document(landing) == expected
+
+    def test_hal_only_location_yields_document_url_before_landing(self):
+        from mosaic.sources.unpaywall import candidates
+
+        data = {
+            "is_oa": True,
+            "best_oa_location": {"url_for_pdf": None, "url": "https://hal.science/hal-02877468"},
+            "oa_locations": [{"url_for_pdf": None, "url": "https://hal.science/hal-02877468"}],
+        }
+        with patch("httpx.get", return_value=_mock_get(json_data=data)):
+            urls = candidates("10.1063/5.0003978", "test@example.com")
+        assert urls == [
+            "https://hal.science/hal-02877468/document",
+            "https://hal.science/hal-02877468",
+        ]
 
     def test_returns_none_on_http_error(self):
         from mosaic.sources.unpaywall import resolve

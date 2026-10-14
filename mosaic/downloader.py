@@ -25,7 +25,7 @@ def download(
 ) -> str | None:
     """
     Download PDF for a paper. Returns local path on success, None on failure.
-    Tries: 1) known pdf_url  2) Unpaywall lookup by DOI  3) browser session
+    Tries: 1) known pdf_url  2) every Unpaywall OA location  3) browser session
     """
     rec = cache.get_download(paper.uid)
     if rec and rec["status"] == "ok":
@@ -53,9 +53,12 @@ def download(
             log.debug("Direct PDF download failed for %s", pdf_url, exc_info=True)
 
     # ── step 2: Unpaywall ─────────────────────────────────────────────────────
+    # Try every OA location: publisher copies are often bot-walled while a
+    # repository copy of the same paper downloads fine.
     if paper.doi and unpaywall_email:
-        upw_url = unpaywall.resolve(paper.doi, unpaywall_email)
-        if upw_url:
+        for upw_url in unpaywall.candidates(paper.doi, unpaywall_email):
+            if upw_url == pdf_url:
+                continue  # already tried in step 1
             try:
                 _fetch(upw_url, str(dest))
                 cache.set_download(paper.uid, str(dest), "ok")
