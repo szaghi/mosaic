@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.7.2] — 2026-10-14
+### Fixed
+- **download**: Try every OA location, navigate browser to PDFs, name files from Crossref
+
+
 ## [1.7.1] — 2026-10-14
 ### Fixed
 - **packaging**: Notebooklm-py pin >=0.10 never existed; [all] was uninstallable
