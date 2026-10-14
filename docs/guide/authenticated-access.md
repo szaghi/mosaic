@@ -102,7 +102,9 @@ Hand-off of 3 paper(s) to your browser — watching /mnt/c/Users/me/Downloads fo
   ✓ 1-s2.0-S0094576517312663-main.pdf → 2018_Crossref_Acta_Astronautica_….pdf
 ```
 
-- **One paper at a time.** Only a PDF that appears *after* a paper is opened is filed for it, so files are never mixed up. Press **Enter** to skip a paper; each one waits up to 5 minutes.
+- **One paper at a time.** Only a PDF that appears *after* a paper is opened is filed for it, so files are never mixed up. Each paper waits up to 5 minutes; you don't need to press anything once the PDF has downloaded.
+- **Enter means "done with this paper".** MOSAIC still checks for a few seconds, and for as long as a download is visibly in progress, before moving on, so pressing Enter right after clicking Download does not lose the file. Press Enter without downloading to skip a paper.
+- **A PDF that was not picked up** (downloaded after MOSAIC moved on) can be filed afterwards with [`mosaic import`](./usage#file-pdfs-you-downloaded-yourself).
 - **Downloads folder.** Detected automatically: on WSL, MOSAIC asks Windows for its Downloads folder (even if it has been moved, e.g. into OneDrive); on Linux it uses `xdg-user-dir`. Override it with `--watch-dir PATH`.
 - **The file is moved**, not copied, out of Downloads. Unfinished downloads (`.crdownload`, `.part`) and non-PDF files are ignored. If Windows keeps the original locked (e.g. while antivirus scans it), your filed copy is kept and the original is left in Downloads.
 - Nothing is automated in your browser: it is an ordinary download that you make yourself.

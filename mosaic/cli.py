@@ -699,6 +699,57 @@ def get(
             pass  # auto-index failures are always silent
 
 
+@app.command("import")
+def import_cmd(
+    files: Annotated[list[Path], typer.Argument(help="PDF file(s) to file into the library")],
+    doi: Annotated[
+        str,
+        typer.Option("--doi", help="DOI of the paper (only with a single file; default: detect)"),
+    ] = "",
+    download_dir: Annotated[
+        str, typer.Option("--download-dir", help="Library folder (default: config download_dir)")
+    ] = "",
+    force: Annotated[
+        bool, typer.Option("--force", help="Replace a PDF already filed under the same name")
+    ] = False,
+) -> None:
+    """Move PDFs you downloaded yourself into the library, named and recorded like `get`.
+
+    The DOI is detected from the PDF's metadata, from a ScienceDirect file name
+    (1-s2.0-<PII>-main.pdf), or from the content when it names exactly one DOI.
+    """
+    from mosaic.importer import PdfImportError, import_pdf
+
+    if doi and len(files) > 1:
+        rprint("[red]--doi applies to a single file.[/red]")
+        raise typer.Exit(1)
+    cfg = cfg_mod.load()
+    if download_dir:
+        cfg["download_dir"] = download_dir
+    cache = Cache(cfg["db_path"])
+
+    failures = 0
+    for f in files:
+        try:
+            res = import_pdf(f.expanduser(), cache, cfg, doi=doi or None, force=force)
+        except PdfImportError as e:
+            failures += 1
+            rprint(f"  [red]✗[/red] {e}")
+            continue
+        note = (
+            ""
+            if res.original_removed or res.dest == f
+            else " [dim](original left in place: file locked)[/dim]"
+        )
+        rprint(
+            f"  [green]✓[/green] {f.name} → {res.dest}"
+            f"\n    [dim]{res.paper.title[:90]} ({res.paper.year or 'n.d.'}) — DOI {res.paper.doi}, "
+            f"found via {res.doi_source}[/dim]{note}"
+        )
+    if failures:
+        raise typer.Exit(1)
+
+
 _CITE_STYLES = ["bibtex", "apa", "mla", "chicago", "harvard", "vancouver"]
 
 
@@ -1618,7 +1669,10 @@ def _handoff_retry(papers: list, cfg: dict, cache: Cache, watch_dir: Path | None
 
     def announce(n: int, total: int, label: str, url: str) -> None:
         rprint(f"\n[bold]\\[{n}/{total}][/bold] {label}\n  [dim]{url}[/dim]")
-        rprint("  Opened in your browser: download the PDF there. [dim]Enter here skips.[/dim]")
+        rprint(
+            "  Opened in your browser: download the PDF there. "
+            "[dim]Press Enter when done, or to skip this paper.[/dim]"
+        )
 
     def report(key: str, path: str | None, original: str | None) -> None:
         if path:

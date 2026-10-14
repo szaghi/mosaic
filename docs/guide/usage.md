@@ -115,6 +115,29 @@ Done: 35 downloaded, 4 failed, 3 skipped (no OA copy)
 
 ![Bulk download from BibTeX demo](/gifs/12_bulk_get.gif)
 
+## File PDFs you downloaded yourself
+
+`mosaic import` moves PDFs you already have into the library, named and recorded exactly as if `mosaic get` had downloaded them:
+
+```bash
+mosaic import ~/Downloads/1-s2.0-S0376042106000029-main.pdf
+mosaic import ~/Downloads/*.pdf --download-dir ~/papers/project
+mosaic import scan.pdf --doi 10.1016/j.paerosci.2006.01.001
+```
+
+```
+  ✓ 1-s2.0-S0376042106000029-main.pdf → ~/papers/project/2005_Crossref_Progress_in_Aerospace_Sciences_Boyd_Numerical_modeling_of_….pdf
+    Numerical modeling of spacecraft electric propulsion thrusters (2005) — DOI 10.1016/j.paerosci.2006.01.001, found via filename
+```
+
+The DOI is detected automatically, in this order:
+
+1. the document's own DOI in the PDF metadata;
+2. the article ID in a ScienceDirect download name (`1-s2.0-<PII>-main.pdf`), looked up on Crossref;
+3. a DOI in the content, but only if exactly one appears (a reference list names many, so several means "unknown").
+
+If none applies, MOSAIC asks for `--doi`. Title, authors and year come from the cache or Crossref. Files that are not PDFs are rejected and left alone. An existing PDF with the same name is not overwritten without `--force`; an HTML page saved by versions before 1.6 is replaced. The paper is recorded in the cache, so `mosaic cache verify` and `mosaic index` see it.
+
 ## Filter by year
 
 ```bash

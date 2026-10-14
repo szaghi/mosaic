@@ -103,11 +103,26 @@ class DownloadWatcher:
         self.folder = folder
         self._before: dict[str, tuple[int, float]] = {}
         self._sizes: dict[str, int] = {}
+        self._pending: set[str] = set()
 
     def arm(self) -> None:
         """Remember what is already there; only later arrivals count."""
         self._before = _snapshot(self.folder)
         self._sizes = {}
+        self._pending = set()
+
+    def downloading(self) -> bool:
+        """True while a download is under way since :meth:`arm`.
+
+        That is, a partial file (``.crdownload``, ``.part``, ...) exists, or a
+        finished-looking file was seen once and awaits its confirming poll.
+        """
+        if self._pending:
+            return True
+        return any(
+            name.lower().endswith(_PARTIAL_SUFFIXES) and name not in self._before
+            for name in _snapshot(self.folder)
+        )
 
     def poll(self) -> Path | None:
         """Return a completed new PDF, or None.
@@ -126,7 +141,9 @@ class DownloadWatcher:
             size = stat[0]
             if size == 0 or self._sizes.get(name) != size:
                 self._sizes[name] = size  # still growing, or first sighting
+                self._pending.add(name)
                 continue
+            self._pending.discard(name)
             path = self.folder / name
             if is_pdf_file(path):
                 return path
@@ -162,6 +179,26 @@ def _collect(src: Path, dest: str, unlink_wait_s: float = 5.0) -> bool:
             time.sleep(0.5)
 
 
+_IN_PROGRESS_MAX_S = 120.0
+
+
+def _final_check(watcher: DownloadWatcher, grace_s: float, poll_s: float) -> Path | None:
+    """Keep polling after Enter for a download that is finishing.
+
+    Waits *grace_s*, extended up to ``_IN_PROGRESS_MAX_S`` while a partial
+    download file shows the browser is still writing.
+    """
+    start = time.monotonic()
+    while True:
+        found = watcher.poll()
+        if found:
+            return found
+        elapsed = time.monotonic() - start
+        if elapsed >= _IN_PROGRESS_MAX_S or (elapsed >= grace_s and not watcher.downloading()):
+            return None
+        time.sleep(poll_s)
+
+
 def _enter_pressed(timeout: float) -> bool:
     """Wait up to *timeout* s; return True if the user pressed Enter (TTY only)."""
     if not sys.stdin.isatty():
@@ -180,6 +217,7 @@ def handoff_download(
     *,
     wait_s: float = 300,
     poll_s: float = 1.0,
+    grace_s: float = 8.0,
     on_result: Callable[[str, str | None, str | None], None] | None = None,
     opener: Callable[[str], bool] = open_in_browser,
     announce: Callable[[int, int, str, str], None] | None = None,
@@ -214,6 +252,10 @@ def handoff_download(
         deadline = time.monotonic() + wait_s
         while time.monotonic() < deadline:
             if _enter_pressed(poll_s):
+                # Enter means "done with this paper", and users press it right
+                # after clicking Download: give a just-finished file the two
+                # stable polls it needs instead of discarding it.
+                found = _final_check(watcher, grace_s, poll_s)
                 break
             found = watcher.poll()
             if found:

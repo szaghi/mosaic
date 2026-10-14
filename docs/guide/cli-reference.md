@@ -229,6 +229,24 @@ mosaic search "diffusion model" --semantic --downloaded-only   # only papers on 
 
 ---
 
+### `import`
+
+Move PDFs you downloaded yourself into the library, named and recorded like `get`.
+
+```
+mosaic import [OPTIONS] FILES...
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--doi` | str | detect | DOI of the paper (single file only) |
+| `--download-dir` | path | config | Library folder |
+| `--force` | flag | off | Replace a PDF already filed under the same name |
+
+DOI detection: PDF metadata, then a ScienceDirect file name (`1-s2.0-<PII>-main.pdf`), then a single DOI in the content. See [Usage → File PDFs you downloaded yourself](./usage#file-pdfs-you-downloaded-yourself). Exits with code 1 if any file could not be imported.
+
+---
+
 ### `cite`
 
 Fetch and format a citation string for a paper by DOI.

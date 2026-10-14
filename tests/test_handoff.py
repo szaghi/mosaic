@@ -276,3 +276,78 @@ class TestCollect:
         with patch.object(Path, "unlink", flaky):
             assert _collect(src, str(tmp_path / "lib" / "x.pdf"), unlink_wait_s=3) is True
         assert not src.exists()
+
+
+class TestEnterMeansDone:
+    """Users press Enter right after clicking Download: that must not discard the file."""
+
+    def test_pdf_finishing_after_enter_is_still_filed(self, tmp_path):
+        from mosaic import handoff as ho
+
+        downloads = tmp_path / "Downloads"
+        downloads.mkdir()
+
+        def opener(url):
+            def write():
+                time.sleep(0.15)  # lands after the user's Enter
+                (downloads / "main.pdf").write_bytes(PDF)
+
+            threading.Thread(target=write, daemon=True).start()
+            return True
+
+        presses = iter([True])  # Enter on the first poll
+        with patch.object(
+            ho, "_enter_pressed", side_effect=lambda t: next(presses, False) or time.sleep(t)
+        ):
+            out = handoff_download(
+                [("k", "L", "https://x", str(tmp_path / "x.pdf"))],
+                downloads,
+                wait_s=10,
+                poll_s=0.05,
+                grace_s=1.0,
+                opener=opener,
+            )
+        assert out == {"k": str(tmp_path / "x.pdf")}
+
+    def test_enter_with_no_download_skips_after_grace(self, tmp_path):
+        from mosaic import handoff as ho
+
+        with patch.object(ho, "_enter_pressed", return_value=True):
+            t0 = time.monotonic()
+            out = handoff_download(
+                [("k", "L", "https://x", str(tmp_path / "x.pdf"))],
+                tmp_path,
+                wait_s=10,
+                poll_s=0.05,
+                grace_s=0.3,
+                opener=lambda u: True,
+            )
+        assert out == {}
+        assert time.monotonic() - t0 < 2  # skipped promptly, not after wait_s
+
+    def test_grace_extended_while_browser_is_still_writing(self, tmp_path):
+        from mosaic import handoff as ho
+
+        def opener(url):
+            def write():
+                (tmp_path / "big.pdf.crdownload").write_bytes(PDF[:10])
+                time.sleep(0.8)  # longer than grace_s
+                (tmp_path / "big.pdf.crdownload").write_bytes(PDF)
+                (tmp_path / "big.pdf.crdownload").rename(tmp_path / "big.pdf")
+
+            threading.Thread(target=write, daemon=True).start()
+            return True
+
+        presses = iter([False, True])
+        with patch.object(
+            ho, "_enter_pressed", side_effect=lambda t: next(presses, False) or time.sleep(t)
+        ):
+            out = handoff_download(
+                [("k", "L", "https://x", str(tmp_path / "lib" / "x.pdf"))],
+                tmp_path,
+                wait_s=10,
+                poll_s=0.05,
+                grace_s=0.2,
+                opener=opener,
+            )
+        assert out == {"k": str(tmp_path / "lib" / "x.pdf")}
