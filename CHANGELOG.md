@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.8.0] — 2026-10-14
+### Added
+- **get**: --handoff to the user's own browser; fix Elsevier landing URL
+
+
 ## [1.7.3] — 2026-10-14
 ### Added
 - **get**: --interactive headed-browser retry; honest session status
