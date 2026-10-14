@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.9.2] — 2026-10-14
+### Fixed
+- **import**: Scan the whole PDF for DOI metadata
+
+
 ## [1.9.0] — 2026-10-14
 ### Added
 - **import**: File user-downloaded PDFs into the library; Enter no longer skips a finishing hand-off
