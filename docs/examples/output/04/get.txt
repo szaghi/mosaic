@@ -1,0 +1,3 @@
+$ mosaic get 10.3389/fphy.2019.00140
+Numerical Study of Electron Cyclotron Drift Instability: Application to Hall Thruster (2019)
+Saved: ~/mosaic-papers/2019_DOAJ_Zahra_Numerical_Study_of_Electron_Cyclotron_Drift_Instability_Appl.pdf

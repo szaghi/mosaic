@@ -2,144 +2,54 @@
 title: Compare Papers
 ---
 
-# Compare Papers (`mosaic compare`)
+# Compare papers
 
-`mosaic compare` generates a structured comparison table across a set of cached papers.  When an LLM is configured, it extracts researcher-defined dimensions (method, dataset, metric, result by default) from each paper's title and abstract.  Without an LLM, only metadata fields (year, source, journal, DOI) are populated.
+`mosaic compare` puts cached papers side by side in a table, one row per paper and one column per dimension you
+name: method, dataset, code, key finding. The language model of `[llm]` reads each title and abstract and fills the
+cells. Without one, mosaic fills only the columns it has as metadata.
 
-## Quickstart
+## Usage
 
 ```bash
-# Compare top-cited cached papers on diffusion models (LLM required for method/dataset/metric/result)
-mosaic compare --query "diffusion models" --sort citations -n 15
-
-# Save to Markdown
-mosaic compare --query "transformer attention" --output comparison.md
-
-# Compare papers from a BibTeX file along custom axes
-mosaic compare --from refs.bib --dimensions "method,dataset,BLEU,limitations"
-
-# Export as CSV or JSON
-mosaic compare --query "protein folding" --output comparison.csv
-mosaic compare --query "protein folding" --output comparison.json
+mosaic compare --query "hall thruster" -n 10                          # cached papers matching every word
+mosaic compare --query "hall thruster" --sort citations -n 10         # the 10 most cited of them
+mosaic compare --from refs.bib --dimensions "method,geometry,code,key finding"
+mosaic compare --query "hall thruster" -n 10 --output hall.md         # also write Markdown (.csv, .json)
 ```
 
-## Options
+The papers come from the cache: with `--query`, those whose title or abstract contains every word; with `--from`,
+those of a `.bib` or `.csv` file that are in the cache (run `mosaic get --from` first for the others); with neither,
+the whole cache. `--sort citations` or `--sort year` orders them before `--max` (`-n`, default 20) keeps the first
+ones. The default dimensions are `method,dataset,metric,result`.
 
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--query TEXT` | `-q` | | Filter papers from the cache by title/abstract |
-| `--from FILE` | | | Load papers from a `.bib` or `.csv` file |
-| `--max INT` | `-n` | `20` | Maximum number of papers to compare |
-| `--dimensions TEXT` | | `method,dataset,metric,result` | Comma-separated comparison axes |
-| `--output FILE` | `-o` | | Write table to file (`.md`, `.csv`, `.json`) |
-| `--sort TEXT` | | | Pre-sort papers: `citations` (most cited first) or `year` (newest first) |
+The terminal always shows the table (number, title, year, authors, then your dimensions); `--output` writes it as
+well, as a Markdown table, CSV with a header row, or a JSON list with one object per paper.
 
 ## How it works
 
-### Paper selection
+With a language model configured (see [setting up the models](./rag#setting-up-the-models)), mosaic sends the papers
+in batches of 20, each as its title and the first 300 characters of its abstract, and asks for a JSON list of
+objects with exactly your dimensions as keys, `-` where the text says nothing. Any dimension name works: the model
+reads it as a question about the abstract.
 
-Papers are taken from the local cache in three ways:
+Without a model, mosaic says so in one line and fills the table from metadata. When a request fails or the reply is
+not JSON, it falls back to metadata for the whole table and logs a warning (shown with `mosaic --verbose`). These dimension
+names are filled from the cache, every other one is `–`:
 
-1. **`--query`** — full-text search on title and abstract.
-2. **`--from FILE`** — DOIs extracted from a `.bib` or `.csv` file, then looked up in the cache.
-3. **No filter** — all cached papers, up to `--max`.
+| Dimension | Filled from |
+|---|---|
+| `year` | the publication year |
+| `source` | the source that returned the paper |
+| `journal` | the journal |
+| `doi` | the DOI |
+| `authors` | the short author list (`Reza et al.`) |
+| `citations`, `citation_count`, `cited` | the citation count, when a source reported one |
 
-After filtering, papers are optionally sorted by citation count or year and truncated to `--max`.
+## Limits
 
-### LLM extraction
+- The model sees 300 characters of each abstract, not the paper. A cell can only be as good as that text, and a
+  model can misread it: treat the table as a first pass to check against the papers.
+- Each batch of 20 papers is one request; a local model on a large selection takes minutes.
+- Wide tables wrap in the terminal. Write `--output table.md` or `.csv` for more than five or six dimensions.
 
-When `[llm] api_key` and `[llm] provider` are set in the config, MOSAIC sends batches of 20 papers to the LLM with a structured prompt:
-
-```
-For each paper below extract the following dimensions: "method", "dataset", "metric", "result".
-Return a JSON array of exactly N objects. Each object must have exactly these keys: …
-Use "-" when a dimension cannot be inferred from the title or abstract.
-```
-
-The LLM fills in each field from the title and abstract (up to 300 characters).  Unavailable fields are marked `–`.
-
-::: tip Configure LLM
-```bash
-mosaic config --llm-provider openai --llm-api-key sk-...
-# or Anthropic:
-mosaic config --llm-provider anthropic --llm-api-key sk-ant-...
-```
-:::
-
-### Metadata-only fallback
-
-Without an LLM, or when the LLM call fails, MOSAIC falls back to extracting fields that are directly available in the cache:
-
-| Dimension name | Extracted from |
-|----------------|---------------|
-| `year` | `paper.year` |
-| `source` | `paper.source` |
-| `journal` | `paper.journal` |
-| `doi` | `paper.doi` |
-| `authors` | `paper.short_authors` |
-| `citations` / `citation_count` / `cited` | `paper.citation_count` |
-| anything else | `–` |
-
-### Output formats
-
-| Extension | Format |
-|-----------|--------|
-| terminal (default) | Rich table |
-| `.md` / `.markdown` | Markdown table |
-| `.csv` | CSV with header row |
-| `.json` | JSON array, one object per paper |
-
-The terminal table is always printed; `--output` saves a copy to disk in addition.
-
-## Examples
-
-### Terminal output
-
-```
-mosaic compare --query "diffusion models" --sort citations -n 5
-```
-
-```
- #  Title                          Year  Authors          Method              Dataset      Metric  Result
- 1  DDPM                           2020  Ho et al.        Denoising diffusion  CIFAR-10    FID     3.17
- 2  Stable Diffusion               2022  Rombach et al.   Latent diffusion     LAION-5B    FID     12.6
- 3  DALL-E 2                       2022  Ramesh et al.    Hierarchical GLIDE   COCO        FID     10.39
-…
-```
-
-### Markdown table
-
-```markdown
-| # | Title | Year | Authors | Method | Dataset | Metric | Result |
-|---|-------|------|---------|--------|---------|--------|--------|
-| 1 | DDPM  | 2020 | Ho et al. | Denoising diffusion | CIFAR-10 | FID | 3.17 |
-```
-
-### Custom dimensions
-
-```bash
-mosaic compare --from refs.bib --dimensions "task,architecture,training_data,main_limitation"
-```
-
-Any dimension name works; the LLM will attempt to extract it from the abstract.
-
-## Limitations
-
-- Accuracy depends on what is stated in the abstract.  Full-text extraction is not yet supported.
-- Batching is limited to 20 papers per LLM call; larger sets take proportionally longer.
-- Very long tables (>50 rows) can be hard to read in the terminal — use `--output` to save as Markdown or CSV.
-
-## Workflow example
-
-```bash
-# Step 1: collect papers
-mosaic search "graph neural networks" -n 50
-
-# Step 2: compare top-cited methods
-mosaic compare --query "graph neural networks" --sort citations -n 20 \
-               --dimensions "task,gnn_type,dataset,accuracy" \
-               --output gnn-comparison.md
-
-# Step 3: visualise the citation network of the same corpus
-mosaic network --query "graph neural networks" --cluster --output gnn-network.md
-```
+See also: [tutorial chapter 8](/tutorial/08-local-model), [recipes](/cookbook/ai), [`mosaic compare`](/reference/compare).

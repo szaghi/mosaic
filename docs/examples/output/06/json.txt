@@ -1,0 +1,6 @@
+$ mosaic search "hall thruster particle-in-cell" --cached --json | jq -r '.papers[] | "\(.year)  \(.doi)"' | head -n 5
+2023  10.1088/1361-6595/acdea3
+2023  10.1063/5.0143292
+2022  10.48550/arXiv.2206.13892
+2022  10.1063/5.0090853
+2023  10.3390/aerospace10010044

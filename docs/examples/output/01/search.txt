@@ -1,0 +1,31 @@
+$ mosaic search "hall thruster particle-in-cell" --max 5
+
+ #     Title                             Authors       Year   DOI                 Source         OA     PDF       Cited
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Plasma Diagnostic and             Jose          2004   10.48550/arXiv.ph   arXiv          yes    ✓             –
+       Performance of a Permanent        Leonardo             ysics/0410170
+       Magnet Hall Thruster              Ferreira et
+                                         al.
+ 2     Reduced-order particle-in-cell    Maryam Reza   2023   10.1088/1361-6595   arXiv          yes    ✓             –
+       simulations of a high-power       et al.               /acdea3
+       magnetically shielde…
+ 3     Effects of the neutral dynamics   Farbod        2023   10.1063/5.0143292   arXiv          yes    ✓             –
+       model on the particle-in-cell     Faraji et
+       simulations of a …                al.
+ 4     Dimensionality reduction of       Maryam Reza   2022   10.48550/arXiv.22   arXiv          yes    ✓             –
+       Poisson's equation with           et al.               06.13892
+       application to particle-in-…
+ 5     Enhancing one-dimensional         Farbod        2022   10.1063/5.0090853   arXiv          yes    ✓             –
+       particle-in-cell simulations to   Faraji et
+       self-consistently res…            al.
+ 6     PIC-DSMC Simulation of a Hall     Sang Hun      2023   10.3390/aerospace   DOAJ           yes    ✓             –
+       Thruster Plume with Charge        Kang                 10010044
+       Exchange Effects Using…
+ 7     Effects of Magnetic Field         Qi Liu et     2023   10.3390/aerospace   DOAJ           yes    ✓             –
+       Gradient on the Performance of    al.                  10110942
+       a Magnetically Shielde…
+  ⋮  (101 lines not shown)
+ 41    Modeling of surface-dominated     Taccogna F    2008   10.1063/1.2802565   PubMed         no     –             –
+       plasmas: from electric thruster   et al.
+       to negative ion s…
+41 result(s)

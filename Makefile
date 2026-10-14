@@ -17,13 +17,13 @@ test: dev
 
 ## Check linting (no fixes)
 lint: dev
-	$(VENV)/bin/ruff check mosaic/ tests/
-	$(VENV)/bin/ruff format --check mosaic/ tests/
+	$(VENV)/bin/ruff check mosaic/ tests/ docs/scripts/
+	$(VENV)/bin/ruff format --check mosaic/ tests/ docs/scripts/
 
 ## Auto-fix lint and format
 fmt: dev
-	$(VENV)/bin/ruff check --fix mosaic/ tests/
-	$(VENV)/bin/ruff format mosaic/ tests/
+	$(VENV)/bin/ruff check --fix mosaic/ tests/ docs/scripts/
+	$(VENV)/bin/ruff format mosaic/ tests/ docs/scripts/
 
 ## Remove build artifacts
 clean:

@@ -4,246 +4,120 @@ title: Cache Management
 
 # Cache Management
 
-Every `search`, `similar`, and `get` run automatically saves results to a local SQLite database (`~/.local/share/mosaic/cache.db`). Over time this cache becomes a rich, queryable library of papers you have already discovered.
+Every paper mosaic shows you is saved in a local SQLite database, `~/.local/share/mosaic/cache.db`. The cache is
+your library: you search it offline, export it, index it for [questions](./rag), and it remembers which PDFs you
+downloaded. `mosaic cache` inspects and maintains it.
 
-The `mosaic cache` subcommand lets you inspect, search, and maintain that library — with no network requests needed.
-
-## Quick overview
-
-```bash
-mosaic cache stats          # summary of what's stored
-mosaic cache list           # browse cached papers
-mosaic cache show <id>      # full record for one paper
-mosaic cache verify         # check which PDF files still exist on disk
-mosaic cache clean          # remove stale download records
-mosaic cache clear          # wipe the whole cache
-mosaic cache export out.csv # bulk export to file
-```
-
-![Cache management demo](/gifs/11_cache.gif)
-
-## stats
-
-Print a summary of the cache contents:
+## Usage
 
 ```bash
-mosaic cache stats
+mosaic cache stats                  # what is stored
+mosaic cache list -n 20             # the newest papers
+mosaic cache show 10.3390/aerospace10010044
+mosaic cache verify                 # do the downloaded PDFs still exist?
+mosaic cache clean                  # forget downloads whose files are gone
+mosaic cache export library.bib     # everything, to a file
+mosaic cache clear                  # wipe it (asks first)
+mosaic search "thruster simulation" --cached   # search it, offline
 ```
 
-```
-Cache stats
-  Papers          312
-  With abstract   278
-  With PDF URL     94
-  Open access     201
-  Downloaded       47
-  Searches        128
-  Exports          12
-  DB size         1.2 MB
-```
+## What gets cached
 
-## list
+- every result of `mosaic search`, `mosaic similar` and `mosaic watch run`;
+- the Crossref record of each DOI you `mosaic get` or `mosaic import` that was not cached yet;
+- a download record per paper: the local file and its status (`ok`, or `error: <reason>`);
+- every live search (`search` without `--cached` or `--semantic`, from the command line or the web UI), counted by
+  `cache stats` as "Searches logged";
+- the vector index and citation edges built by `mosaic index`.
 
-Browse papers stored in the cache, newest-first:
+Move the database with `mosaic config --db-path PATH`.
+
+## Inspecting
+
+<<< @/examples/output/03/stats.txt{console}
+
+`cache list` shows the newest papers first; `--query` (`-q`) keeps those whose title or abstract contains every
+word of the query, and `--offset` pages through the rest:
+
+<<< @/examples/output/03/list.txt{console}
+
+`cache show` takes a DOI, an arXiv ID or a full uid (`doi:...`, `arxiv:...`), and prints the whole record, plus the
+local file and download status when the paper was downloaded or a download failed:
+
+<<< @/examples/output/03/show.txt{console}
+
+## Searching the cache
 
 ```bash
-mosaic cache list
-mosaic cache list --limit 20
-mosaic cache list --limit 20 --offset 40   # page 3 of 20
-mosaic cache list --query "attention"      # substring filter on title / abstract
+mosaic search "thruster simulation" --cached --sort year
+mosaic search "electron transport" --cached --year 2020-2026 --author Boeuf --oa-only
+mosaic search "" --cached --sort relevance          # the whole cache, ranked
 ```
 
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--limit` | `-n` | `20` | Max papers to show |
-| `--offset` | | `0` | Skip this many rows (for pagination) |
-| `--query` | `-q` | | Substring filter on title and abstract |
+`--cached` makes no network request. A paper matches when its title or abstract contains every word of the
+query, in any order and case: "thruster simulation" finds "Particle simulation of a Hall thruster". An empty
+query matches every paper. All the `search` filters, `--sort`, `--output` and `--download` apply.
+`--downloaded-only` keeps the papers whose PDF you have.
 
-Output format:
+`--semantic` searches the [vector index](./rag) by meaning instead of by words, once `mosaic index` has run.
 
-```
- #   Title                              Authors          Year   Source            OA    PDF   Downloaded
- 1   Attention Is All You Need          Vaswani et al.   2017   Semantic Scholar  yes   ✓     ✓
- 2   BERT: Pre-training…                Devlin et al.    2019   arXiv             yes   ✓     –
-...
-20 of 312 paper(s)
-```
+## How records are merged
 
-## show
+The same paper arrives from several sources: arXiv and Crossref, OpenAlex and Semantic Scholar. The cache keys
+papers by uid (the DOI, else the arXiv ID, else the PII, else the title) and merges a new record into the stored
+one field by field:
 
-Show the full cached record for a single paper identified by DOI or arXiv ID:
+| Field | Rule |
+|---|---|
+| `abstract` | the longer one |
+| `pdf_url` | the first one recorded is kept |
+| `is_open_access` | true wins |
+| `citation_count` | the higher one; unknown never replaces a number |
+| `authors` | the longer list |
+| `doi`, `arxiv_id`, `pii`, `journal`, `volume`, `issue`, `pages`, `url` | filled when empty, never overwritten |
+| `title`, `year`, `source` | the first one recorded is kept |
 
-```bash
-mosaic cache show 10.48550/arXiv.1706.03762
-mosaic cache show arxiv:1706.03762
-```
+A record only gains information from later searches.
 
-```
-Title        Attention Is All You Need
-Authors      Vaswani, Ashish; Shazeer, Noam; ...
-Year         2017
-DOI          10.48550/arxiv.1706.03762
-arXiv ID     1706.03762
-Journal      –
-Source       arXiv
-Open access  yes
-PDF URL      https://arxiv.org/pdf/1706.03762
-Citations    95 847
-Abstract     The dominant sequence transduction models...
+### `--prefer-cache`
 
-Download
-  Path       ~/mosaic-papers/2017_arXiv_Vaswani_Attention_Is_All_You_Need.pdf
-  Status     ok
-```
+`mosaic search --prefer-cache` replaces a freshly fetched paper by its cached record when that record is rich:
+it has an abstract, a year and at least one author. The table then shows the merged metadata of earlier runs
+instead of what one source returned this time.
 
-## verify
+## Maintenance
 
-Check that each tracked download still exists on disk **and is a real PDF**:
+### verify
 
 ```bash
 mosaic cache verify
 ```
 
-```
-45 file(s) OK, 1 missing, 1 not a PDF
- UID                        Problem     Path
- 10.18653/v1/n19-1423       missing     ~/mosaic-papers/2019_arXiv_Devlin_BERT.pdf
- 10.1038/s41586-021-03819   not a PDF   ~/mosaic-papers/2021_Nature_Jumper_Highly.pdf
-Run mosaic cache clean to drop these records; the next mosaic get retries them.
-```
+<<< @/examples/output/04/verify.txt{console}
 
-"Not a PDF" means the file is an HTML page (a publisher bot-check, "Client Challenge", or an abstract landing page) that versions before 1.6 saved under a `.pdf` name. Current versions reject such responses at download time.
+For every download recorded as `ok`, `verify` checks that the file exists and starts with the PDF signature. A
+"not a PDF" file is an HTML page (a bot check, a landing page) that versions before 1.6 saved under a `.pdf`
+name; current versions reject those when downloading. The problems are listed with their uid and path.
 
-## clean
+### clean
 
-Remove download records whose files are missing or are not PDFs:
+`mosaic cache clean` deletes the download records that `verify` flags. It never deletes files or paper metadata:
+the next `mosaic get` of those papers downloads them again.
 
-```bash
-mosaic cache clean
-```
-
-```
-Removed 2 stale download record(s).
-```
-
-Only records with `status=ok` are checked — failed downloads are left untouched. The paper metadata is never deleted, and neither are files on disk: only the download tracking entry is removed, so the next `mosaic get` downloads the paper again.
-
-## clear
-
-Wipe **all** papers, downloads, searches, and exports from the cache:
+### export
 
 ```bash
-mosaic cache clear          # asks for confirmation
-mosaic cache clear --yes    # skip the confirmation prompt
+mosaic cache export library.bib
+mosaic cache export thrusters.csv --query "hall thruster" --limit 100
 ```
 
-This is irreversible. PDF files already saved to disk are not deleted.
+The format follows the extension: `.bib`, `.ris`, `.csv`, `.json`, `.md` (a table) or `.markdown` (a section per
+paper), as for `search --output`. See [Exporting](/tutorial/06-exporting).
 
-## export
+### clear
 
-Bulk-export cached papers to a file. The format is inferred from the file extension:
+`mosaic cache clear` deletes papers, download records, the search and export logs, the vector index and the
+citation graph, after a confirmation (`--yes` skips it). Your PDF files and your [watches](./watch) stay.
 
-```bash
-mosaic cache export results.csv
-mosaic cache export refs.bib
-mosaic cache export refs.ris
-mosaic cache export papers.json
-mosaic cache export summary.md
-mosaic cache export report.markdown
-```
-
-| Extension | Format |
-|-----------|--------|
-| `.csv` | CSV table |
-| `.json` | JSON array |
-| `.bib` | BibTeX |
-| `.ris` | RIS (EndNote, Mendeley, RefWorks, Papers, …) |
-| `.md` | Markdown table |
-| `.markdown` | Markdown sections (one `##` per paper) |
-
-Export all papers at once, or filter first with `--query`:
-
-```bash
-mosaic cache export --query "diffusion" diffusion.bib
-```
-
-## Smart enrichment
-
-When the same paper arrives from multiple sources, MOSAIC merges the records using field-level rules rather than blindly overwriting:
-
-| Field | Rule |
-|-------|------|
-| `abstract` | Keep the longer version |
-| `pdf_url` | Preserve the first non-null value (never overwrite) |
-| `is_open_access` | `True` supersedes `False` |
-| `citation_count` | Keep the higher value; `null` treated as unknown |
-| `authors` | Keep the longer list |
-| `doi`, `arxiv_id`, `journal`, `volume`, `issue`, `pages`, `url` | Fill if empty, never overwrite |
-| `title`, `year`, `source` | Always keep the first-recorded value |
-
-This means every subsequent search enriches the existing records rather than degrading them.
-
-## Cache-first search (--prefer-cache)
-
-Pass `--prefer-cache` to a regular `search` to substitute rich cached records for freshly fetched ones:
-
-```bash
-mosaic search "transformer attention" --prefer-cache
-```
-
-When a fetched paper has a matching UID in the cache **and** the cached record is considered *rich* (has abstract + year + at least one author), MOSAIC uses the cached version instead of the freshly fetched one. This avoids redundant Unpaywall round-trips and preserves enriched metadata accumulated across earlier searches.
-
-A record is *rich* when it has:
-- A non-empty abstract
-- A known publication year
-- At least one author
-
-`--prefer-cache` can be combined with all other `search` flags:
-
-```bash
-# Use cache-enriched records, open-access only, sorted by citations
-mosaic search "protein folding" --prefer-cache --oa-only --sort citations
-```
-
-## Offline search
-
-### Keyword search — `--cached`
-
-Use `--cached` to search *only* the local cache — no network requests, no API keys needed, instant results:
-
-```bash
-mosaic search "attention mechanism" --cached
-mosaic search "protein folding" --cached --sort citations --oa-only
-```
-
-All the usual filters, sort, and export options still apply. See [Usage → Offline / cached search](./usage#offline-cached-search) for details.
-
-![Offline cached search demo](/gifs/14_cached_search.gif)
-
-### Semantic search — `--semantic`
-
-`--semantic` goes beyond keyword matching: it embeds the query with the same model used by
-`mosaic index` and retrieves the most similar papers from the vector index. Synonyms,
-paraphrases, and conceptual relationships are handled — even if the exact keywords are absent.
-
-```bash
-# Retrieve by meaning, not keyword overlap
-mosaic search "methods that learn without labels" --semantic
-
-# Only papers you have downloaded
-mosaic search "attention mechanism" --semantic --downloaded-only
-```
-
-The results table shows a **Sim.** column (0 – 1) showing the cosine-like similarity score.
-
-**Prerequisites:** `sqlite-vec` installed and `mosaic index` run at least once. See the [RAG guide](./rag) for setup.
-
-### `--downloaded-only`
-
-Both `--cached` and `--semantic` accept `--downloaded-only` to restrict results to papers for
-which a PDF is stored locally:
-
-```bash
-mosaic search "graph neural network" --cached --downloaded-only
-mosaic search "diffusion model" --semantic --downloaded-only
-```
+See also: [tutorial: the local cache](/tutorial/03-cache), [recipes](/cookbook/maintenance),
+[`mosaic cache`](/reference/cache), [Downloads](./downloads).

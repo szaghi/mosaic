@@ -1,0 +1,10 @@
+$ mosaic get 10.1016/j.paerosci.2006.01.001 --handoff --watch-dir ~/Downloads
+Numerical modeling of spacecraft electric propulsion thrusters (2005)
+
+Hand-off of 1 paper(s) to your browser: watching ~/Downloads for each PDF you download (one paper at a time).
+
+[1/1] Numerical modeling of spacecraft electric propulsion thrusters (2005)
+  https://www.sciencedirect.com/science/article/pii/S0376042106000029
+  Opened in your browser: download the PDF there. Press Enter when done, or to skip this paper.
+  ✓ 1-s2.0-S0376042106000029-main.pdf → 2005_Crossref_Boyd_Numerical_modeling_of_spacecraft_electric_propulsion_thruste.pdf
+Saved: ~/mosaic-papers/2005_Crossref_Boyd_Numerical_modeling_of_spacecraft_electric_propulsion_thruste.pdf

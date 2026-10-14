@@ -1,0 +1,43 @@
+$ mosaic compare --query "hall thruster" -n 4 --dimensions "method,dimensionality,key finding"
+
+ #     Title                   Year   Authors      Method                  Dimensionality          Key Finding
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Plasma Diagnostic and   2004   Jose         Experimental plasma     -                       Demonstrated plasma
+       Performance of a               Leonardo     diagnostics and                                 density and
+       Permanent Magnet Hall          Ferreira     performance                                     temperature spatial
+       Thruster                       et al.       measurement of a Hall                           profiles (inside and
+                                                   thruster                                        outside the channel)
+                                                                                                   of a Hall thruster
+                                                                                                   using an array of
+                                                                                                   permanent magnets
+                                                                                                   instead…
+ 2     Reduced-order           2023   Maryam       Reduced-order           -                       Demonstrated the
+       particle-in-cell               Reza et      particle-in-cell                                applicability of a
+       simulations of a               al.          (PIC) simulation                                novel reduced-order
+       high-power                                                                                  PIC scheme for a
+       magnetically…                                                                               cost-efficient,
+                                                                                                   self-consistent
+                                                                                                   simulation of a 20
+                                                                                                   kW magnetically
+                                                                                                   shielded Hall…
+ 3     Effects of the          2023   Farbod       Particle-in-cell        1D (axial) and          Conducted an
+       neutral dynamics               Faraji et    (PIC) simulation with   quasi-2D                extensive
+       model on the                   al.          multiple neutral        (axial-azimuthal)       sensitivity study
+       particle-in-cell                            dynamics models                                 showing how the
+       simulations of a…                           (kinetic/DSMC vs. 1D                            choice of neutral
+                                                   fluid)                                          dynamics model
+                                                                                                   (fluid vs. kinetic)
+                                                                                                   affects ionization,
+                                                                                                   electron mobility,
+                                                                                                   and…
+ 4     Dimensionality          2022   Maryam       Reduced-order           Quasi-2D                The
+       reduction of                   Reza et      particle-in-cell        (axial-azimuthal)       dimensionality-reduc
+       Poisson's equation             al.          (PIC) simulation with                           ed Poisson
+       with application to…                        a                                               formulation achieved
+                                                   dimensionality-reduce                           a remarkable
+                                                   d Poisson's equation                            reduction in
+                                                   formulation                                     computational cost
+                                                   (Vlasov-Poisson                                 while accurately
+                                                   system)                                         reproducing axial
+                                                                                                   distributions of…
+4 paper(s) compared

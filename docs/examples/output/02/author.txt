@@ -1,0 +1,7 @@
+$ mosaic search "hall thruster" --author Boeuf --source oa --max 25
+
+ #     Title                             Authors       Year   DOI                 Source         OA     PDF       Cited
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Tutorial: Physics and modeling    Jean-Pierre   2017   10.1063/1.4972269   OpenAlex       no     –           502
+       of Hall thrusters                 Bœuf
+1 result(s)

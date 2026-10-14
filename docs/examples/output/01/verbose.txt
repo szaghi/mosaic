@@ -1,0 +1,3 @@
+$ mosaic --verbose search "hall thruster particle-in-cell" --max 5 2>&1 | grep Warning
+Warning: DBLP: answered with a web page instead of JSON (a bot check); try again later
+Warning: Semantic Scholar: rate limited (HTTP 429); try again later

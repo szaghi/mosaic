@@ -1,0 +1,4 @@
+$ mosaic watch list
+ Name             Query                               Source   Seen   Last run (UTC)
+──────────────────────────────────────────────────────────────────────────────────────────
+ hall-transport   hall thruster anomalous transport   arxiv      25   2026-10-14 16:59:43

@@ -1,0 +1,26 @@
+$ mosaic search "hall thruster" --field title --source oa --max 8 --sort citations
+
+ #     Title                             Authors       Year   DOI                 Source         OA     PDF       Cited
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Plasma oscillations in Hall       Edgar         2001   10.1063/1.1354644   OpenAlex       no     –           537
+       thrusters                         Choueiri
+ 2     Tutorial: Physics and modeling    Jean-Pierre   2017   10.1063/1.4972269   OpenAlex       no     –           502
+       of Hall thrusters                 Bœuf
+ 3     Parametric investigations of a    Yevgeny       2001   10.1063/1.1355318   OpenAlex       no     –           209
+       nonconventional Hall thruster     Raitses &
+                                         N. J. Fisch
+ 4     Electron-wall interaction in      Yevgeny       2005   10.1063/1.1891747   OpenAlex       yes    ✓           150
+       Hall thrusters                    Raitses et
+                                         al.
+ 5     Kinetic effects in a Hall         Igor          2007   10.1063/1.2709865   OpenAlex       no     –           134
+       thruster discharge                Kaganovich
+                                         et al.
+ 6     Review of Hall Thruster Plume     Iain D.       2001   10.2514/2.3695      OpenAlex       no     –           125
+       Modeling                          Boyd
+ 7     Rayleigh instability in Hall      Andrei A.     2004   10.1063/1.1647565   OpenAlex       no     –            77
+       thrusters                         Litvak & N.
+                                         J. Fisch
+ 8     Propellant Utilization in Hall    Yevgeny       1998   10.2514/2.5274      OpenAlex       no     –            73
+       Thrusters                         Raitses et
+                                         al.
+8 result(s)

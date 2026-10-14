@@ -1,0 +1,10 @@
+$ mosaic get --from refs.bib
+Found 2 DOI(s) in refs.bib
+  ✗ 10.1063/1.4972269
+  ✓ 2019_Crossref_Taccogna_Latest_progress_in_Hall_thrusters_plasma_modelling.pdf
+
+
+Have access? Retry with --handoff (your own browser; works for Elsevier) or --interactive (a browser window mosaic
+drives).
+
+Done: 1 downloaded, 1 failed

@@ -1,0 +1,16 @@
+$ mosaic cache list -n 5
+ #       Title                                 Authors                  Year     Source             OA     PDF    Abstr
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1       Plasma-induced surface cooling.       Tomko JA et al.          2022     PubMed Central     ✓      ✓      –
+ 2       Spatiotemporal dynamics of            Kawachi Y et al.         2022     PubMed Central     ✓      ✓      –
+         high-wavenumber turbulence in a
+         basic laboratory plas
+ 3       Modulated electron cyclotron drift    Tsikata S & Minea T      2015     PubMed             ✗      –      –
+         instability in a high-power pulsed
+         magnetron
+ 4       Nonlinear simulations and anomalous   Koshkarov, O. et al.     2016     Crossref           ✗      –      –
+         transport in hall thruster plasma
+ 5       Optimal Experimental Design for       Allen, Madison G. et     2024     Crossref           ✗      –      –
+         Inferring Anomalous Electron          al.
+         Transport in a Hall
+Showing 1–5 of 80

@@ -1,0 +1,37 @@
+$ mosaic search "hall thruster anomalous electron transport" --source arxiv --max 6 --summarise
+
+ #     Title                                  Authors         Year   DOI                    Source         OA     PDF
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Near-Wall Pathways of Anomalous        Zhe Liu et      2026   10.1103/p8v6-66mq      arXiv          yes    ✓
+       Electron Transport in Hall Thrusters   al.
+       Revealed b…
+ 2     Plasma Diagnostic and Performance of   Jose Leonardo   2004   10.48550/arXiv.physi   arXiv          yes    ✓
+       a Permanent Magnet Hall Thruster       Ferreira et            cs/0410170
+                                              al.
+ 3     Cross-field chaotic transport of       D. Mandal et    2019   10.1063/1.5134148      arXiv          yes    ✓
+       electrons by ExB electron drift        al.
+       instability in…
+ 4     Two-dimensional hybrid model of        Rei Kawashima   2021   10.1063/5.0045984      arXiv          yes    ✓
+       gradient drift instability and         & Kimiya
+       enhanced electro…                      Komurasaki
+ 5     Cross-field chaotic transport of       Debraj Mandal   2019   10.48550/arXiv.1907.   arXiv          yes    ✓
+       electrons by $\vec E \times \vec B$    et al.                 08407
+       electron d…
+ 6     Electric field induced Berry           Srimayi         2025   10.48550/arXiv.2510.   arXiv          yes    ✓
+       curvature dipole and non-linear        Korrapati et           20237
+       anomalous Hall eff…                    al.
+6 result(s)
+
+╭─ AI summary ─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Studying anomalous cross-field electron transport in Hall thrusters has progressed from early experimental work      │
+│ characterizing plasma performance and density profiles [2] to increasingly dimensionally rich simulations. In 2019,  │
+│ model calculations showed that collisionless, chaotic electron dynamics driven by E×B electron drift instabilities   │
+│ produce cross-field transport roughly 100 times above collisional levels, with wave–particle interactions            │
+│ significantly raising the perpendicular electron temperature [3][5]. A 2021 study then used a two-dimensional hybrid │
+│ particle-fluid model to isolate the gradient-drift-instability contribution to transport enhancement near the        │
+│ channel exit and in the plume region [4]. The 2026 work advances the field with three-dimensional particle-in-cell   │
+│ simulations resolving individual instabilities, revealing that anomalous transport self-organizes into non-uniform   │
+│ near-wall pathways rather than distributing uniformly across the channel cross section [1]. Overall, the field has   │
+│ moved from phenomenological characterisation toward geometry- and instability-resolving simulations that clarify the │
+│ spatial structure of anomalous transport.                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

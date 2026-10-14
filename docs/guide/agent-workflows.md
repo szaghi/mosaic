@@ -1,219 +1,149 @@
 ---
-title: Agent Workflows & Claude Code Skill
+title: Agents and scripts
 ---
 
-# Agent Workflows & Claude Code Skill
+# Agents and scripts
 
-MOSAIC ships a bundled [Claude Code](https://claude.ai/claude-code) skill that gives any Claude
-Code session expert knowledge of all mosaic commands, sources, filters, export formats, and JSON
-scripting patterns. Once installed, the `/mosaic` slash command is available in every conversation
-in that project (or globally, with `--global`).
+Two things make mosaic easy to drive from a script or an AI agent: `--json`, which prints results as one JSON
+object on standard output, and a bundled [Claude Code](https://claude.com/claude-code) skill that teaches Claude
+Code every mosaic command.
 
-All `search` and `similar` commands support a `--json` flag that emits a structured JSON envelope
-to stdout — designed for piping, agent scripting, and CI pipelines.
+## JSON output
 
----
-
-## Installing the Claude Code skill
+`--json` replaces the table with a JSON object on `search`, `similar` and `watch run`. Nothing else is printed to
+standard output, so you can pipe it:
 
 ```bash
-# Install into the current project's .claude/skills/ directory
-mosaic skill install
-
-# Install globally to ~/.claude/skills/ — available in all your projects
-mosaic skill install --global
-
-# Inspect the bundled skill content (useful for review or manual installation)
-mosaic skill show
+mosaic search "hall thruster particle-in-cell" --cached --json | jq -r '.papers[] | "\(.year)  \(.doi)"' | head -n 5
+mosaic similar 10.1063/1.4972269 --max 15 --json
+mosaic watch run --json
 ```
 
-After installation, open a new Claude Code session. The `/mosaic` slash command will be available.
-
-::: tip What the skill provides
-The skill teaches Claude Code the full mosaic command surface: all flags, source shorthands, JSON
-schemas, export formats, Zotero/Obsidian integration patterns, RAG commands, and ready-to-run
-agent workflow templates. You can ask it to build a bibliography, search multiple topics in parallel,
-or script a full literature review — and it will produce correct, working mosaic commands.
-:::
-
----
-
-## JSON output — `--json`
-
-Add `--json` to `search` or `similar` to get a structured JSON object on stdout instead of the
-rich terminal table. All rich output is suppressed; the result is pipe-friendly.
+The papers are saved to the cache as usual, and on a live search `--output` still writes its files:
 
 ```bash
-mosaic search "attention mechanism" --max 30 --oa-only --json
-mosaic similar 10.48550/arXiv.1706.03762 --max 15 --json
+mosaic search "hall thruster" --max 20 --json --output refs.bib > papers.json
 ```
 
-Papers are still saved to the local cache, so `--cached` queries work immediately after.
+### search and similar
 
-`--json` and `--output` can be combined: the file is written *and* JSON is printed to stdout.
-
-```bash
-# Save to BibTeX and also get structured stdout output
-mosaic search "FDTD methods" --json --output refs.bib
-```
-
-### JSON schema — search
+A real envelope (one paper shown, abstract shortened):
 
 ```json
 {
   "status": "ok",
-  "query": "attention mechanism",
-  "count": 3,
+  "query": "Effects of the neutral dynamics model",
+  "count": 2,
   "papers": [
     {
-      "title": "Attention Is All You Need",
-      "authors": ["Vaswani, Ashish", "Shazeer, Noam"],
-      "year": 2017,
-      "doi": "10.48550/arXiv.1706.03762",
-      "arxiv_id": "1706.03762",
+      "title": "Effects of the neutral dynamics model on the particle-in-cell simulations of a Hall thruster plasma discharge",
+      "authors": ["Farbod Faraji", "Maryam Reza", "Aaron Knoll"],
+      "year": 2023,
+      "doi": "10.1063/5.0143292",
+      "arxiv_id": "2304.00585v1",
       "pii": null,
-      "abstract": "The dominant sequence transduction models...",
-      "journal": null,
+      "abstract": "The dynamics of the neutral atoms in Hall thrusters affect several plasma processes, ...",
+      "journal": "Journal of Applied Physics 133, 213301 (2023)",
       "volume": null,
       "issue": null,
       "pages": null,
-      "pdf_url": "https://arxiv.org/pdf/1706.03762",
-      "source": "arxiv",
+      "pdf_url": "https://arxiv.org/pdf/2304.00585v1",
+      "source": "arXiv",
       "is_open_access": true,
-      "url": "https://arxiv.org/abs/1706.03762",
-      "citation_count": 50000,
+      "url": "https://arxiv.org/abs/2304.00585v1",
+      "citation_count": null,
       "relevance_score": null,
-      "uid": "10.48550/arxiv.1706.03762"
+      "openalex_id": null,
+      "uid": "doi:10.1063/5.0143292"
     }
   ],
   "errors": []
 }
 ```
 
-`status` is always `"ok"` (source-level warnings go into `errors[]`; a fatal failure exits with
-code 1 before printing). `uid` is the cache deduplication key (DOI → arXiv ID → PII → title
-slug). All fields are always present; unavailable values are `null`.
+- Every paper has every field; a missing value is `null`. `relevance_score` is set by `--sort relevance`.
+- `uid` is the key mosaic deduplicates and caches by: `doi:<doi>`, `arxiv:<id>`, `pii:<pii>` or `title:<title>`,
+  the first that exists (arXiv DOIs `10.48550/arXiv.N` become `arxiv:N`).
+- On a live `search`, `errors` lists the sources that failed (rate limits, timeouts) on a run that still produced
+  results.
+- `similar` adds `"seed"`: the title of the paper you started from. If the identifier is not found, it prints
+  `{"status": "error", "query": ..., "errors": ["Paper not found"]}` and exits with code 1.
+- With `--summarise`, `search` adds `"summary"`: the paragraph, whose `[n]` refers to the n-th entry of `papers`,
+  or `null` when no summary could be made (the reason is in `errors`). See
+  [tutorial chapter 8](/tutorial/08-local-model).
 
-### JSON schema — similar
+Other failures (an unknown `--source`, a bad `--year`) print a message, not JSON, and exit with code 1. Test the
+exit code before parsing.
 
-Same as above plus a `"seed"` key with the resolved seed paper title:
+### watch run
 
 ```json
 {
   "status": "ok",
-  "seed": "Attention Is All You Need",
-  "query": "10.48550/arXiv.1706.03762",
-  "count": 10,
-  "papers": [...],
-  "errors": []
+  "watches": [
+    {"name": "hall-transport", "query": "hall thruster anomalous transport", "total": 25,
+     "new": [], "downloaded": 0, "errors": []}
+  ]
 }
 ```
 
----
+`new` holds the papers not seen by earlier runs, in the format above. See [watches](/guide/watch).
 
-## Scripting patterns
-
-### Bash — filter with jq
+## Patterns
 
 ```bash
-# Extract all DOIs from an OA search
-dois=$(mosaic search "graph neural networks" --max 30 --oa-only --json \
-       | jq -r '.papers[].doi | select(. != null)')
+# DOIs of the open-access results
+mosaic search "hall thruster anomalous transport" --max 30 --oa-only --json | jq -r '.papers[].doi | select(. != null)'
 
-# Count papers with a direct PDF link
-mosaic search "diffusion models" --max 50 --json \
-  | jq '[.papers[] | select(.pdf_url != null)] | length'
+# how many results have a PDF link
+mosaic search "hall thruster" --max 50 --json | jq '[.papers[] | select(.pdf_url != null)] | length'
 
-# Print title + year for the top 5 most-cited
-mosaic search "transformer" --sort citations --max 20 --json \
-  | jq -r '.papers[:5][] | "\(.year)  \(.title)"'
+# the five most cited
+mosaic search "hall thruster" --sort citations --max 20 --json | jq -r '.papers[:5][] | "\(.citation_count)  \(.title)"'
 ```
 
-### Python — full bibliography pipeline
+From Python, call the command and parse its output:
 
 ```python
-import json, subprocess
-from pathlib import Path
+import json
+import subprocess
 
-def mosaic(args: list[str]) -> dict:
-    r = subprocess.run(["mosaic"] + args, capture_output=True, text=True, check=False)
-    if r.returncode != 0 and not r.stdout.strip():
-        raise RuntimeError(r.stderr)
-    return json.loads(r.stdout)
 
-# ── 1. Search multiple related queries ──────────────────────────────────────
-queries = [
-    "transformer self-attention mechanism",
-    "BERT language model pre-training",
-    "GPT autoregressive language model",
-]
-all_papers: list[dict] = []
-for q in queries:
-    data = mosaic(["search", q, "--max", "15", "--oa-only", "--json"])
-    all_papers.extend(data["papers"])
+def mosaic(*args: str) -> dict:
+    run = subprocess.run(["mosaic", *args, "--json"], capture_output=True, text=True, check=False)
+    if run.returncode != 0:
+        raise RuntimeError(run.stdout + run.stderr)
+    return json.loads(run.stdout)
 
-# ── 2. Deduplicate by uid ────────────────────────────────────────────────────
-seen: set[str] = set()
-unique: list[dict] = []
-for p in all_papers:
-    if p["uid"] not in seen:
-        seen.add(p["uid"])
-        unique.append(p)
 
-# ── 3. Expand with similar papers from the most-cited seed ──────────────────
-most_cited = max(unique, key=lambda p: p["citation_count"] or 0)
-if most_cited.get("doi"):
-    related = mosaic(["similar", most_cited["doi"], "--max", "10", "--json"])
-    for p in related["papers"]:
-        if p["uid"] not in seen:
-            seen.add(p["uid"])
-            unique.append(p)
-
-print(f"Collected {len(unique)} unique papers")
-
-# ── 4. Export the cache to BibTeX ────────────────────────────────────────────
-# (all papers from steps 1–3 are already in the cache)
-subprocess.run(["mosaic", "search", queries[0], "--cached", "--output", "bibliography.bib"])
-
-# ── 5. Index and ask ─────────────────────────────────────────────────────────
-subprocess.run(["mosaic", "index"])
-subprocess.run([
-    "mosaic", "ask",
-    "Summarise the evolution of attention mechanisms",
-    "--mode", "synthesis",
-    "--output", "synthesis.md",
-])
+seen = {}
+for query in ("hall thruster anomalous transport", "hall thruster particle-in-cell"):
+    for paper in mosaic("search", query, "--max", "15", "--oa-only")["papers"]:
+        seen[paper["uid"]] = paper
+print(len(seen), "papers")
 ```
 
----
+Every paper of both searches is now in the cache: `mosaic search "hall thruster" --cached --output refs.bib` writes
+them to BibTeX, and `mosaic index` makes them searchable by meaning.
 
-## Using `/mosaic` in Claude Code
+## The Claude Code skill
 
-Once the skill is installed, describe your bibliography goal in plain English and Claude Code will
-construct and run the right mosaic commands for you.
-
-**Example prompts:**
-
-- *"Search for papers on discontinuous Galerkin methods, filter for OA only, sort by citations, and export to refs.bib"*
-- *"Find 20 papers similar to 10.1016/j.jcp.2020.109935 and push them to my Zotero 'CFD' collection"*
-- *"Build a synthesis report on FDTD time-domain schemes — use my cached papers, index them, then ask in synthesis mode"*
-- *"Give me a JSON list of all papers in my cache from 2022–2024 on neural ODEs"*
-
-Claude Code will translate these into mosaic commands, run them, parse the output, and iterate.
-
----
-
-## CI / automation
-
-`--json` output is designed to be consumed in CI pipelines. Exit code is 0 on success, 1 on fatal
-failure. Source-level warnings (non-fatal) are surfaced in the `errors[]` array.
-
-```yaml
-# GitHub Actions example
-- name: Build bibliography
-  run: |
-    mosaic search "${{ inputs.query }}" --max 50 --oa-only --json > papers.json
-    count=$(jq '.count' papers.json)
-    echo "Found $count papers"
-    mosaic search "${{ inputs.query }}" --cached --output bibliography.bib
+```bash
+mosaic skill install            # into ./.claude/skills/mosaic/SKILL.md, for this project
+mosaic skill install --global   # into ~/.claude/skills/mosaic/SKILL.md, for every project
+mosaic skill show               # print the skill
 ```
+
+Start a new Claude Code session after installing: the skill is available as `/mosaic`, and Claude Code also loads it
+by itself when you ask for literature work. The skill describes the commands, the source shorthands, the filters,
+the export formats, the JSON envelope and the integrations, so Claude Code writes valid mosaic commands, runs them
+and reads their JSON. Requests it handles:
+
+- "Find open-access papers on Hall thruster anomalous transport since 2020, sorted by citations, and write refs.bib."
+- "Add the 20 papers most similar to 10.1063/1.4972269 to my Zotero collection 'Hall thrusters'."
+- "Index my cached papers and tell me what they say about electron-wall interaction, with sources."
+
+The skill is a copy: after upgrading mosaic, run `mosaic skill install` again to update it.
+
+See also: [scripting recipes](/cookbook/scripting), [`mosaic search`](/reference/search),
+[`mosaic skill`](/reference/skill).

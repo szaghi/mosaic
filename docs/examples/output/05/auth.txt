@@ -1,0 +1,2 @@
+$ mosaic auth status
+No saved sessions. Use mosaic auth login <name> --url <url> to add one.

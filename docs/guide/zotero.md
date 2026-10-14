@@ -1,116 +1,71 @@
 ---
-title: Zotero Integration
+title: Zotero
 ---
 
-# Zotero Integration
+# Zotero
 
-MOSAIC can push search results directly into your Zotero library — either through the **Zotero desktop local API** (no configuration needed) or the **Zotero web API** (works without the desktop app, from any machine).
+`--zotero` adds the papers of a `search`, `similar` or `get` to your Zotero library, optionally in a named
+collection. mosaic talks to Zotero desktop on your machine, or to the Zotero web API when you configure a key.
 
-![Zotero with MOSAIC-imported papers](/zotero-01.png)
+![Papers added by mosaic in Zotero](/zotero-01.png)
 
-## Quick start — local API
-
-1. Open Zotero on your computer.
-2. Run any MOSAIC command with `--zotero`:
+## Usage
 
 ```bash
-mosaic search "attention mechanism" --oa-only --zotero
-mosaic search "diffusion models" --zotero --zotero-collection "My Papers"
-```
-
-That's it — no API key, no configuration. MOSAIC talks to Zotero over `http://localhost:23119`.
-
-## Quick start — web API
-
-Use this when Zotero is not running locally, or when working on a remote machine.
-
-**1. Get a Zotero API key**
-
-Go to [zotero.org/settings/keys](https://www.zotero.org/settings/keys), create a key with **read/write** permissions for your personal library (or a specific group), and copy it.
-
-**2. Configure MOSAIC**
-
-```bash
-mosaic config --zotero-key YOUR_API_KEY
-```
-
-MOSAIC automatically fetches and caches your Zotero user ID — you never need to look it up.
-
-**3. Use normally**
-
-```bash
-mosaic search "protein folding" --zotero --zotero-collection "Structural Biology"
-```
-
-## Options
-
-All three `--zotero*` options are available on `search`, `similar`, and `get`:
-
-| Option | Description |
-|--------|-------------|
-| `--zotero` | Push results to Zotero |
-| `--zotero-collection TEXT` | Add to this collection (created automatically if missing) |
-| `--zotero-local` | Force the local API even when a web API key is configured |
-
-## Examples
-
-```bash
-# Push search results to the default library
-mosaic search "CRISPR gene editing" --oa-only --zotero
-
-# Push to a named collection
-mosaic search "transformer architecture" --zotero --zotero-collection "Transformers 2024"
-
-# Download PDFs and link them in Zotero (local mode only)
-mosaic search "diffusion models" --download --zotero --zotero-collection "Generative AI"
-
-# Find similar papers and push to Zotero
-mosaic similar 10.48550/arXiv.1706.03762 --zotero --zotero-collection "Related Work"
-
-# Bulk-import a BibTeX file
+mosaic search "hall thruster particle-in-cell" --zotero
+mosaic search "hall thruster" --zotero --zotero-collection "Hall thrusters"
+mosaic similar 10.1063/1.4972269 --zotero --zotero-collection "Related work"
 mosaic get --from refs.bib --zotero --zotero-collection "Imported"
-
-# Single DOI — download and push
-mosaic get 10.48550/arXiv.1706.03762 --zotero
+mosaic search "hall thruster" --download --zotero      # also link the PDFs (local API only)
 ```
 
-![Zotero integration demo](/gifs/09_zotero.gif)
+- `--zotero-collection NAME` puts the items in that collection, created on first use (top level).
+- `--zotero-local` uses Zotero desktop even when a web API key is configured.
 
-## PDF attachment
+## The two APIs
 
-When you combine `--download` and `--zotero` in **local mode**, MOSAIC links each downloaded PDF as a child attachment of its Zotero item. Zotero stores an absolute path to the file — no bytes are copied, so there is no storage duplication.
+| Configuration | API used |
+|---|---|
+| no `zotero.api_key` | local: Zotero desktop at `http://localhost:23119`, which must be running |
+| `zotero.api_key` set | web: `https://api.zotero.org/users/<user_id>` |
+| `zotero.api_key` set and `--zotero-local` | local |
 
-```bash
-# PDF is downloaded to ~/mosaic-papers/ AND linked in Zotero
-mosaic search "neural ODEs" --download --zotero --zotero-collection "ODE Papers"
-```
+To use the web API, create a key with write access at
+[zotero.org/settings/keys](https://www.zotero.org/settings/keys), then:
 
-> **Note:** PDF attachment is not yet available in web API mode (v1). The paper metadata and URL are always exported; the PDF link is local-only for now.
-
-## Mode selection
-
-| Scenario | Mode used |
-|----------|-----------|
-| No `zotero.api_key` in config | Local API (Zotero must be running) |
-| `zotero.api_key` set | Web API |
-| `zotero.api_key` set + `--zotero-local` flag | Local API (forced) |
-
-## Troubleshooting
-
-**`Zotero is not running`**
-
-Start the Zotero desktop app, or configure the web API key:
 ```bash
 mosaic config --zotero-key YOUR_KEY
 ```
 
-**`Zotero web API not reachable`**
+mosaic asks Zotero for the user ID that owns the key and saves it as `zotero.user_id`.
 
-Check that:
-- Your API key has write permissions for your library
-- You haven't reached the Zotero API rate limit (100 requests/s)
-- `mosaic config --show` shows the correct `api_key` under `[zotero]`
+## How it works
 
-**Collections not appearing**
+Each paper becomes a Zotero item: `preprint` for arXiv, bioRxiv and medRxiv, `journalArticle` otherwise. The item
+gets the title, the authors (split into first and last name: "Last, First" at the comma, "First Last" at the last
+space), the year, the abstract, the DOI, the journal and a URL (the paper's page, or `https://doi.org/<doi>`).
+Items are sent 50 at a time, Zotero's limit per request.
 
-Collections are created automatically on first use. If a collection doesn't show up in Zotero, try syncing: **Edit → Sync with Zotero Server** (or the sync button in the toolbar).
+With `--download`, each downloaded PDF is linked to its item as a `linked_file` attachment: Zotero stores the
+absolute path, and the file stays in your mosaic library. The web API gets the metadata only; mosaic does not
+upload files.
+
+mosaic does not look for duplicates in Zotero: running the same export twice adds the items twice.
+
+## Configuration
+
+```toml
+[zotero]
+api_key = ""   # web API key; empty means the local API
+user_id = 0    # filled in by mosaic config --zotero-key
+```
+
+## Troubleshooting
+
+- "Zotero desktop is not running": start Zotero, or configure a web API key.
+- "Zotero web API not reachable. Check your API key.": the key was rejected or has no write access;
+  `mosaic config --show` prints the key mosaic uses.
+- A collection is missing on another device: it exists on the server only after Zotero syncs.
+
+See also: [tutorial chapter 6](/tutorial/06-exporting), [export recipes](/cookbook/exporting),
+[`mosaic search`](/reference/search), [`mosaic get`](/reference/get).

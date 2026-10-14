@@ -117,7 +117,7 @@ async function cmdDocs(token, chatId, msgId) {
   await send(token, chatId, (
     "📘 <b>MOSAIC Documentation</b>\n\n" +
     `<a href="${DOCS_URL}">${DOCS_URL}</a>\n\n` +
-    "Covers: getting started, configuration, all 21 sources, " +
+    "Covers: getting started, configuration, all 22 sources, " +
     "CLI reference, Zotero/Obsidian integrations, and changelog."
   ), msgId);
 }

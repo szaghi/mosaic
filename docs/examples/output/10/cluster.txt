@@ -1,0 +1,52 @@
+$ mosaic network --query "thruster" --cluster --top 3 --output graph.json
+Graph written to: graph.json
+
+Citation Network  49 papers · 127 edges
+
+─────────────────────── Cluster 1 — Tutorial: Physics and modeling of Hall thrusters (12 papers) ───────────────────────
+ Hub    Tutorial: Physics and modeling of Hall thrusters                     Jean-Pierre Bœuf     2017        degree=27
+        Near-Wall Pathways of Anomalous Electron Transport in Hall           Zhe Liu et al.       2026         degree=7
+        Thrusters Revealed by 3D PIC…
+        Numerical Study of Electron Cyclotron Drift Instability:             Zahra Asadi et al.   2019         degree=6
+        Application to Hall Thruster
+  … and 9 more paper(s)
+
+─────────────────────────── Cluster 2 — Concept of the generalized reduced-order… (9 papers) ───────────────────────────
+ Hub    Concept of the generalized reduced-order particle-in-cell scheme   M. Reza et al.         2023        degree=10
+        and verification in an…
+        Enhancing one-dimensional particle-in-cell simulations to          Farbod Faraji et al.   2022         degree=9
+        self-consistently resolve…
+        Effects of the neutral dynamics model on the particle-in-cell      Farbod Faraji et al.   2023         degree=8
+        simulations of a Hall…
+  … and 6 more paper(s)
+
+────────────────────── Cluster 3 — Latest progress in Hall thrusters plasma modelling (8 papers) ───────────────────────
+ Hub    Latest progress in Hall thrusters plasma modelling         Taccogna, F. & Garrigues, L.   2019        degree=14
+        Kinetic effects in a Hall thruster discharge               Igor Kaganovich et al.         2007         degree=5
+        Full Particle-In-Cell Simulation Methodology for           James Szabo et al.             2013         degree=4
+        Axisymmetric Hall Effect Thrusters
+  … and 5 more paper(s)
+
+───────────────────────────── Cluster 4 — Plasma oscillations in Hall thrusters (8 papers) ─────────────────────────────
+ Hub    Plasma oscillations in Hall thrusters                               Edgar Choueiri        2001        degree=10
+ Hub    3D particle-in-cell study of the electron drift instability in a    W. Villafana et al.   2023        degree=10
+        Hall Thruster using…
+        Investigation of the Optical Emission of Hall Effect Thrusters      Tarek Ben Slimane     2023         degree=5
+        using a Collisional…
+  … and 5 more paper(s)
+
+──────────────────────── Cluster 5 — Theory for the anomalous electron transport in… (7 papers) ────────────────────────
+ Hub    Theory for the anomalous electron transport in     Trevor Lafleur et al.                  2016        degree=17
+        Hall effect thrusters. II. Kinetic model
+        E × B electron drift instability in Hall           Jean-Pierre Bœuf & Laurent Garrigues   2018        degree=14
+        thrusters: Particle-in-cell simulations vs.…
+        Anomalous cross-field transport in a Hall          Brown ZA & Jorns BA.                   2023         degree=5
+        thruster inferred from direct measurement of…
+  … and 4 more paper(s)
+
+────────────────────────── Cluster 6 — Electron-wall interaction in Hall thrusters (5 papers) ──────────────────────────
+ Hub    Electron-wall interaction in Hall thrusters                      Yevgeny Raitses et al.   2005         degree=5
+        Anomalous cross field electron transport in a Hall effect        C. Boniface et al.       2006         degree=4
+        thruster
+        Effect of Anode Dielectric Coating on Hall Thruster Operation    L. Dorf et al.           2003         degree=3
+  … and 2 more paper(s)

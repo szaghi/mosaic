@@ -1,0 +1,16 @@
+$ mosaic cache show 10.3390/aerospace10010044
+ Title                PIC-DSMC Simulation of a Hall Thruster Plume with Charge Exchange Effects Using pdFOAM
+ Authors              Sang Hun Kang
+ Year                 2023
+ DOI                  10.3390/aerospace10010044
+ arXiv ID             –
+ Journal              Aerospace
+ Source               DOAJ
+ Open access          yes
+ PDF URL              https://www.mdpi.com/2226-4310/10/1/44
+ Citation count       –
+ UID                  doi:10.3390/aerospace10010044
+ Abstract             To develop technologies for the stable operation of electric propulsion systems, the effects of
+                      charge exchange (CEX) on the exhaust plume of a Hall thruster were studied using the
+                      particle-in-cell direct simulation Monte Carlo (PIC-DSMC) method. For the numerical analysis, an
+                      OpenFOAM-based code, p…

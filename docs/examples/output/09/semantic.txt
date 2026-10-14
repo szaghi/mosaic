@@ -1,0 +1,43 @@
+$ mosaic search "electrons crossing the magnetic field" --semantic
+Searching local vector index for 'electrons crossing the magnetic field'…
+ #     Title                        Authors      Year   DOI              Source         OA     PDF       Cited     Sim.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Cross-field chaotic          Debraj       2019   10.48550/arXiv   arXiv          yes    ✓             –     0.50
+       transport of electrons by    Mandal et           .1907.08407
+       $\vec E \times \vec B$       al.
+       electron d…
+ 2     Rôle des instabilités        Alexandre    2006   –                HAL            yes    ✓             –     0.49
+       électroniques de dérive      Ducrocq
+       dans le transport
+       électronique du…
+ 3     Anomalous cross field        C.           2006   10.1063/1.2360   OpenAlex       no     –            99     0.49
+       electron transport in a      Boniface            182
+       Hall effect thruster         et al.
+ 4     Cross-field chaotic          D. Mandal    2019   10.1063/1.5134   arXiv          yes    ✓             –     0.49
+       transport of electrons by    et al.              148
+       ExB electron drift
+       instability in…
+ 5     Three-dimensional            Yin-Jian     2025   10.1017/S00223   Semantic       yes    ✓             1     0.49
+       particle-in-cell             Zhao et             77826102189      Scholar
+       simulations on Hall          al.
+       thruster electron drift …
+ 6     Theory for the anomalous     Trevor       2016   10.1063/1.4948   OpenAlex       no     –           151     0.49
+       electron transport in Hall   Lafleur et          496
+       effect thrusters. II.        al.
+       Kinet…
+ 7     Electric field induced       Srimayi      2025   10.48550/arXiv   arXiv          yes    ✓             –     0.49
+       Berry curvature dipole and   Korrapati           .2510.20237
+       non-linear anomalous Hall    et al.
+       eff…
+ 8     Modélisation                 Vivien       2017   10.70675/49b79   HAL            yes    ✓             –     0.49
+       bidimensionnelle de la       Croes               74ezcf6dz42b1z
+       décharge plasma dans un                          9817z0df2db1d5
+       propulseur de Hall                               902
+ 9     State Estimation of          Troyetsky,   2023   10.1109/icops4   Crossref       no     –             –     0.48
+       Anomalous Electron           D. et al.           5740.2023.1048
+       Transport in a Hall-Effect                       1135
+       Thruster Disc…
+ 10    Ionization instability and   Potrivitu    2022   10.21203/rs.3.   Europe PMC     no     –             –     0.48
+       turbulence in the plume of   G & Xu S.           rs-1806238/v1
+       sub-ampere hollow cathode…
+10 result(s)

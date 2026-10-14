@@ -1,0 +1,15 @@
+$ mosaic network --top 5
+
+Citation Network  51 papers · 128 edges
+
+ #      Title                                                    Authors                              Year       Degree
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1      Tutorial: Physics and modeling of Hall thrusters         Jean-Pierre Bœuf                     2017           27
+ 2      Theory for the anomalous electron transport in Hall      Trevor Lafleur et al.                2016           17
+        effect thrusters. II. Kinetic model
+ 3      Latest progress in Hall thrusters plasma modelling       Taccogna, F. & Garrigues, L.         2019           14
+ 4      E × B electron drift instability in Hall thrusters:      Jean-Pierre Bœuf & Laurent           2018           14
+        Particle-in-cell simulations vs.…                        Garrigues
+ 5      3D particle-in-cell study of the electron drift          W. Villafana et al.                  2023           10
+        instability in a Hall Thruster using…
+Showing top 5 of 51 papers by degree.

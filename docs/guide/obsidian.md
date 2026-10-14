@@ -1,176 +1,128 @@
 ---
-title: Obsidian Integration
+title: Obsidian
 ---
 
-# Obsidian Integration
+# Obsidian
 
-MOSAIC can write paper notes directly into an [Obsidian](https://obsidian.md) vault. Each paper becomes one `.md` file with:
-
-- **YAML frontmatter** — Obsidian *Properties* (title, authors, year, DOI, …)
-- **Abstract callout** — `> [!abstract]` block
-- **Metadata table** — human-readable field/value pairs
-- **See also** — `[[wikilinks]]` to other papers exported in the same batch
-
-Notes already present in the vault are never overwritten, preserving any manual edits.
-
-## Setup
-
-Add the vault path to your config file:
-
-```toml
-# ~/.config/mosaic/config.toml
-[obsidian]
-vault_path = "/path/to/your/vault"   # required
-subfolder  = "papers"                # optional, default: "papers"
-```
-
-Or use the full reference below to customise every option.
+`--obsidian` writes one Markdown note per paper into an [Obsidian](https://obsidian.md) vault: the metadata as
+Obsidian properties, the abstract, and links to the other papers of the same export. Use it to build a
+literature vault you annotate by hand.
 
 ## Usage
 
-Add `--obsidian` to any `search`, `similar`, or `get` command:
+Point mosaic at the vault once:
 
 ```bash
-# Export search results as Obsidian notes
-mosaic search "transformer attention" --obsidian
-
-# Export and also download PDFs
-mosaic search "BERT NLP" --obsidian --download
-
-# Find similar papers and export them
-mosaic similar 10.48550/arxiv.1706.03762 --obsidian
-
-# Download a paper by DOI and create a note
-mosaic get 10.1234/example --obsidian
-
-# Write notes to a different subfolder this run
-mosaic search "diffusion models" --obsidian --obsidian-folder "AI/diffusion"
+mosaic config --obsidian-vault ~/vault
 ```
 
-![Obsidian integration demo](/gifs/13_obsidian.gif)
+Then add `--obsidian` to `search`, `similar` or `get`:
 
-## Note format
+```bash
+mosaic search "hall thruster particle-in-cell" --cached --obsidian
+mosaic similar 10.1063/1.4972269 --obsidian
+mosaic get 10.3389/fphy.2019.00140 --obsidian
+mosaic search "hall thruster" --obsidian --obsidian-folder "papers/hall"   # another subfolder, this run only
+```
 
-A generated note looks like this:
+The run ends with a count and the folder:
+
+```
+Obsidian: 29 note(s) added → ~/vault/papers
+```
+
+A note that already exists is skipped (`N skipped (already exist)`): mosaic never overwrites a note, so your
+edits survive later exports.
+
+## The note
+
+This note was written by the export of [tutorial chapter 6](/tutorial/06-exporting) (abstract and links
+shortened):
 
 ````markdown
 ---
-title: Attention Is All You Need
+title: "E × B electron drift instability in Hall thrusters: Particle-in-cell simulations vs. theory"
 authors:
-  - Ashish Vaswani
-  - Noam Shazeer
-year: 2017
-doi: 10.48550/arxiv.1706.03762
-arxiv_id: 1706.03762
-journal: NeurIPS
-source: arXiv
+  - Jean-Pierre Bœuf
+  - Laurent Garrigues
+year: 2018
+doi: 10.1063/1.5017033
+journal: Physics of Plasmas
+volume: 25
+issue: 6
+source: OpenAlex
 open_access: true
-citation_count: 50000
-pdf_url: https://arxiv.org/pdf/1706.03762
+citation_count: 144
+pdf_url: "https://aip.scitation.org/doi/pdf/10.1063/1.5017033"
+url: "https://openalex.org/W2804872065"
 tags:
   - paper
 ---
 
-# Attention Is All You Need
+# E × B electron drift instability in Hall thrusters: Particle-in-cell simulations vs. theory
 
 > [!abstract]
-> We propose a new simple network architecture, the Transformer, …
+> The E × B Electron Drift Instability (E × B EDI), also called Electron Cyclotron Drift Instability, ...
 
 ## Metadata
 
 | Field | Value |
 |-------|-------|
-| Authors | Ashish Vaswani, Noam Shazeer |
-| Year | 2017 |
-| DOI | 10.48550/arxiv.1706.03762 |
-| Source | arXiv |
-| Open Access | yes |
-| Citations | 50000 |
-| URL | [link](https://arxiv.org/abs/1706.03762) |
-| PDF | [link](https://arxiv.org/pdf/1706.03762) |
+| Authors | Jean-Pierre Bœuf, Laurent Garrigues |
+| Year | 2018 |
+| DOI | 10.1063/1.5017033 |
+...
 
 ## See also
 
-- [[2019_Devlin_BERT pre-training of deep bidirectional transformers]]
-- [[2020_Brown_Language models are few-shot learners]]
+- [[2023_Maryam_Reduced-order_particle-in-cell_simulations_of_a_high-power_m]]
+- [[2019_Zahra_Numerical_Study_of_Electron_Cyclotron_Drift_Instability_Appl]]
+...
 ````
 
-### Plugin compatibility
+- Properties appear only when the paper has them (no `doi:` line without a DOI); `source`, `open_access` and `tags`
+  are always there.
+- The abstract callout is omitted when the source gave no abstract.
+- See also links every other paper of the same command run, when `wikilinks` is on and the run exported more than
+  one paper. Notes of earlier runs are not linked: mosaic does not read the vault.
+- Notes contain no <span v-pre>`{{...}}`</span> or `<%...%>`, so the Templates and Templater plugins leave them
+  alone. The properties work with Dataview:
 
-| Plugin | Compatible | Notes |
-|---|---|---|
-| **Obsidian Properties** (core) | ✅ | YAML frontmatter is standard Obsidian property format |
-| **Dataview** (community) | ✅ | Query by `year`, `doi`, `source`, `citation_count`, etc. |
-| **Templates** (core) | ✅ | Notes contain no <span v-pre>`{{…}}`</span> syntax — not processed as templates |
-| **Templater** (community) | ✅ | Notes contain no `<%…%>` syntax — not processed as templates |
-
-## Configuration reference
-
-```toml
-[obsidian]
-# Absolute path to the Obsidian vault root directory (required)
-vault_path = "/home/you/my-vault"
-
-# Subfolder within the vault where paper notes are written
-# Use "" to write notes directly to the vault root
-subfolder = "papers"
-
-# Filename pattern — same placeholders as the PDF filename pattern:
-#   {year}    publication year (0000 if unknown)
-#   {author}  first author last name
-#   {title}   title slug, truncated to 60 chars
-#   {source}  source name (arXiv, Scopus, …)
-#   {doi}     DOI with special chars replaced by _
-#   {journal} journal name slug (no_journal if unknown)
-filename_pattern = "{year}_{author}_{title}"
-
-# Tags added to every note's frontmatter
-tags = ["paper"]
-
-# When true, a "See also" section with [[wikilinks]] is added to each note,
-# linking to the other papers exported in the same command invocation
-wikilinks = true
-```
-
-## Deduplication
-
-Notes are never overwritten. If a note file for a paper already exists (matched by filename), it is silently skipped. This means any annotations, links, or edits you have added to the note are preserved across future exports.
-
-The `export_papers` call returns `(added, skipped)` counts, which MOSAIC prints after each run:
-
-```
-Obsidian: 8 note(s) added, 2 skipped (already exist) → /home/you/my-vault/papers
-```
-
-## Wikilinks
-
-When `wikilinks = true` (the default), each exported note gets a **See also** section listing `[[wikilinks]]` to the other papers exported in the **same command invocation**. Links are not added across separate runs — MOSAIC does not scan the whole vault.
-
-To disable wikilinks entirely:
-
-```toml
-[obsidian]
-wikilinks = false
-```
-
-## Dataview queries
-
-Because each note's frontmatter is standard Obsidian Properties, you can query your paper collection with the [Dataview](https://blacksmithgu.github.io/obsidian-dataview/) community plugin. Examples:
-
-````
+````markdown
 ```dataview
-TABLE year, authors, citation_count AS "Citations"
+TABLE year, citation_count AS "Citations"
 FROM "papers"
-WHERE source = "arXiv"
+WHERE open_access = true
 SORT citation_count DESC
 ```
 ````
 
-````
-```dataview
-LIST
-FROM "papers"
-WHERE year >= 2022 AND open_access = true
-SORT year DESC
+## Configuration
+
+```toml
+[obsidian]
+vault_path = ""                            # vault root; required
+subfolder = "papers"                       # "" writes to the vault root
+filename_pattern = "{year}_{author}_{title}"
+tags = ["paper"]
+wikilinks = true
 ```
-````
+
+| Key | Set with |
+|---|---|
+| `vault_path` | `mosaic config --obsidian-vault PATH` |
+| `subfolder` | `mosaic config --obsidian-subfolder NAME` (`--obsidian-folder` overrides it for one run) |
+| `filename_pattern` | `mosaic config --obsidian-filename-pattern PATTERN` |
+| `tags` | `mosaic config --obsidian-tag paper --obsidian-tag hall` (repeatable; replaces the list) |
+| `wikilinks` | `mosaic config --obsidian-wikilinks` / `--no-obsidian-wikilinks` |
+
+The file name placeholders are those of PDF file names: `{year}` (`0000` if unknown), `{author}`, `{title}` (the
+first 60 characters), `{source}`, `{doi}`, `{journal}`. `{author}` is the first word of the first author's name as
+the source writes it: the family name for "Family, Given" sources such as Crossref, the given name for "Given
+Family" ones such as arXiv (`2019_Zahra_...` above).
+
+A note is matched by its file name: change `filename_pattern` and the next export writes new notes beside the old
+ones.
+
+See also: [tutorial chapter 6](/tutorial/06-exporting), [export recipes](/cookbook/exporting),
+[`mosaic config`](/reference/config).

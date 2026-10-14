@@ -1,0 +1,14 @@
+$ head -n 14 refs.bib
+@article{Reza2023Reducedorder,
+  title          = {{Reduced-order particle-in-cell simulations of a high-power magnetically shielded Hall thruster}},
+  author         = {Maryam Reza and Farbod Faraji and Aaron Knoll and Antonio Piragino and Tommaso Andreussi and Tommaso Misuri},
+  year           = {2023},
+  journal        = {{Plasma Sources Sci. Technol. 32 065016 (2023)}},
+  doi            = {10.1088/1361-6595/acdea3},
+  eprint         = {2304.06563v1},
+  eprinttype     = {arXiv},
+  abstract       = {{High-power magnetically shielded Hall thrusters have recently emerged to meet the needs of the next-generation space missions. Even though a few such thrusters are currently undergoing their late-stage development campaigns, many unanswered questions yet exist concerning the behavior and evolution of the plasma in these large-size thrusters that feature an unconventional magnetic field topology. Noting the complex, multi-dimensional nature of plasma processes in Hall thrusters, high-fidelity particle-in-cell simulations are optimal tools to study the intricate plasma behavior. Nonetheless, the significant computational cost of traditional PIC schemes renders simulating high-power thrusters without any physics-altering speed-up factors unfeasible. Thus, in this article, we demonstrate the applicability of the novel reduced-order PIC scheme for a cost-efficient, self-consistent study of the high-power Hall thrusters by performing simulations of a 20 kW magnetically shielded Hall thruster along the axial-azimuthal and radial-azimuthal coordinates. The axial-azimuthal simulations are performed for three operating conditions in a rather simplified representation of the thruster's inherently 3D configuration. Nevertheless, we resolved self-consistently an unprecedented 650 us of the discharge evolution without any ad-hoc electron mobility model, capturing several breathing cycles and approximating the experimental performance parameters with an accuracy of 70 to 80 % across the operating conditions. The radial-azimuthal simulations casted further light on the evolution of the azimuthal instabilities and the resulting variations in the electrons' cross-field mobility and the plasma-wall interactions. Particularly, we observed the development of a long-wavelength, relatively low-frequency wave mode near the exit plane of the thruster's channel that induces a notable electron transport.}},
+  pdf            = {https://arxiv.org/pdf/2304.06563v1},
+  url            = {https://arxiv.org/abs/2304.06563v1},
+  note           = {Open Access}
+}

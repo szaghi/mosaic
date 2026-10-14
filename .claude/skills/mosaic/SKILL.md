@@ -2,7 +2,7 @@
 name: mosaic
 description: >
   Expert knowledge of MOSAIC (Multi-source Scientific Article Indexer and Collector) — a CLI tool
-  for searching, downloading, and managing scientific papers from 21 sources with a single command.
+  for searching, downloading, and managing scientific papers from 22 sources with a single command.
   Use this skill whenever the user asks about: building a bibliography programmatically, searching
   for papers across multiple sources, downloading OA PDFs, exporting to BibTeX/Zotero/Obsidian,
   interpreting mosaic --json output in AI agent or CI workflows, RAG over a paper library, finding
@@ -413,7 +413,9 @@ be available in that project's Claude Code context.
 https://szaghi.github.io/mosaic/
 
 - [Installation guide](https://szaghi.github.io/mosaic/guide/installation)
-- [Usage guide](https://szaghi.github.io/mosaic/guide/usage)
+- [Tutorial](https://szaghi.github.io/mosaic/tutorial/)
+- [Cookbook](https://szaghi.github.io/mosaic/cookbook/)
+- [Command reference](https://szaghi.github.io/mosaic/reference/)
 - [Sources reference](https://szaghi.github.io/mosaic/guide/sources)
 - [RAG guide](https://szaghi.github.io/mosaic/guide/rag)
 - [Zotero integration](https://szaghi.github.io/mosaic/guide/zotero)

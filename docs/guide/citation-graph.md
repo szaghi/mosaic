@@ -2,154 +2,76 @@
 title: Citation Graph
 ---
 
-# Citation Graph
+# Citation graph
 
-MOSAIC can enrich its local RAG pipeline with a **citation graph** — a network of bibliographic relationships stored alongside your paper embeddings. Papers that share citation edges with other retrieved results are promoted in the ranking, improving retrieval precision without requiring an LLM at index time.
+mosaic can record who cites whom among the papers in your cache. The edges feed [`mosaic network`](./network) (hubs
+and clusters of your corpus) and, if you enable it, the retrieval of [`mosaic ask` and `mosaic chat`](./rag), where
+papers linked by citations to the other retrieved papers move up.
+
+## Usage
+
+```bash
+mosaic index --enrich-citations            # embed new papers, then fetch their reference lists
+mosaic index --reindex --enrich-citations  # re-embed everything and re-fetch every reference list
+mosaic network --top 10                    # use the graph
+```
+
+Enrichment is part of `mosaic index`, after the embedding step, but does not depend on it: without an embedding
+model, `mosaic index --enrich-citations` reports the embedding error and builds the graph anyway.
 
 ## How it works
 
-The citation graph adds a second signal to the retrieval step:
+Enrich. For each cached paper, mosaic asks the providers in order for its reference list and keeps only the
+references that are papers in your cache: a reference to a paper you have never searched for is dropped. The first
+provider that yields at least one such edge wins for that paper. Edges go into the `paper_citations` table of the
+cache database, as "source cites target", tagged with the provider.
 
-1. **Enrich**: for each cached paper, mosaic fetches its outgoing reference list from OpenAlex (or CrossRef as fallback) and stores the edges in a local `paper_citations` table. Only edges whose target paper is already in your local cache are stored — dangling references to uncached papers are dropped.
+| Provider | Handles | Notes |
+|---|---|---|
+| `openalex` | papers with a DOI, an arXiv ID or an OpenAlex ID | first by default |
+| `crossref` | papers with a DOI | publishers deposit reference lists unevenly |
+| `opencitations` | papers with a DOI | the COCI index; off unless you list it |
 
-2. **Boost**: when `rag.citations.enabled = true`, the retrieval step combines cosine similarity rank with citation link count:
+Papers with neither a DOI nor an arXiv ID cannot be enriched. A paper that already has edges is skipped on later
+runs (unless `--reindex`); a paper whose references matched nothing in your cache is queried again on every run.
+OpenAlex and Crossref receive `unpaywall.email` (or `sources.openalex.email`) to put your requests in their polite
+pool.
 
-   ```
-   score(paper) = (1 / rank) × (1 + α × citation_links(paper, result_set))
-   ```
+Because edges only connect papers you have, the graph grows with your cache: search more, then enrich again.
 
-   Papers with more citation edges to/from other retrieved papers rise in rank. When `α = 0` the original cosine order is preserved.
+Boost. With `rag.citations.enabled = true`, retrieval re-ranks the nearest papers by
 
-3. **Expand** *(optional)*: with `expand_neighbors = true`, 1-hop citation neighbors of the top results are added to the candidate pool before final ranking, widening recall for closely related papers not caught by embeddings alone.
-
-## Quickstart
-
-```bash
-# 1. Index your papers (embed title + abstract)
-mosaic index
-
-# 2. Enrich the citation graph
-mosaic index --enrich-citations
-
-# 3. Enable citation boosting in config
-mosaic config --set rag.citations.enabled=true
-
-# 4. Ask a question — retrieval now uses the citation graph
-mosaic ask "What are the main approaches to neural machine translation?"
+```
+score(i) = (1 / i) * (1 + boost_alpha * links(i))
 ```
 
-## Provider coverage
-
-Citation edges are fetched in priority order. The first provider that returns a non-empty reference list wins; subsequent providers are skipped for that paper.
-
-| Provider | Coverage | Auth required | Notes |
-|----------|----------|---------------|-------|
-| **OpenAlex** | ~90 %+ of DOI/arXiv papers | None (polite pool) | Primary source; handles DOI, arXiv ID, and stored W-IDs |
-| **CrossRef** | Varies by publisher | None (polite pool) | Supplementary; many publishers do not deposit reference lists |
-| **OpenCitations** | OA literature | None | Tertiary; skews toward open-access journals |
-
-::: tip Polite pool
-Set `unpaywall.email` in your config to identify your requests to OpenAlex and CrossRef. This opts you into their "polite pool" for better rate limits:
-
-```bash
-mosaic config --unpaywall-email you@example.com
-```
-:::
+where i is the paper's rank by vector distance and links(i) counts the citation edges, in either direction, between
+the paper and the other retrieved papers. `boost_alpha = 0` keeps the vector order. With `expand_neighbors = true`,
+the cached papers cited by the top results are appended after them; they only reach the answer when fewer than
+`top_k` papers were retrieved.
 
 ## Configuration
 
-All citation graph settings live under `[rag.citations]` in `~/.config/mosaic/config.toml`:
+`mosaic config` has no flags for these keys: edit `~/.config/mosaic/config.toml`.
 
 ```toml
 [rag.citations]
-enabled          = false              # apply graph boosting in retrieve()
-boost_alpha      = 0.3               # citation weight; 0 = pure cosine
-providers        = ["openalex", "crossref"]  # priority order
-expand_neighbors = false             # add 1-hop neighbors to candidate pool
+enabled          = false                    # boost retrieval, and enrich on every mosaic index
+boost_alpha      = 0.3                      # weight of citation links; 0 = vector order
+providers        = ["openalex", "crossref"] # tried in this order; "opencitations" also exists
+expand_neighbors = false                    # append cited papers to the retrieved ones
 ```
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `enabled` | `false` | Master switch for citation boosting during `mosaic ask` / `mosaic chat` |
-| `boost_alpha` | `0.3` | Re-scoring weight. Higher values give more weight to citation links; `0` disables boosting while keeping the graph populated |
-| `providers` | `["openalex","crossref"]` | Ordered provider list. Valid values: `"openalex"`, `"crossref"`, `"opencitations"` |
-| `expand_neighbors` | `false` | When true, citation neighbors of top-*k* results are appended to the candidate pool before final ranking |
+With `enabled = true`, every `mosaic index` also enriches, without `--enrich-citations`.
 
-### Auto-enrichment
+A value of `boost_alpha` between 0.4 and 0.6 suits a corpus on one narrow subject, where citations are informative;
+between 0.1 and 0.2 a broad one. Start from 0.3 and compare the answers of `mosaic ask --show-sources`.
 
-Set `enabled = true` to trigger enrichment automatically every time you run `mosaic index`, without needing the `--enrich-citations` flag:
+## Adding a provider
 
-```toml
-[rag.citations]
-enabled = true
-```
+Subclass `BaseCitationProvider` (`mosaic/citations/base.py`): give it a `name`, a `can_handle(paper)` and a
+`fetch_references(paper)` that returns UIDs such as `doi:10.1063/1.4972269` or `arxiv:2304.06563`. Register the
+class in `_REGISTRY` of `mosaic/citations/registry.py` and add its name to `providers`.
 
-## Related commands
-
-Once you have citation edges stored, you can use two additional commands built on top of the graph:
-
-- **`mosaic network`** — explore topology, identify hubs, cluster into communities, and export to JSON/DOT/Mermaid.  See the [Citation Network](./network) guide.
-- **`mosaic compare`** — generate a structured comparison table across a set of papers using an LLM.  See the [Compare Papers](./compare) guide.
-
-## CLI reference
-
-### `mosaic index --enrich-citations`
-
-Embeds papers and then fetches citation edges for all candidates:
-
-```bash
-mosaic index --enrich-citations
-mosaic index --reindex --enrich-citations   # re-embed AND re-enrich
-```
-
-The enrichment step is idempotent: papers already present in `paper_citations` are skipped on subsequent runs (unless `--reindex` is passed).
-
-## Tuning `boost_alpha`
-
-The right value depends on your corpus:
-
-| Corpus type | Suggested α |
-|-------------|-------------|
-| Tightly scoped (single subfield) | `0.4–0.6` — citations are highly informative |
-| Broad interdisciplinary | `0.1–0.2` — citation links are noisier |
-| Mostly preprints (no DOIs) | `0.0` — few edges available; keep cosine-only |
-
-Start with the default `0.3` and adjust based on whether `mosaic ask` surfaces the right papers.
-
-## Limitations
-
-- **Papers without DOI or arXiv ID** (title-slug UIDs) cannot be enriched — they have no identifier that citation databases can resolve. They remain retrievable via cosine similarity; only the boosting signal is absent.
-- **Papers not in OpenAlex** — rare for peer-reviewed literature but common for very new preprints or niche repositories. CrossRef provides a fallback for DOI-bearing papers.
-- **CrossRef coverage is uneven** — some publishers do not deposit reference lists to CrossRef. If CrossRef returns nothing for a well-known paper, this is expected behaviour.
-- **Re-enrichment of missed papers** — papers queried during enrichment that had no local citation matches are not tracked as "enriched" and will be re-attempted on the next run. This is a known limitation; a future release will add explicit attempt tracking.
-
-## Adding a custom provider
-
-Implement `BaseCitationProvider` from `mosaic.citations.base`, register the class name in `mosaic/citations/registry.py`, then add it to `rag.citations.providers` in your config:
-
-```python
-# mosaic/citations/myprovider.py
-from mosaic.citations.base import BaseCitationProvider
-from mosaic.models import Paper
-
-class MyProvider(BaseCitationProvider):
-    name = "myprovider"
-
-    def can_handle(self, paper: Paper) -> bool:
-        return bool(paper.doi)
-
-    def fetch_references(self, paper: Paper) -> list[str]:
-        # Return list of "doi:…" or "arxiv:…" UID strings
-        ...
-```
-
-```python
-# In mosaic/citations/registry.py — add to _REGISTRY:
-"myprovider": MyProvider,
-```
-
-```toml
-# In config.toml:
-[rag.citations]
-providers = ["openalex", "myprovider"]
-```
+See also: [tutorial chapter 10](/tutorial/10-citations), [recipes](/cookbook/ai), [`mosaic index`](/reference/index-command),
+[citation network](./network).

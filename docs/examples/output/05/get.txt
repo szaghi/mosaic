@@ -1,0 +1,5 @@
+$ mosaic get 10.1016/j.paerosci.2006.01.001
+Numerical modeling of spacecraft electric propulsion thrusters (2005)
+Could not find a downloadable PDF for this DOI.
+Have access? Retry with --handoff (your own browser; works for Elsevier) or --interactive (a browser window mosaic
+drives).

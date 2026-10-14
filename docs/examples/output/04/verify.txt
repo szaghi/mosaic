@@ -1,0 +1,2 @@
+$ mosaic cache verify
+5 file(s) OK, 0 missing, 0 not a PDF

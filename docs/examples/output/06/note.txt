@@ -1,0 +1,4 @@
+$ ls ~/vault/papers | head -n 3
+2007_Igor_Kinetic_effects_in_a_Hall_thruster_discharge.md
+2007_Lee_Two-Dimensional_Particle-in-Cell_Simulation_of_a_Hall_Thrust.md
+2008_Shannon_Hybrid_Particle-in-Cell_Erosion_Modeling_of_Two_Hall_Thruste.md

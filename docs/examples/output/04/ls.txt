@@ -1,0 +1,5 @@
+$ ls ~/mosaic-papers
+2004_arXiv_Jose_Plasma_Diagnostic_and_Performance_of_a_Permanent_Magnet_Hall.pdf
+2019_DOAJ_Zahra_Numerical_Study_of_Electron_Cyclotron_Drift_Instability_Appl.pdf
+2023_arXiv_Farbod_Effects_of_the_neutral_dynamics_model_on_the_particle-in-cel.pdf
+2023_arXiv_Maryam_Reduced-order_particle-in-cell_simulations_of_a_high-power_m.pdf

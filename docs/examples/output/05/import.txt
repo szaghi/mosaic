@@ -1,0 +1,4 @@
+$ mosaic import ~/Downloads/1-s2.0-S0094576517312663-main.pdf
+  ✓ 1-s2.0-S0094576517312663-main.pdf
+    → ~/mosaic-papers/2018_Crossref_Cai_Three-dimensional_particle_simulation_of_ion_thruster_plume.pdf
+    Three-dimensional particle simulation of ion thruster plume impingement (2018), DOI 10.1016/j.actaastro.2018.07.007, found via metadata

@@ -1,0 +1,28 @@
+$ mosaic search "hall thruster particle-in-cell" --source arxiv --year 2020-2025
+
+ #     Title                                  Authors         Year   DOI                    Source         OA     PDF
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Reduced-order particle-in-cell         Maryam Reza     2023   10.1088/1361-6595/ac   arXiv          yes    ✓
+       simulations of a high-power            et al.                 dea3
+       magnetically shielde…
+ 2     Effects of the neutral dynamics        Farbod Faraji   2023   10.1063/5.0143292      arXiv          yes    ✓
+       model on the particle-in-cell          et al.
+       simulations of a …
+ 3     Dimensionality reduction of            Maryam Reza     2022   10.48550/arXiv.2206.   arXiv          yes    ✓
+       Poisson's equation with application    et al.                 13892
+       to particle-in-…
+ 4     Enhancing one-dimensional              Farbod Faraji   2022   10.1063/5.0090853      arXiv          yes    ✓
+       particle-in-cell simulations to        et al.
+       self-consistently res…
+ 5     Generalized reduced-order              Maryam Reza     2022   10.48550/arXiv.2208.   arXiv          yes    ✓
+       particle-in-cell scheme for Hall       et al.                 13106
+       thruster modeling: c…
+ 6     Giant topological and planar Hall      D. A. Mayoh     2022   10.1103/PhysRevResea   arXiv          yes    ✓
+       effect in Cr$_{1/3}$NbS$_{2}$          et al.                 rch.4.013134
+ 7     Analysis and Particle-in-Cell          Ishaan Mishra   2022   10.48550/arXiv.2211.   arXiv          yes    ✓
+       Simulation of Gridded ICRH Plasma                             09364
+       Thruster
+ 8     Electrospray Thruster Plume            Ethan Kahn      2025   10.48550/arXiv.2510.   arXiv          yes    ✓
+       Impingement on CubeSat Solar Arrays:                          05084
+       A Particle-Tra…
+8 result(s)

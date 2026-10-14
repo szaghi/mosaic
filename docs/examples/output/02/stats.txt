@@ -1,0 +1,23 @@
+$ mosaic search "hall thruster anomalous transport" --max 5 --stats
+
+          Search stats
+ Source                 Results
+────────────────────────────────
+ arXiv                        5
+ BASE                         0
+ DOAJ                         1
+ Cochrane                     0
+ Europe PMC                   5
+ HAL                          5
+ OpenAlex                     5
+ bioRxiv/medRxiv              0
+ Crossref                     5
+ PubMed                       3
+ Zenodo                       5
+ PubMed Central               5
+
+ Total raw                   39
+ Merged                       4
+ Unique                      35
+  ⋮  (111 lines not shown)
+35 result(s)

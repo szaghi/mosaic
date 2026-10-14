@@ -1,0 +1,5 @@
+$ mosaic get 10.3390/aerospace10010044
+PIC-DSMC Simulation of a Hall Thruster Plume with Charge Exchange Effects Using pdFOAM (2023)
+Could not find a downloadable PDF for this DOI.
+Have access? Retry with --handoff (your own browser; works for Elsevier) or --interactive (a browser window mosaic
+drives).

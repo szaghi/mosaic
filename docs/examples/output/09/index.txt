@@ -1,0 +1,7 @@
+$ mosaic index
+Warning: full_text_index is enabled but pymupdf is not installed.
+Run: pipx inject mosaic-search pymupdf
+Falling back to metadata-only indexing.
+Indexing 107 papers…
+
+Indexed 107 new paper(s). 0 already indexed.

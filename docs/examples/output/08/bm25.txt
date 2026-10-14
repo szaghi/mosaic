@@ -1,0 +1,139 @@
+$ mosaic search "electron transport" --cached --sort relevance
+Searching local cache for 'electron transport'…
+ #     Title                        Authors      Year   DOI              Source         OA     PDF       Cited     Rel.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Three-dimensional            Yin-Jian     2025   10.1017/S00223   Semantic       yes    ✓             1     1.00
+       particle-in-cell             Zhao et             77826102189      Scholar
+       simulations on Hall          al.
+       thruster electron drift …
+ 2     Two-dimensional hybrid       Rei          2021   10.1063/5.0045   arXiv          yes    ✓             –     0.99
+       model of gradient drift      Kawashima           984
+       instability and enhanced     & Kimiya
+       electro…                     Komurasaki
+ 3     Cross-field chaotic          Debraj       2019   10.48550/arXiv   arXiv          yes    ✓             –     0.98
+       transport of electrons by    Mandal et           .1907.08407
+       $\vec E \times \vec B$       al.
+       electron d…
+ 4     Anomalous cross field        C.           2006   10.1063/1.2360   OpenAlex       no     –            99     0.94
+       electron transport in a      Boniface            182
+       Hall effect thruster         et al.
+ 5     Particle-In-Cell modelling   Lucas        2019   –                HAL            yes    ✓             –     0.94
+       of acceleration region in    Nicolle et
+       Hall Thruster                al.
+ 6     Near-Wall Pathways of        Zhe Liu et   2026   10.1103/p8v6-6   arXiv          yes    ✓             –     0.93
+       Anomalous Electron           al.                 6mq
+       Transport in Hall
+       Thrusters Revealed b…
+ 7     Cross-field chaotic          D. Mandal    2019   10.1063/1.5134   arXiv          yes    ✓             –     0.93
+       transport of electrons by    et al.              148
+       ExB electron drift
+       instability in…
+ 8     Data-driven analysis of      Bayón-Buj…   2025   10.1007/s44205   Europe PMC     yes    ✓             –     0.92
+       anomalous transport and      B et al.            -025-00158-6
+       three-wave-coupling
+       effects in …
+ 9     Two-dimensional Modeling     Rei          2018   10.48550/arXiv   arXiv          yes    ✓             –     0.92
+       of the Hall Thruster         Kawashima           .1805.06120
+       Discharge with Non-uniform   et al.
+       Propel…
+ 10    Theory for the anomalous     Trevor       2016   10.1063/1.4948   OpenAlex       no     –           151     0.91
+       electron transport in Hall   Lafleur et          496
+       effect thrusters. II.        al.
+       Kinet…
+ 11    Optical study of anomalous   Meezan, N.   1999   10.2514/6.1999   Crossref       no     –             –     0.89
+       electron transport in a      et al.              -2284
+       laboratory Hall thruster
+ 12    State Estimation of          Troyetsky,   2023   10.1109/icops4   Crossref       no     –             –     0.89
+       Anomalous Electron           D. et al.           5740.2023.1048
+       Transport in a Hall-Effect                       1135
+       Thruster Disc…
+ 13    Optimal Experimental         Allen,       2024   10.2514/6.2024   Crossref       no     –             –     0.89
+       Design for Inferring         Madison G.          -2164
+       Anomalous Electron           et al.
+       Transport in a Hal…
+ 14    Anomalous cross-field        Brown ZA &   2023   10.1103/physre   Europe PMC     no     –             –     0.89
+       transport in a Hall          Jorns BA.           ve.108.065204
+       thruster inferred from
+       direct measure…
+ 15    E × B electron drift         Jean-Pier…   2018   10.1063/1.5017   OpenAlex       yes    ✓           144     0.88
+       instability in Hall          Bœuf &              033
+       thrusters:                   Laurent
+       Particle-in-cell             Garrigues
+       simulation…
+ 16    Kinetic effects in a Hall    Igor         2007   10.1063/1.2709   OpenAlex       no     –           134     0.87
+       thruster discharge           Kaganovich          865
+                                    et al.
+ 17    Two-Dimensional (z-theta)    Cheryl Lam   2009   –                OpenAlex       no     ✓             0     0.87
+       Simulations of Hall          et al.
+       Thruster Anomalous
+       Transport
+ 18    Anomalous transport          F.           2009   10.1063/1.3152   OpenAlex       yes    –            58     0.86
+       induced by sheath            Taccogna            270
+       instability in Hall effect   et al.
+       thrusters
+ 19    Axial-radial plasma          Shaun        2024   10.1088/1361-6   arXiv          yes    ✓             –     0.86
+       transport and performance    Andrews et          595/ade286
+       of a plasma thruster         al.
+       magnetic noz…
+ 20    Comparison between ad-hoc    Roberto      2019   10.1063/1.5089   HAL            no     –             –     0.86
+       and instability-induced      Martorelli          008
+       electron anomalous           et al.
+       transport …
+ 21    Full Particle-In-Cell        James        2013   10.2514/1.b347   OpenAlex       no     –            79     0.84
+       Simulation Methodology for   Szabo et            74
+       Axisymmetric Hall Effect     al.
+       Thrus…
+ 22    3D particle-in-cell study    W.           2023   10.1063/5.0133   HAL            yes    ✓            38     0.83
+       of the electron drift        Villafana           963
+       instability in a Hall        et al.
+       Thruster …
+ 23    Enhancing one-dimensional    Farbod       2022   10.1063/5.0090   arXiv          yes    ✓             –     0.82
+       particle-in-cell             Faraji et           853
+       simulations to               al.
+       self-consistently res…
+ 24    Numerical Study of           Zahra        2019   10.3389/fphy.2   DOAJ           yes    ✓             –     0.81
+       Electron Cyclotron Drift     Asadi et            019.00140
+       Instability: Application     al.
+       to Hall Th…
+ 25    Ionization instability and   Potrivitu    2022   10.21203/rs.3.   Europe PMC     no     –             –     0.78
+       turbulence in the plume of   G & Xu S.           rs-1806238/v1
+       sub-ampere hollow cathode…
+ 26    Application of sparse grid   Laurent      2021   10.1063/5.0044   HAL            yes    ✓             –     0.76
+       combination techniques to    Garrigues           865
+       low temperature plasmas      et al.
+       Pa…
+ 27    Evaluation of Hall           Thomas A.    2023   10.2514/6.2023   OpenAlex       no     –             1     0.75
+       thruster anomalous           Marks &             -0067
+       transport models obtained    Benjamin
+       via data-driven…             Jorns
+ 28    Tutorial: Physics and        Jean-Pier…   2017   10.1063/1.4972   OpenAlex       no     –           502     0.71
+       modeling of Hall thrusters   Bœuf                269
+ 29    Axial-azimuthal Fluid        Poli D &     2026   10.21203/rs.3.   Europe PMC     no     –             –     0.68
+       Modelling of the Hall        Ahedo E.            rs-10852565/v1
+       Effect Thruster Discharge
+ 30    Plasma Dynamics and          Maryam       2024   10.3390/plasma   DOAJ           yes    ✓             –     0.66
+       Electron Transport in a      Reza et             7030034
+       Hall-Thruster-Representat…   al.
+       Config…
+ 31    Electronic transport and     Marc Chung   2024   10.70675/88dd8   HAL            yes    ✓             –     0.62
+       secondary emission in a      To Sang             730zab32z4e2dz
+       Hall thruster                                    a662z9abb69862
+                                                        e52
+ 32    Investigation of the         Tarek Ben    2023   10.70675/efb49   HAL            yes    ✓             –     0.60
+       Optical Emission of Hall     Slimane             6d0z3facz4f0cz
+       Effect Thrusters using a                         b9c6z93c8e5219
+       Collisio…                                        6d6
+ 33    Disordered Quantum           Jian-Xiao    2019   10.1103/PhysRe   arXiv          yes    ✓             –     0.58
+       Transport in Quantum         Zhang &             vB.102.144513
+       Anomalous Hall               Chao-Xing
+       Insulator-Superconductor…    Liu
+ 34    Reduced-order                Maryam       2023   10.1088/1361-6   arXiv          yes    ✓             –     0.58
+       particle-in-cell             Reza et             595/acdea3
+       simulations of a             al.
+       high-power magnetically
+       shielde…
+ 35    Tunable linear and           Lulu Xiong   2024   10.1088/1361-6   arXiv          yes    ✓             –     0.55
+       nonlinear anomalous Hall     et al.              48X/ae084d
+       transport in
+       two-dimensional CrPS$_…
+35 result(s)

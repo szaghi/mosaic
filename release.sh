@@ -126,8 +126,8 @@ BEHIND=$(git rev-list --count HEAD..origin/${TRUNK} 2>/dev/null || echo 0)
 # ── lint gate ──────────────────────────────────────────────────────────────────
 STAGE="lint"
 info "Running ruff lint + format check"
-.venv/bin/ruff check mosaic/ tests/         || die "lint failed — run 'make fmt' to fix, then retry"
-.venv/bin/ruff format --check mosaic/ tests/ || die "format check failed — run 'make fmt' to fix, then retry"
+.venv/bin/ruff check mosaic/ tests/ docs/scripts/         || die "lint failed — run 'make fmt' to fix, then retry"
+.venv/bin/ruff format --check mosaic/ tests/ docs/scripts/ || die "format check failed — run 'make fmt' to fix, then retry"
 
 # ── confirm ────────────────────────────────────────────────────────────────────
 STAGE="confirm"

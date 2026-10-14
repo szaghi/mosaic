@@ -4,519 +4,235 @@ title: Configuration
 
 # Configuration
 
-MOSAIC stores its configuration in `~/.config/mosaic/config.toml`. The file is created automatically with defaults on first run.
+mosaic reads its settings from `~/.config/mosaic/config.toml`. Every key has a default, so the file only holds what
+you change. You edit it with `mosaic config` flags or by hand; this page lists every key and the flag that sets it.
 
-Browser sessions (saved via `mosaic auth login`) are stored separately at `~/.config/mosaic/sessions/` and are not part of the main config file.
+## Where things live
 
-## Quick setup
+| What | Default location | Key |
+|---|---|---|
+| Configuration | `~/.config/mosaic/config.toml` | |
+| Browser sessions (`mosaic auth login`) | `~/.config/mosaic/sessions/` | |
+| Cache: papers, downloads, searches, watches, vector index | `~/.local/share/mosaic/cache.db` | `db_path` |
+| Downloaded PDFs | `~/mosaic-papers/` | `download_dir` |
+
+mosaic writes the configuration file the first time a `mosaic config` flag changes something, readable by you only
+(mode 0600: it holds API keys). Until then the defaults apply.
+
+## Reading and changing it
 
 ```bash
-# Set your Unpaywall email (enables PDF fallback for any DOI)
-mosaic config --unpaywall-email you@example.com
-
-# --- Source API keys ---
-mosaic config --elsevier-key YOUR_KEY        # ScienceDirect
-mosaic config --ss-key YOUR_KEY              # Semantic Scholar
-mosaic config --ncbi-key YOUR_KEY            # PubMed + PMC
-mosaic config --core-key YOUR_KEY            # CORE
-mosaic config --ads-key YOUR_KEY             # NASA ADS
-mosaic config --ieee-key YOUR_KEY            # IEEE Xplore
-mosaic config --springer-key YOUR_KEY        # Springer Nature
-mosaic config --scopus-key YOUR_KEY          # Scopus
-mosaic config --scopus-inst-token YOUR_TOKEN # Scopus institutional token
-mosaic config --zenodo-key YOUR_TOKEN        # Zenodo
-
-# --- Enable / disable sources ---
-mosaic config --disable-source dblp --disable-source hal
-mosaic config --enable-source dblp
-
-# --- Downloads ---
-mosaic config --download-dir ~/papers
-mosaic config --filename-pattern "{author}_{year}_{title}"
-mosaic config --db-path ~/mydata/mosaic.db
-mosaic config --rate-limit-delay 0.5
-
-# --- Obsidian integration ---
-mosaic config --obsidian-vault ~/Documents/MyVault
-mosaic config --obsidian-subfolder literature
-mosaic config --obsidian-filename-pattern "{year}_{author}_{title}"
-mosaic config --obsidian-tag paper --obsidian-tag science
-mosaic config --no-obsidian-wikilinks
-
-# --- LLM relevance scoring ---
-mosaic config --llm-provider openai --llm-api-key sk-... --llm-model gpt-4o-mini
-mosaic config --llm-provider openai --llm-base-url http://localhost:11434/v1 --llm-api-key ollama --llm-model llama3.2
-
-# --- RAG / embeddings ---
-mosaic config --embedding-model snowflake-arctic-embed2 \
-              --embedding-base-url http://localhost:11434/v1 \
-              --embedding-api-key ollama
-mosaic config --embedding-model text-embedding-3-small --embedding-api-key sk-...
-mosaic config --rag-top-k 15
-mosaic config --rag-auto-index           # silently index after every search
-mosaic config --no-rag-auto-index        # disable auto-index
-
-# Print current config
-mosaic config --show
+mosaic config --show                                # print the merged configuration as JSON
+mosaic config --unpaywall-email you@example.org     # change one setting, then save
+mosaic config --download-dir ~/papers --rate-limit-delay 2
 ```
 
-![Configuration setup demo](/gifs/05_config.gif)
+`mosaic config` with no flag prints the configuration too. Several flags combine in one call. Keys that have no
+flag (marked "edit the file" below) go into the TOML file directly; mosaic merges the file over its defaults when it
+starts, and logs a warning for a value of the wrong type or an unknown source name.
 
-## Full config reference
+A first setup usually needs one line, the e-mail that Unpaywall requires to find open PDFs:
 
-```toml
-# Where downloaded PDFs are saved
-download_dir = "/home/you/mosaic-papers"
-
-# Path to the local SQLite cache
-db_path = "/home/you/.local/share/mosaic/cache.db"
-
-# Minimum seconds between requests to the same source
-rate_limit_delay = 1.0
-
-# PDF filename pattern — available placeholders:
-#   {year}    publication year (0000 if unknown)
-#   {source}  source name (arXiv, DOAJ, …)
-#   {author}  first author last name
-#   {title}   title slug, truncated to 60 chars
-#   {doi}     DOI with special chars replaced by _
-#   {journal} journal name slug (no_journal if unknown)
-filename_pattern = "{year}_{source}_{author}_{title}"
-
-[unpaywall]
-# Required for PDF fallback. Any valid email — Unpaywall uses it
-# for usage tracking only, not authentication.
-email = "you@example.com"
-
-[sources.arxiv]
-enabled = true
-
-[sources.semantic_scholar]
-enabled = true
-# Optional. Without a key you share 1000 req/s with all unauthenticated users.
-# With a key you get a dedicated 1 req/s slot.
-api_key = ""
-
-[sources.sciencedirect]
-enabled = true
-# Optional. Register free at https://dev.elsevier.com
-# If omitted, MOSAIC falls back to a saved browser session for search
-# (see Authenticated Access). Without an institutional token the API
-# returns only open-access content.
-api_key = ""
-
-[sources.springer_api]
-enabled = true
-# Optional. Register free at https://dev.springernature.com
-# Returns only open-access articles with direct PDF links.
-# Disabled automatically when api_key is empty.
-api_key = ""
-
-[sources.springer]
-enabled = true
-# No credentials required. Requires the [browser] optional extra.
-# Disable here if you want to exclude Springer from multi-source searches.
-
-[sources.doaj]
-enabled = true
-
-[sources.europepmc]
-enabled = true
-
-[sources.cochrane]
-enabled = true
-
-[sources.openalex]
-enabled = true
-
-[sources.base]
-enabled = true
-
-[sources.core]
-enabled = true
-# Required. Register free at https://core.ac.uk/services/api
-api_key = ""
-
-[sources.nasa_ads]
-enabled = true
-# Required. Register free at https://ui.adsabs.harvard.edu/user/settings/token
-api_key = ""
-
-[sources.ieee]
-enabled = true
-# Required. Register free at https://developer.ieee.org
-# Returns IEEE journals, transactions, and conference proceedings.
-# Disabled automatically when api_key is empty. Free tier: 200 req/day.
-api_key = ""
-
-[sources.zenodo]
-enabled = true
-# Optional. Create a personal access token at https://zenodo.org/account/settings/applications/
-# Anonymous access works without a token (60 req/min limit).
-api_key = ""
-
-[sources.crossref]
-enabled = true
-# No credentials required. Reuses the unpaywall.email for the polite pool (50 req/s).
-
-[sources.dblp]
-enabled = true
-# No credentials required. CS bibliography — journals, conferences, workshops.
-
-[sources.hal]
-enabled = true
-# No credentials required. French open archive — strong for French academic output and grey literature.
-
-[sources.pubmed]
-enabled = true
-# Optional. NCBI API key raises rate limit from 3 req/s to 10 req/s.
-# One key works for both PubMed and PubMed Central.
-# Register free at https://www.ncbi.nlm.nih.gov/account/
-api_key = ""
-
-[sources.pmc]
-enabled = true
-# Optional. Same NCBI API key as [sources.pubmed].
-api_key = ""
-
-[sources.biorxiv]
-enabled = true
-# No credentials required. Searches bioRxiv and medRxiv preprint servers.
-
-[sources.pedro]
-enabled = true
-# Disabled until you explicitly acknowledge PEDro's Fair Use policy.
-# Set acknowledge_fair_use = true to enable.
-acknowledge_fair_use = false
-# Fetch each record's detail page to populate authors, year, DOI, and abstract.
-# Issues one extra HTTP request per result — slower but richer metadata.
-fetch_details = false
-# Seconds between HTTP requests. 3.0 s is the safe-fair default.
-# Lower only if your usage stays within PEDro's acceptable-use terms.
-rate_limit_delay = 3.0
-
-[sources.scopus]
-enabled = true
-# Free API key from https://dev.elsevier.com — same account as ScienceDirect.
-# If omitted, MOSAIC falls back to a saved browser session for search
-# (see Authenticated Access → Scopus). Disabled when both are absent.
-api_key = ""
-# Optional institutional token — unlocks full abstracts and complete author
-# lists for subscribers. Request from Elsevier support if your institution
-# has a Scopus subscription.
-inst_token = ""
-
-[llm]
-# Optional LLM backend for --sort relevance (see Relevance Ranking guide).
-# When provider and api_key are both set, LLM scoring replaces BM25.
-# Leave all fields empty to use BM25 (the default, always available).
-
-# Provider — "openai" or "anthropic".
-# Use "openai" for any OpenAI-compatible server, including local ones
-# (Ollama, LM Studio, llama.cpp, LocalAI, …).
-provider = ""
-
-# API key for the chosen provider.
-# For local servers, any non-empty string works (e.g. "ollama", "lmstudio").
-api_key = ""
-
-# Model name.  Defaults per provider when left empty:
-#   openai    → gpt-4o-mini
-#   anthropic → claude-haiku-4-5-20251001
-model = ""
-
-# Base URL for a local or custom OpenAI-compatible endpoint.
-# Leave empty to use the official provider API.
-# Examples:
-#   Ollama     → http://localhost:11434/v1
-#   LM Studio  → http://localhost:1234/v1
-#   llama.cpp  → http://localhost:8080/v1
-base_url = ""
-
-[rag]
-# Local RAG pipeline — requires: pipx inject mosaic-search sqlite-vec
-# See the RAG & Literature Analysis guide for full setup instructions.
-
-# Embedding model name — required for mosaic index / ask / chat.
-# Examples:
-#   Local (Ollama)  → snowflake-arctic-embed2, nomic-embed-text
-#   Cloud (OpenAI)  → text-embedding-3-small, text-embedding-3-large
-embedding_model = ""
-
-# Base URL for the embedding server.
-# Leave empty to use the official OpenAI API endpoint.
-# When empty, falls back to llm.base_url if set.
-# Examples:
-#   Ollama     → http://localhost:11434/v1
-#   LM Studio  → http://localhost:1234/v1
-embedding_base_url = ""
-
-# API key for the embedding server.
-# Any non-empty string works for local servers (e.g. "ollama", "lmstudio").
-# When empty, falls back to llm.api_key if set.
-embedding_api_key = ""
-
-# Provider — leave empty to inherit from [llm].
-# Set only if your embedding server differs from the generation server.
-embedding_provider = ""
-
-# Number of papers retrieved per RAG query.
-top_k = 10
-
-# Max characters per text chunk — reserved for future full-PDF indexing.
-chunk_size = 512
-
-# Set to true to silently index new papers after every search / get run.
-auto_index = false
-
-[rag.citations]
-# Citation graph — populated by `mosaic index --enrich-citations`.
-# Boosts RAG retrieval scores for papers that share bibliographic edges
-# with other results in the retrieved set. Off by default.
-
-# Enable citation-graph boosting during retrieval.
-enabled = false
-
-# Boost strength. 0.3 gives a modest nudge toward well-connected papers;
-# raise toward 1.0 for tightly-scoped corpora where citation links are
-# highly informative. See the Citation Graph guide for tuning advice.
-boost_alpha = 0.3
-
-# Providers used when running `mosaic index --enrich-citations`.
-# Order = priority. Available: "openalex" (90 %+ DOI coverage),
-# "crossref" (variable), "opencitations" (OA-skewed).
-providers = ["openalex", "crossref"]
-
-# When true, 1-hop citation neighbours are added to the retrieval candidate
-# pool before final ranking — expands coverage at the cost of topic drift.
-expand_neighbors = false
+```bash
+mosaic config --unpaywall-email you@example.org
 ```
 
-## Source credentials
+## Top-level keys
+
+| Key | Default | Flag | Meaning |
+|---|---|---|---|
+| `download_dir` | `~/mosaic-papers` | `--download-dir` | Where PDFs are saved; `--download-dir` on `search`, `get`, `import` overrides it per run |
+| `db_path` | `~/.local/share/mosaic/cache.db` | `--db-path` | The SQLite cache |
+| `filename_pattern` | `{year}_{source}_{author}_{title}` | `--filename-pattern` | Name of a downloaded PDF, see [File names](#file-names) |
+| `rate_limit_delay` | `1.0` | `--rate-limit-delay` | Seconds between two arXiv requests |
+| `custom_sources` | `[]` | edit the file | Extra JSON APIs searched like built-in sources: [Custom sources](./custom-sources) |
+
+## File names
+
+`filename_pattern` builds the name of every PDF that `search --download`, `get`, `get --handoff` and `import`
+save. The same placeholders work in `obsidian.filename_pattern` for note names.
+
+| Placeholder | Value | When missing |
+|---|---|---|
+| `{year}` | publication year | `0000` |
+| `{source}` | source that returned the paper (`arXiv`, `DOAJ`, `Crossref`, ...) | |
+| `{author}` | first word of the first author's name, as the source lists it | `Unknown` |
+| `{title}` | title, punctuation removed, cut to 60 characters, spaces as `_` | |
+| `{doi}` | DOI with characters other than letters, digits, `.` and `-` replaced by `_` | `no_doi` |
+| `{journal}` | journal name, cleaned like the title | `no_journal` |
+
+`{author}` is a family name for sources that list "Family, Given" (Crossref: `2005_Crossref_Boyd_...`) and a given
+name for those that list "Given Family" (arXiv, DOAJ: `2004_arXiv_Jose_...`). Already downloaded papers are
+recognised by the cache, so changing the pattern renames nothing and downloads nothing twice; new downloads use
+the new pattern.
+
+```bash
+mosaic config --filename-pattern "{year}_{journal}_{author}_{title}"
+```
+
+## Sources
+
+Each source has a table `[sources.<name>]` with `enabled = true` and, for some, more keys. `--enable-source NAME`
+and `--disable-source NAME` (repeatable) switch sources on and off by config name:
+
+| Config name | `--source` | Extra keys |
+|---|---|---|
+| `arxiv` | `arxiv` | |
+| `semantic_scholar` | `ss` | `api_key` |
+| `sciencedirect` | `sd` | `api_key` |
+| `springer` | `sp` | |
+| `springer_api` | `springer` | `api_key` |
+| `doaj` | `doaj` | |
+| `europepmc` | `epmc` | |
+| `cochrane` | `cochrane` | |
+| `openalex` | `oa` | |
+| `base` | `base` | |
+| `core` | `core` | `api_key` |
+| `nasa_ads` | `ads` | `api_key` |
+| `ieee` | `ieee` | `api_key` |
+| `zenodo` | `zenodo` | `api_key` |
+| `crossref` | `crossref` | |
+| `dblp` | `dblp` | |
+| `hal` | `hal` | |
+| `pubmed` | `pubmed` | `api_key` |
+| `pmc` | `pmc` | `api_key` |
+| `biorxiv` | `rxiv` | |
+| `pedro` | `pedro` | `acknowledge_fair_use`, `fetch_details`, `rate_limit_delay` |
+| `scopus` | `scopus` | `api_key`, `inst_token` |
+
+```bash
+mosaic config --disable-source base --disable-source zenodo
+```
+
+What each source covers and needs: [Sources](./sources).
+
+### API keys
+
+| Key | Flag | Get it at |
+|---|---|---|
+| `sources.semantic_scholar.api_key` | `--ss-key` | [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api) |
+| `sources.sciencedirect.api_key` | `--elsevier-key` | [dev.elsevier.com](https://dev.elsevier.com) |
+| `sources.scopus.api_key` | `--scopus-key` | [dev.elsevier.com](https://dev.elsevier.com) (same Elsevier key) |
+| `sources.scopus.inst_token` | `--scopus-inst-token` | Elsevier support, through your library |
+| `sources.springer_api.api_key` | `--springer-key` | [dev.springernature.com](https://dev.springernature.com) |
+| `sources.core.api_key` | `--core-key` | [core.ac.uk/services/api](https://core.ac.uk/services/api) |
+| `sources.nasa_ads.api_key` | `--ads-key` | [ui.adsabs.harvard.edu](https://ui.adsabs.harvard.edu/user/settings/token) |
+| `sources.ieee.api_key` | `--ieee-key` | [developer.ieee.org](https://developer.ieee.org) |
+| `sources.zenodo.api_key` | `--zenodo-key` | [zenodo.org](https://zenodo.org/account/settings/applications/tokens/new/) |
+| `sources.pubmed.api_key`, `sources.pmc.api_key` | `--ncbi-key` (sets both) | [ncbi.nlm.nih.gov](https://www.ncbi.nlm.nih.gov/account/) |
+
+CORE, NASA ADS, IEEE Xplore and the Springer Nature API are skipped until their key is set; the others work
+without one.
 
 ### ScienceDirect (Elsevier)
 
-MOSAIC supports two access modes for ScienceDirect. The active mode is chosen
-automatically based on what credentials you have configured:
+ScienceDirect searches with the Elsevier API when `sources.sciencedirect.api_key` is set, and otherwise through a
+saved browser session (`mosaic auth login`), if one is valid. Create the key at
+[dev.elsevier.com](https://dev.elsevier.com), under "Manage API Keys"; a new key can take up to 15 minutes to
+activate, and answers HTTP 401 until then. In API mode mosaic asks for open-access articles only. The browser
+session sees what your institution subscribes to. Scopus works the same way with its own key and
+`inst_token`. Sessions: [Authenticated access](./authenticated-access).
 
-| Credentials | Search | PDF download |
+```bash
+mosaic config --elsevier-key KEY --scopus-key KEY
+```
+
+### PEDro
+
+| Key | Default | Flag |
 |---|---|---|
-| **Elsevier API key** (recommended) | ✅ Full API search | ✅ via Unpaywall / direct URL |
-| **Browser session** (institutional login) | ✅ Browser-based search | ⚠️ Blocked by Cloudflare on PDF endpoint |
-| **Neither** | — source skipped — | — |
+| `acknowledge_fair_use` | `false` | `--pedro-fair-use` / `--no-pedro-fair-use` |
+| `fetch_details` | `false` | `--pedro-fetch-details` / `--no-pedro-fetch-details` |
+| `rate_limit_delay` | `3.0` | `--pedro-rate-limit-delay` |
 
-::: tip Which mode is right for me?
-- Use the **API key** if you primarily want reliable, scriptable access to metadata and open-access PDFs.
-- Use the **browser session** if you have institutional credentials but no API key — you still get full search results for subscribed content. PDF download via the session is limited (see note below).
-- Both can coexist: if an API key is set it always takes priority; the browser session is the fallback.
-:::
+PEDro stays off until `acknowledge_fair_use` is true: [Sources, PEDro](./sources#pedro).
 
-#### API key setup
+## Unpaywall
 
-**Step 1 — create an Elsevier developer account:**
-
-1. Go to [dev.elsevier.com](https://dev.elsevier.com) and click **I want an API key**
-2. Sign in with an existing Elsevier / Scopus account, or click **Register** to create one (free)
-3. Fill in your name, email, and organisation; accept the API terms of service
-
-**Step 2 — create an API key:**
-
-1. Once logged in, click your name → **Manage API Keys** (or go to [dev.elsevier.com/apikey/manage](https://dev.elsevier.com/apikey/manage))
-2. Click **Create API Key**, enter a label (e.g. `MOSAIC`), click **Submit**
-3. Copy the 32-character hex key
-
-**Step 3 — add the key to MOSAIC:**
-
-::: warning Wait before using the key
-Newly created Elsevier API keys can take up to **15 minutes** to activate. If you get a `401 Unauthorized` error immediately after creation, wait a few minutes and try again.
-:::
-
-```bash
-mosaic config --elsevier-key YOUR_KEY
-```
-
-::: tip Institutional access via API
-Without an institutional token, the API returns only open-access articles. For subscribed content, your institution's library must request an **Institution Token** from Elsevier. Running MOSAIC from campus or via your institution's VPN activates IP-based authentication automatically — no extra config needed.
-:::
-
-#### Browser session setup
-
-If you have institutional credentials but no API key, save a browser session
-instead. See [Authenticated Access](./authenticated-access) for the general
-workflow. The ScienceDirect-specific steps are:
-
-```bash
-mosaic auth login elsevier --url https://www.sciencedirect.com
-```
-
-In the browser window, complete the full institutional SSO flow until
-ScienceDirect shows your name or a "Sign out" link, then press **Enter** in
-the terminal.
-
-::: warning Use Firefox for ScienceDirect
-MOSAIC uses Firefox for both login and headless search by default. The
-Cloudflare session cookie (`cf_clearance`) is bound to the browser's TLS
-fingerprint — mixing browsers (e.g. logging in with Chromium then searching
-with Firefox) causes the session to be rejected. If Firefox is not installed,
-run `playwright install firefox`.
-:::
-
-::: info PDF download limitation
-ScienceDirect's PDF download endpoint (`/pdfft/`) applies stricter Cloudflare
-Bot Management rules than article pages. Even with a valid institutional
-session the download is blocked by Cloudflare regardless of credentials. The
-browser session therefore enables **search only**; PDF retrieval falls back to
-Unpaywall (open-access copies). For reliable PDF access to subscribed content,
-use the API key with an institutional IP or VPN.
-:::
-
-::: tip Session expiry
-MOSAIC checks cookie timestamps before activating the browser session. An
-expired session is silently excluded at startup (visible as ✗ in
-`mosaic auth status`). If the session expires mid-search, MOSAIC prints a
-warning and suggests the re-login command. Re-run
-`mosaic auth login elsevier --url https://www.sciencedirect.com` to refresh.
-:::
-
-### CORE — free API key required
-
-CORE is **disabled** until an API key is set. Registration is free for academic use.
-
-1. Register at [core.ac.uk/services/api](https://core.ac.uk/services/api)
-2. Copy the key from your dashboard
-3. Add it via the CLI:
-
-```bash
-mosaic config --core-key YOUR_KEY
-```
-
-### Semantic Scholar — optional API key
-
-Without a key, requests share the public rate-limit pool (1 000 req/s across all anonymous users). With a dedicated key you get a private slot at 1 req/s — enough for interactive use.
-
-1. Go to [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api) and scroll down to **"Get API Key"**
-2. Fill in your name, email, and a brief description of your use case
-3. The key is issued automatically and sent to your email — usually within a few minutes; no institutional affiliation is required
-4. Apply it:
-
-```bash
-mosaic config --ss-key YOUR_KEY
-```
-
-### Unpaywall — email address required
-
-Unpaywall is not a search source but the PDF fallback resolver used during download. It requires any valid email address for usage tracking — no account or password.
-
-```bash
-mosaic config --unpaywall-email you@example.com
-```
-
-### OpenAlex — optional email (polite pool)
-
-OpenAlex works without any credentials. Providing your email opts you into the [polite pool](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication), which grants significantly higher rate limits. MOSAIC reuses the Unpaywall email automatically — no separate step needed once `--unpaywall-email` is set.
-
-### Springer Nature API — free API key
-
-The Springer Nature API source (`springer`) returns only open-access articles and includes direct PDF links. Register for a free key at [dev.springernature.com](https://dev.springernature.com) and add it via the CLI:
-
-```bash
-mosaic config --springer-key YOUR_KEY
-```
-
-The source is disabled automatically when `api_key` is empty.
-
-### Springer Nature browser — no credentials required
-
-The browser-based Springer source (`sp`) is publicly accessible. It activates
-automatically when Playwright is installed (`pip install 'mosaic-search[browser]'`).
-No API key or browser session is needed for searching. A saved session is
-used only for PDF downloads of subscribed articles — see
-[Authenticated Access](./authenticated-access).
-
-Both Springer sources can run simultaneously; results are deduplicated by DOI.
-
-To disable the browser source:
-```bash
-mosaic config --disable-source springer
-```
-
-### IEEE Xplore — free API key required
-
-IEEE Xplore is **disabled** until an API key is set. Registration is free.
-
-1. Sign up at [developer.ieee.org](https://developer.ieee.org)
-2. Create an application to receive an API key
-3. Add it via the CLI:
-
-```bash
-mosaic config --ieee-key YOUR_KEY
-```
-
-The free tier allows 200 requests per day.
-
-### Zenodo — optional access token
-
-Zenodo works without any credentials (60 req/min anonymous limit). A free personal access token raises this limit. Create one at [zenodo.org/account/settings/applications](https://zenodo.org/account/settings/applications/tokens/new/) and add it via the CLI:
-
-```bash
-mosaic config --zenodo-key YOUR_TOKEN
-```
-
-### Crossref — email optional
-
-Crossref works without any credentials. Providing your email opts the client into the [polite pool](https://api.crossref.org/swagger-ui/index.html), granting up to 50 requests per second. MOSAIC reuses the Unpaywall email automatically — no separate step needed once `--unpaywall-email` is set.
-
-To disable the source entirely:
-```bash
-mosaic config --disable-source crossref
-```
-
-### Scopus — API key or browser session
-
-Scopus supports two access modes (same as ScienceDirect):
-
-| Credentials | What MOSAIC does |
+| Key | Flag |
 |---|---|
-| **Elsevier API key** | Uses the Scopus Search API. Free key returns partial metadata; add `inst_token` for full abstracts. |
-| **Browser session** (no API key) | Searches via headless Firefox. Shares the `id.elsevier.com` SSO with ScienceDirect. |
-| **Neither** | Source is skipped. |
+| `unpaywall.email` | `--unpaywall-email` |
 
-The Elsevier API key is the same one used for ScienceDirect. If you have already run `mosaic config --elsevier-key YOUR_KEY`, add the same key to the Scopus config:
+Unpaywall wants an e-mail address with each request and has no account. Without it, `get` and `--download` use only
+the PDF links the sources return. mosaic also sends this address to OpenAlex, Crossref and the citation providers,
+which serve identified clients faster.
+
+## Zotero
+
+| Key | Default | Flag |
+|---|---|---|
+| `zotero.api_key` | `""` | `--zotero-key` |
+| `zotero.user_id` | `0` | set by `--zotero-key` |
+
+With no key, `--zotero` talks to the Zotero desktop app on this computer. `--zotero-key` stores a web API key and
+looks up your user ID at once. Details: [Zotero](./zotero).
+
+## Obsidian
+
+| Key | Default | Flag |
+|---|---|---|
+| `obsidian.vault_path` | `""` | `--obsidian-vault` |
+| `obsidian.subfolder` | `papers` | `--obsidian-subfolder` |
+| `obsidian.filename_pattern` | `{year}_{author}_{title}` | `--obsidian-filename-pattern` |
+| `obsidian.tags` | `["paper"]` | `--obsidian-tag` (repeatable; replaces the list) |
+| `obsidian.wikilinks` | `true` | `--obsidian-wikilinks` / `--no-obsidian-wikilinks` |
+
+Details: [Obsidian](./obsidian).
+
+## LLM
+
+One model serves `--sort relevance`, `--summarise`, `compare`, `ask` and `chat`.
+
+| Key | Default | Flag | Meaning |
+|---|---|---|---|
+| `llm.provider` | `""` | `--llm-provider` | `openai` (also any OpenAI-compatible server) or `anthropic` |
+| `llm.api_key` | `""` | `--llm-api-key` | Key; any non-empty string for a local server |
+| `llm.model` | `""` | `--llm-model` | Empty: `gpt-4o-mini` (openai) or `claude-haiku-4-5-20251001` (anthropic) |
+| `llm.base_url` | `""` | `--llm-base-url` | OpenAI-compatible server, e.g. `http://localhost:11434/v1` for Ollama (`/v1` is added when missing) |
+| `llm.timeout` | `0` | `--llm-timeout` | Seconds to wait for one answer; `0` keeps the built-in 2–3 minutes. Raise it for large local models |
+
+mosaic uses the LLM only when both `provider` and `api_key` are set. A local Ollama server:
 
 ```bash
-mosaic config --scopus-key YOUR_KEY
-# Optional institutional token for full abstracts and complete author lists:
-mosaic config --scopus-inst-token YOUR_INST_TOKEN
+mosaic config --llm-provider openai --llm-base-url http://localhost:11434/v1 --llm-api-key ollama --llm-model qwen3:8b
 ```
 
-For browser-session setup see [Authenticated Access → Scopus](./authenticated-access#scopus). The full API key registration procedure is documented in [Sources → Scopus](./sources#scopus--shorthand-scopus).
+## RAG
 
-### arXiv, DOAJ, Europe PMC, Cochrane, BASE, DBLP, HAL
+Settings for `mosaic index`, `ask`, `chat` and `search --semantic` ([Asking your library](./rag)).
 
-These sources require no credentials and are ready to use out of the box. DBLP is particularly useful for computer science conference and journal papers; note that it does not provide abstracts. HAL is the French national open archive, strong for French academic output and grey literature.
+| Key | Default | Flag | Meaning |
+|---|---|---|---|
+| `rag.embedding_model` | `""` | `--embedding-model` | Embedding model; required to index |
+| `rag.embedding_base_url` | `""` | `--embedding-base-url` | Embedding server; empty: `llm.base_url`, or OpenAI |
+| `rag.embedding_api_key` | `""` | `--embedding-api-key` | Empty: `llm.api_key` |
+| `rag.embedding_provider` | `""` | edit the file | Not used: embeddings always go through the OpenAI embeddings API (cloud OpenAI, or the server at `embedding_base_url`) |
+| `rag.top_k` | `10` | `--rag-top-k` | Papers retrieved per question |
+| `rag.chunk_size` | `512` | edit the file | Tokens per text chunk (counted as 4 characters each) |
+| `rag.chunk_overlap` | `50` | `--chunk-overlap` | Tokens shared by consecutive chunks |
+| `rag.full_text_index` | `true` | `--full-text-index` / `--no-full-text-index` | Index the text of downloaded PDFs; needs `pymupdf` installed |
+| `rag.auto_index` | `false` | `--rag-auto-index` / `--no-rag-auto-index` | Index new papers after every `search` and `get` |
 
-### PEDro — explicit fair-use opt-in required
+Change the embedding model and the stored vectors no longer match: run `mosaic index --reindex`.
 
-PEDro is the specialised physiotherapy evidence database (~67 700 RCTs, systematic reviews, and clinical practice guidelines).  It is **disabled by default** because its [Fair Use policy](https://pedro.org.au/fair-use/) prohibits automated bulk downloading.
+### Citation graph
 
-To enable it via the CLI:
+| Key | Default | Meaning |
+|---|---|---|
+| `rag.citations.enabled` | `false` | Boost retrieval with citation links, and fetch them on every `mosaic index` |
+| `rag.citations.boost_alpha` | `0.3` | Weight of the boost; 0 turns it off |
+| `rag.citations.providers` | `["openalex", "crossref"]` | Where citation links come from, in order; `opencitations` also works |
+| `rag.citations.expand_neighbors` | `false` | Add papers one citation away to the retrieved set |
 
-```bash
-# Acknowledge the fair-use policy (required to enable the source)
-mosaic config --pedro-fair-use
+These keys have no flags: edit the file.
 
-# Optionally enable detail fetching (authors, year, DOI, abstract — one extra request per result)
-mosaic config --pedro-fetch-details
-
-# Optionally adjust the rate-limit delay (default: 3.0 s — lower only within fair-use terms)
-mosaic config --pedro-rate-limit-delay 2.0
+```toml
+[rag.citations]
+enabled = true
+boost_alpha = 0.3
 ```
 
-Once enabled, PEDro appears in all multi-source searches and can also be targeted directly:
+Details: [Citation graph](./citation-graph).
 
-```bash
-mosaic search "chronic low back pain" --source pedro --field title
-
-# With full metadata (authors, year, DOI, abstract):
-mosaic search "chronic low back pain" --source pedro --pedro-fetch-details
-```
+See also: [tutorial: getting the PDFs](/tutorial/04-pdfs), [maintenance recipes](/cookbook/maintenance),
+[`mosaic config`](/reference/config).

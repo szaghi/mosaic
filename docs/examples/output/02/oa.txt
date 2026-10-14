@@ -1,0 +1,50 @@
+$ mosaic search "hall thruster anomalous transport" --oa-only --pdf-only --max 3
+
+ #     Title                             Authors       Year   DOI                 Source         OA     PDF       Cited
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Plasma Diagnostic and             Jose          2004   10.48550/arXiv.ph   arXiv          yes    ✓             –
+       Performance of a Permanent        Leonardo             ysics/0410170
+       Magnet Hall Thruster              Ferreira et
+                                         al.
+ 2     Electric field induced Berry      Srimayi       2025   10.48550/arXiv.25   arXiv          yes    ✓             –
+       curvature dipole and non-linear   Korrapati            10.20237
+       anomalous Hall eff…               et al.
+ 3     Near-Wall Pathways of Anomalous   Zhe Liu et    2026   10.1103/p8v6-66mq   arXiv          yes    ✓             –
+       Electron Transport in Hall        al.
+       Thrusters Revealed b…
+ 4     Numerical Study of Electron       Zahra Asadi   2019   10.3389/fphy.2019   DOAJ           yes    ✓             –
+       Cyclotron Drift Instability:      et al.               .00140
+       Application to Hall Th…
+ 5     Data-driven analysis of           Bayón-Buján   2025   10.1007/s44205-02   Europe PMC     yes    ✓             –
+       anomalous transport and           B et al.             5-00158-6
+       three-wave-coupling effects in
+       …
+ 6     Two-Dimensional (z-theta)         Cheryl Lam    2009   –                   OpenAlex       no     ✓             0
+       Simulations of Hall Thruster      et al.
+       Anomalous Transport
+ 7     3D particle-in-cell study of      W.            2023   10.1063/5.0133963   HAL            yes    ✓             –
+       the electron drift instability    Villafana
+       in a Hall Thruster …              et al.
+ 8     Modèles cinétiques et             Jordan        2013   –                   HAL            yes    ✓             –
+       caractérisation expérimentale     Cavalier
+       des fluctuations électrosta…
+ 9     Modélisation bidimensionnelle     Vivien        2017   10.70675/49b7974e   HAL            yes    ✓             –
+       de la décharge plasma dans un     Croes                zcf6dz42b1z9817z0
+       propulseur de Hall                                     df2db1d5902
+ 10    Technology Demonstration          Safran        2026   10.5281/zenodo.23   Zenodo         yes    ✓             –
+       testing of the PPS-20k Thruster   Spacecraft           102630
+                                         Propulsion
+                                         et al.
+ 11    Application of Force Measuring    Spethmann,    2017   10.5281/zenodo.17   Zenodo         yes    ✓             –
+       Probes for the Investigation of   Alexander            385281
+       Sputtering and a…                 et al.
+ 12    Band structure, magneto-Seebeck   Daou, Ramzy   2025   10.5281/zenodo.17   Zenodo         yes    ✓             –
+       and magnetoresistance at the      et al.               423713
+       para-to ferri-magn…
+ 13    Interstellar Mapping And          McComas DJ    2025   10.1007/s11214-02   PubMed         yes    ✓             –
+       Acceleration Probe: The NASA      et al.               5-01224-z           Central
+       IMAP Mission.
+ 14    Characterization of a 10 W        Whittaker C   2025   10.1007/s44205-02   PubMed         yes    ✓             –
+       class electrospray array          et al.               5-00114-4           Central
+       thruster.
+14 result(s)

@@ -1,0 +1,192 @@
+$ mosaic ask "What causes anomalous electron transport in Hall thrusters?" --show-sources
+───────────────────────────────────────────── mosaic ask · mode: synthesis ─────────────────────────────────────────────
+
+Sources retrieved (10):
+  [1] Optical study of anomalous electron transport in a laboratory Hall thruster — Meezan, N., Hargus, Jr., W. (1999)
+  [2] Anomalous cross field electron transport in a Hall effect thruster — C. Boniface, Laurent Garrigues (2006)
+  [3] State Estimation of Anomalous Electron Transport in a Hall-Effect Thruster Discharge — Troyetsky, D., Greve, C.
+(2023)
+  [4] Near-Wall Pathways of Anomalous Electron Transport in Hall Thrusters Revealed by 3D PIC Simulations — Zhe Liu,
+Zhongping Zhao (2026)
+  [5] Optimal Experimental Design for Inferring Anomalous Electron Transport in a Hall Thruster — Allen, Madison G.,
+Marks, Thomas A. (2024)
+  [6] Comparison between ad-hoc and instability-induced electron anomalous transport in a 1D fluid simulation of
+Hall-effect thruster — Roberto Martorelli, Trevor Lafleur (2019)
+  [7] Theory for the anomalous electron transport in Hall effect thrusters. II. Kinetic model — Trevor Lafleur, Scott
+Baalrud (2016)
+  [8] Nonlinear simulations and anomalous transport in hall thruster plasma — Koshkarov, O., Pombo, W. Frias (2016)
+  [9] Anomalous transport induced by sheath instability in Hall effect thrusters — F. Taccogna, Savino Longo (2009)
+  [10] Cross-field chaotic transport of electrons by ExB electron drift instability in Hall thruster — D. Mandal, Y.
+Elskens (2019)
+
+           What Causes Anomalous Electron Transport in Hall Thrusters? – A Synthesis of the State of the Art
+
+1. The Core Problem
+
+In Hall effect thrusters (HETs), electrons must cross the radial magnetic field to reach the anode, yet classical
+collisional diffusion predicts a cross-field mobility that is orders of magnitude too small to sustain the observed
+discharge current. This "anomalous" (or Bohm-like) transport has long been a central obstacle to first-principles
+modelling of Hall thrusters. The papers collected here span optical diagnostics, kinetic and fluid modelling, kinetic
+theory, sheath physics, and data-driven inference, and together they paint a picture in which azimuthal electrostatic
+instabilities are the dominant driver, while wall interactions and sheath physics provide important secondary
+contributions that shape the spatial distribution of the cross-field current.
+
+2. Main Approaches and Methods
+
+Several complementary methodological strands are represented:
+
+ • Optical and interferometric diagnostics. Meezan et al. [1] performed one of the earliest dedicated optical studies of
+   anomalous electron transport in a laboratory Hall thruster, establishing the need for spatially resolved plasma
+   measurements. Boniface et al. [2] used Fabry-Pérot interferometry on a 5 kW thruster to compare measured ion-velocity
+   profiles against hybrid-model predictions, allowing them to infer the cross-field conductivity inside and outside the
+   channel simultaneously.
+ • Kinetic particle-in-cell (PIC) simulations. Lafleur, Baalrud and Chabert [7] used PIC simulations to demonstrate a
+   direct correlation between anomalously high cross-field electron transport and the presence of azimuthal
+   electrostatic instabilities. Liu, Zhao and Zhao [4] performed instability-resolving, fully three-dimensional PIC
+   simulations with self-consistent dielectric wall charging, secondary electron emission, Monte Carlo ionisation, a
+   continuum neutral-gas model, and an open near-plume outflow. Koshkarov et al. [8] explored nonlinear simulation
+   effects on anomalous transport in Hall thruster plasmas.
+ • Fluid and hybrid models with instability-derived transport. Martorelli et al. [6] compared an ad-hoc
+   anomalous-transport model against an instability-induced closure within a one-dimensional fluid simulation, testing
+   whether the instability picture can reproduce results typically obtained with empirical conductivity prescriptions.
+   Taccogna et al. [9] performed numerical experiments specifically isolating the contribution of a lateral sheath
+   instability to the anomalous axial current.
+ • Kinetic theory and wave-particle modelling. Lafleur et al. [7] derived a kinetic theory of the enhanced electron
+   scattering rate driven by the azimuthal electron drift instability, predicting a cross-field mobility in good
+   agreement with experiment. Mandal et al. [10] modelled the anomalous transport as arising from chaotic electron
+   dynamics in the fluctuating electrostatic fields of the electron cyclotron drift (E×B) instability endemic to HETs.
+ • Data-driven and experimental-design approaches. Troyetsky et al. [3] applied state-estimation techniques to infer
+   anomalous electron transport from discharge measurements, while Allen et al. [5] formulated an optimal experimental
+   design problem for inferring the transport coefficient with fewer measurements and higher confidence.
+
+3. Key Findings
+
+3.1 Azimuthal Electrostatic Instabilities as the Primary Driver
+
+The strongest and most recurring finding across the literature is that azimuthal E×B / electron drift instabilities are
+the principal mechanism generating anomalous cross-field electron transport. Lafleur et al. [7] showed via PIC
+simulations that the large azimuthal electron drift in HETs drives a strong instability that quickly saturates through
+ion-wave trapping and wave convection, yielding an enhanced mobility many orders of magnitude above classical diffusion.
+Mandal et al. [10] independently attributed the anomalous transport to chaotic electron dynamics in the fluctuating
+fields of the electron cyclotron drift instability, demonstrating that wave-particle interaction raises the
+perpendicular electron temperature (T⊥/T∥ ~ 4) and produces a mean axial electron velocity of the correct order of
+magnitude relative to experiment. Liu et al. [4] confirmed in fully 3D PIC simulations that the transport is
+instability-driven, extracting the net correlation term ⟨n_e E_y⟩ from strongly oscillatory three-dimensional fields.
+
+3.2 Instability-Induced Transport Reproduces Ad-Hoc Models
+
+Martorelli et al. [6] found reasonable agreement between the friction force and anomalous heating produced by a
+conventional ad-hoc transport model and those arising from an instability-derived closure in a 1D fluid simulation. This
+suggests that the long-used empirical Bohm-like conductivity may be a macroscopic shadow of the underlying
+micro-instability physics, and it paves the way for self-consistent instability-driven closures in fluid solvers.
+
+3.3 Spatial Non-Uniformity and Near-Wall Pathways
+
+A particularly notable result comes from Liu et al. [4], who showed that anomalous electron transport is not distributed
+uniformly across the channel cross-section. Instead, it self-organises into persistent near-wall pathways connected to
+the near-exit region. Comparing conducting-wall, ceramic-wall-with-secondary-emission, and open-outflow closures, they
+demonstrated that this near-wall transport topology is robust, while the boundary treatment mainly redistributes the
+detailed strength of the pathway and its coupling to the exit and near-plume region. This provides a previously
+unresolved spatial picture of where the instability-driven transport actually occurs.
+
+3.4 The Role of Walls and Sheath Instability
+
+Boniface et al. [2] challenged the long-standing assumption that Bohm anomalous conductivity dominates outside the
+channel while electron-wall (near-wall) conductivity prevails inside; their interferometric comparisons suggested that
+one and the same mechanism is responsible for anomalous transport in both regions. Taccogna et al. [9] identified a
+distinct additional mechanism: a lateral sheath instability arising from the negative differential resistance of the
+floating-wall I–V characteristic due to high secondary electron emission. Their numerical experiments indicated this
+sheath instability alone can account for more than 80 % of the experimentally measured anomalous axial current. Liu et
+al. [4] showed that secondary electron emission and dielectric wall charging affect the detailed strength and
+exit-region coupling of the near-wall transport pathways, even though the topological structure remains robust.
+
+3.5 Scaling and Plasma-Property Dependence
+
+Lafleur et al. [7] emphasised that the enhanced mobility predicted by their kinetic model is a strong function of local
+plasma properties (density, temperature) as well as B₀, and therefore does not in general follow a simple 1/B₀ or 1/B₀²
+scaling. This has implications for scaling HET performance across power levels and magnetic-field configurations.
+
+3.6 Inference and Experimental Design
+
+Troyetsky et al. [3] and Allen et al. [5] address the practical challenge of inferring the anomalous transport
+coefficient from limited experimental data, employing state-estimation and optimal-experimental-design frameworks
+respectively. These contributions are complementary to the physics modelling, providing systematic methods to extract
+the effective transport from measurements with quantified uncertainty.
+
+4. Areas of Consensus
+
+Among the ten papers, several points of agreement emerge:
+
+ • The classical collisional (Spitzer) conductivity is insufficient by several orders of magnitude, and some additional
+   mechanism is required [2][4][6][7][10].
+ • Azimuthal electrostatic (E×B) instabilities are the leading candidate for the anomalous transport mechanism
+   [4][6][7][10].
+ • The problem is inherently three-dimensional and spatially non-uniform, and low-dimensional or purely local models
+   capture only part of the physics [4][6][7].
+ • Wall physics (secondary emission, sheath structure) modifies but does not eliminate the instability-driven transport
+   [2][4][9].
+ • Experimental validation (Fabry-Pérot, optical, and electrical measurements) remains essential for constraining
+   models, and the community is moving toward more targeted, design-of-experiment approaches [1][2][3][5].
+
+5. Notable Disagreements and Open Debates
+
+ • Single mechanism vs. multiple mechanisms. Boniface et al. [2] argued that one mechanism (implicated by their
+   hybrid-model comparison) explains transport both inside and outside the channel, explicitly challenging the
+   conventional Bohm-in / wall-conductivity-out partition. Liu et al. [4] and Taccogna et al. [9], by contrast,
+   highlight distinct near-wall pathways and a separate sheath-instability contribution, respectively, suggesting that
+   the physics is more compartmentalised than a single Bohm-like coefficient implies. Whether these are genuinely
+   distinct mechanisms or different spatial manifestations of the same underlying E×B instability remains an open
+   question.
+ • The spatial topology of transport. The older picture (implicit in ad-hoc models [6] and in the Bohm-vs.-wall
+   dichotomy of [2]) treated anomalous conductivity as a fairly homogeneous bulk property. The 3D PIC results of Liu et
+   al. [4] show a strongly structured, near-wall, exit-connected topology, which is not captured by 1D fluid or simple
+   kinetic-theory closures. How well current fluid or hybrid codes can reproduce this spatial structure is an active
+   area of development.
+ • Scaling laws. The expectation of a simple 1/B₀² (Bohm) scaling is contradicted by the kinetic-theory result of
+   Lafleur et al. [7], who show a strong, non-trivial dependence on local density and other plasma parameters. This has
+   practical consequences for thruster scaling that is not yet fully resolved.
+ • Adequacy of 1D / fluid closures. While Martorelli et al. [6] demonstrate that instability-induced closures can match
+   ad-hoc models in 1D, the 3D PIC work of Liu et al. [4] and the sheath-focused study of Taccogna et al. [9] both
+   suggest that important physics (azimuthal mode structure, sheath instability, wall-boundary coupling) is lost in any
+   purely one-dimensional treatment. The community is therefore transitioning toward fully kinetic or at least
+   multi-dimensional fluid descriptions, but at the significant computational cost noted in [4].
+ • The relative weight of the lateral sheath instability. Taccogna et al. [9] claim that the sheath instability
+   contributes more than 80 % of the anomalous axial current, a strong claim that sits in tension with the
+   instability-driven, channel-wide picture of [4][6][7][10]. Reconciling the magnitude of the sheath contribution with
+   the global E×B instability contribution is not yet settled in the literature presented here.
+
+6. Summary
+
+The state of the art, as reflected in the cited works, converges on the view that anomalous electron cross-field
+transport in Hall thrusters is driven primarily by azimuthal electrostatic (E×B / electron drift) instabilities, whose
+interaction with the electron population enhances the effective perpendicular mobility far beyond classical expectations
+[4][6][7][10]. The transport is spatially organised into near-wall pathways rather than being a uniform bulk phenomenon
+[4], and wall-related physics—secondary electron emission, dielectric charging, and lateral sheath instability—modifies
+the strength and distribution of the anomalous current [2][4][9]. Empirical Bohm-like closures remain useful engineering
+tools and can be partially justified by the underlying instability physics [6], but a fully predictive, spatially
+resolved, self-consistent description still requires three-dimensional kinetic or high-fidelity fluid modelling [4][7].
+Open questions persist regarding the exact partition of responsibility between channel instabilities and wall sheath
+effects, the correct scaling with magnetic field and plasma density, and the most efficient experimental protocols for
+inferring the transport coefficient in situ [3][5].
+
+References
+  [1] Optical study of anomalous electron transport in a laboratory Hall thruster — Meezan, N., Hargus, Jr., W.,
+Schmidt, D. et al., 1999
+  [2] Anomalous cross field electron transport in a Hall effect thruster — C. Boniface, Laurent Garrigues, Gerjan J. M.
+Hagelaar et al., 2006
+  [3] State Estimation of Anomalous Electron Transport in a Hall-Effect Thruster Discharge — Troyetsky, D., Greve, C.,
+Tsikata, S. et al., 2023
+  [4] Near-Wall Pathways of Anomalous Electron Transport in Hall Thrusters Revealed by 3D PIC Simulations — Zhe Liu,
+Zhongping Zhao, Yinjian Zhao, 2026
+  [5] Optimal Experimental Design for Inferring Anomalous Electron Transport in a Hall Thruster — Allen, Madison G.,
+Marks, Thomas A., Eckels, Joshua et al., 2024
+  [6] Comparison between ad-hoc and instability-induced electron anomalous transport in a 1D fluid simulation of
+Hall-effect thruster — Roberto Martorelli, Trevor Lafleur, Anne Bourdon et al., 2019
+  [7] Theory for the anomalous electron transport in Hall effect thrusters. II. Kinetic model — Trevor Lafleur, Scott
+Baalrud, Pascal Chabert, 2016
+  [8] Nonlinear simulations and anomalous transport in hall thruster plasma — Koshkarov, O., Pombo, W. Frias, Smolyakov,
+A. I. et al., 2016
+  [9] Anomalous transport induced by sheath instability in Hall effect thrusters — F. Taccogna, Savino Longo, M.
+Capitelli et al., 2009
+  [10] Cross-field chaotic transport of electrons by ExB electron drift instability in Hall thruster — D. Mandal, Y.
+Elskens, N. Lemoine et al., 2019

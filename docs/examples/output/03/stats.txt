@@ -1,0 +1,9 @@
+$ mosaic cache stats
+ Papers cached               80
+   with abstract             63
+   open access               47
+   with PDF URL              49
+ Downloads (ok)               0
+ Searches logged              7
+ Exports tracked              0
+ DB size                0.22 MB

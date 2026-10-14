@@ -1,0 +1,35 @@
+$ mosaic similar 10.1063/1.4972269 --max 8
+
+Similar to: Tutorial: Physics and modeling of Hall thrusters
+
+ #     Title                             Authors       Year   DOI                 Source         OA     PDF       Cited
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Optimization of Electric          Monika        2003   10.2514/2.6124      OpenAlex       no     –            13
+       Thrusters for Primary             Auweter‐Ku…
+       Propulsion Based on the Rocket    & Helmut
+       E…                                Kurtz
+ 2     New concept of metal ion          Ioana–Laura   2020   10.1088/1361-6595   OpenAlex       yes    ✓             4
+       thruster based on pulsed          Velicu et            /abd0dd
+       thermionic vacuum arc dischar…    al.
+ 3     Application of electric           N. E.         2022   10.26732/j.st.202   OpenAlex       yes    –             1
+       thrusters in a spacecraft         Kovalenko &          2.2.02
+       propulsion system                 А. А.
+                                         Внуков
+ 4     THRUST GENERATION BY ION          Vishal        2022   10.47893/gret.202   OpenAlex       yes    ✓             1
+       PROPULSION TECHNOLOGY             Kaushik et           2.1134
+                                         al.
+ 5     Investigation of a miniature      Cheryl        2011   –                   OpenAlex       yes    ✓             2
+       differential ion thruster         Collingwood
+ 6     An RF Plasma Thruster for Use     Lynn Olson    2001   –                   OpenAlex       yes    ✓             0
+       in Small Satellites
+ 7     A Microwave Thruster for          USDOE         2012   10.2172/1047100     OpenAlex       yes    ✓             0
+       Spacecraft Propulsion [Slides]    National
+                                         Nuclear
+                                         Security
+                                         Administra…
+                                         (NNSA) &
+                                         Vincent
+                                         Chiravalle
+ 8     Ion thruster project              G. E.         1984   –                   OpenAlex       yes    ✓             0
+                                         Perche
+8 result(s)

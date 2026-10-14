@@ -1,0 +1,10 @@
+$ mosaic search "hall thruster particle-in-cell" --cached --output refs.bib --output refs.csv
+Searching local cache for 'hall thruster particle-in-cell'…
+ #     Title                             Authors       Year   DOI                 Source         OA     PDF       Cited
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Reduced-order particle-in-cell    Maryam Reza   2023   10.1088/1361-6595   arXiv          yes    ✓             –
+       simulations of a high-power       et al.               /acdea3
+  ⋮  (98 lines not shown)
+33 result(s)
+Saved: refs.bib
+Saved: refs.csv

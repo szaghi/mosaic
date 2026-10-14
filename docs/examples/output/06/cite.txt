@@ -1,0 +1,2 @@
+$ mosaic cite 10.3389/fphy.2019.00140 --style apa
+Asadi, Z., Taccogna, F., & Sharifian, M. (2019). Numerical Study of Electron Cyclotron Drift Instability: Application to Hall Thruster. Frontiers in Physics, 7. https://doi.org/10.3389/fphy.2019.00140

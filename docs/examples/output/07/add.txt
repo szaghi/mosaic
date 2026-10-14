@@ -1,0 +1,3 @@
+$ mosaic watch add "hall thruster anomalous transport" --name hall-transport --source arxiv
+
+Watch 'hall-transport' saved — baseline of 25 paper(s) recorded.

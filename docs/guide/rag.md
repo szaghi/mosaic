@@ -1,393 +1,155 @@
 ---
-title: RAG & Literature Analysis
+title: Asking Your Library
 ---
 
-# RAG & Literature Analysis
+# Asking your library
 
-MOSAIC includes a fully local Retrieval-Augmented Generation (RAG) pipeline that turns your cached paper library into an interactive knowledge base. Think of it as a **local NotebookLM alternative** — no data leaves your machine unless you use a cloud LLM or embedding provider.
+`mosaic index` turns the papers in your cache into a vector index; `mosaic ask` answers a question from the papers
+closest to it, citing them as `[n]`; `mosaic chat` does the same in a conversation; `mosaic search --semantic` lists
+the closest papers without an answer. Everything runs against your local cache: the only data that leaves your machine
+is what you send to the embedding and language models you configure, and with a local server nothing does.
 
-Three commands power the pipeline:
+## Usage
 
-| Command | Purpose |
-|---------|---------|
-| `mosaic index` | Embed all cached papers and store vectors in the local SQLite database |
-| `mosaic ask` | Ask a single question and get a structured answer with citations |
-| `mosaic chat` | Start an interactive multi-turn conversation over your library |
+```bash
+mosaic index                                        # embed every cached paper not indexed yet
+mosaic index --query "hall thruster"                # only the cached papers matching every word
+mosaic index --from refs.bib                        # only the papers of a .bib or .csv file
+mosaic index --reindex                              # rebuild everything (after changing embedding model)
+
+mosaic search "electrons crossing the magnetic field" --semantic       # closest papers, no answer
+mosaic ask "What causes anomalous electron transport?" --show-sources  # an answer with [n] citations
+mosaic ask "What is still unexplained?" --mode gaps --year 2018-2025
+mosaic ask "Compare the PIC codes used" --mode compare --output pic.md
+mosaic chat -q "hall thruster"                      # a conversation over a subset of the library
+```
+
+`mosaic ask` takes four modes, which change the instructions given to the model:
+
+| Mode | Asks the model for |
+|---|---|
+| `synthesis` (default) | the state of the art on the question: approaches, findings, consensus, disagreements |
+| `gaps` | open problems, contradictions and methodological limits, each with evidence from the papers |
+| `compare` | methods, datasets, metrics, results and trade-offs side by side, with a table where it fits |
+| `extract` | one entry per paper: task, method, dataset, metric, key result (`–` when absent) |
+
+The answer is printed as Markdown, followed by the numbered references. `--show-sources` lists the retrieved papers
+before the answer, `--top N` (`-n`) retrieves N papers instead of `rag.top_k`, and `--output` saves the answer:
+a `.json` file holds the question, mode, answer and papers, any other name gets Markdown.
+
+`--query`, `--from` and `--year` restrict which papers can be retrieved. `--query` keeps the cached papers whose
+title or abstract contains every word; `--year` applies to those, or to the whole cache when it is the only filter.
+
+In `mosaic chat`, every question retrieves its own papers, and the last three exchanges go to the model with it. Commands
+start with a slash:
+
+| Command | Effect |
+|---|---|
+| `/mode gaps` | switch mode (`synthesis`, `gaps`, `compare`, `extract`) |
+| `/sources` | list the papers retrieved for the last question |
+| `/clear` | forget the conversation history |
+| `/quit` | leave (Ctrl-D and Ctrl-C too) |
+
+## Setting up the models
+
+Two models are involved, and you configure them separately:
+
+- the **language model** (`[llm]`) writes answers. The same setting serves `mosaic ask`, `mosaic chat`,
+  `search --summarise`, `--sort relevance` and `mosaic compare`;
+- the **embedding model** (`[rag] embedding_*`) turns text into vectors, for `mosaic index`, `--semantic`, `ask` and
+  `chat`. Embeddings go through the OpenAI-compatible `/embeddings` endpoint.
+
+`[llm]` accepts `provider = "openai"` or `"anthropic"` for the cloud services, and any OpenAI-compatible server
+(Ollama, LM Studio, llama.cpp, vLLM) through `base_url`. An API key is required even for a local server, which
+ignores it: any non-empty string does. Without `model`, mosaic uses `gpt-4o-mini` (OpenAI) or
+`claude-haiku-4-5-20251001` (Anthropic).
+
+The embedding settings fall back to `llm.base_url` and `llm.api_key` when unset, so one local server needs one URL.
+Anthropic has no embedding endpoint: with an Anthropic language model, set `--embedding-base-url` and
+`--embedding-api-key` for another server.
+
+### A local server (Ollama)
+
+```bash
+ollama pull qwen3-embedding:0.6b       # an embedding model
+ollama pull qwen3:8b                   # a language model; any chat model you have works
+
+mosaic config --llm-provider openai --llm-base-url http://localhost:11434/v1 \
+              --llm-api-key ollama --llm-model qwen3:8b
+mosaic config --embedding-model qwen3-embedding:0.6b
+```
+
+LM Studio (`http://localhost:1234/v1`) and llama.cpp's server (`http://localhost:8080/v1`) work the same way; the
+model name must be the one the server lists. The base URL works with or without the trailing `/v1`.
+
+A large model on a desktop GPU can take minutes for one answer, especially a model that reasons before
+answering; mosaic waits two to three minutes by default. Raise the limit with `mosaic config --llm-timeout 900`
+(seconds).
+
+### Cloud services
+
+```bash
+# OpenAI for both
+mosaic config --llm-provider openai --llm-api-key sk-... --llm-model gpt-4o-mini
+mosaic config --embedding-model text-embedding-3-small
+
+# Anthropic for answers, a local server for embeddings
+mosaic config --llm-provider anthropic --llm-api-key sk-ant-...
+mosaic config --embedding-model qwen3-embedding:0.6b \
+              --embedding-base-url http://localhost:11434/v1 --embedding-api-key ollama
+```
 
 ## How it works
 
-1. **Index**: each paper's title and abstract are concatenated and embedded using your chosen model. Vectors are stored in a `vec0` virtual table inside the same SQLite cache file — no extra infrastructure needed.
-2. **Retrieve**: at query time, the query is embedded with the same model and the top-*k* most similar papers are returned using cosine distance.
-3. **Generate**: the retrieved papers are injected as context into a structured prompt sent to your configured LLM. Four prompt modes are available: `synthesis`, `gaps`, `compare`, and `extract`.
+Indexing. For each paper mosaic builds a text from the title, the first ten authors, the venue and the abstract.
+When the paper's PDF is in the library and `pymupdf` is installed, it also extracts the full text and splits it into
+overlapping chunks of about `chunk_size` tokens (counted as 4 characters each), every chunk prefixed with the same
+header; otherwise the paper is one chunk. The vectors go into a `vec0` table ([sqlite-vec](https://github.com/asg017/sqlite-vec))
+in the cache database. mosaic records the embedding model's name and refuses to index with a different one until you
+run `mosaic index --reindex`. Papers already indexed are skipped, so `mosaic index` after new searches only embeds the
+new ones.
 
-## Installation
+Retrieval. The question is embedded with the same model; mosaic takes the nearest chunks, keeps the best chunk of
+each paper, applies your filters, optionally re-ranks with the [citation graph](./citation-graph), and keeps
+`top_k` papers.
 
-The vector storage extension (`sqlite-vec`) must be injected into your environment:
+Answer. The model receives the question, the mode's instructions and the numbered papers, each with its best chunk
+(or the first 400 characters of its abstract). It is told to use only these papers and to cite them as `[n]`; check
+any claim that matters against the paper.
 
-```bash
-pipx inject mosaic-search sqlite-vec
-```
-
-If you installed with `pip` instead of `pipx`:
-
-```bash
-pip install 'mosaic-search[rag]'
-```
-
-::: tip Verify the installation
-Run `mosaic index` on an empty library — if sqlite-vec is missing you will see a clear error message pointing to the command above.
-:::
-
-## Choosing an embedding model
-
-The embedding model converts text into vectors. The right choice depends on your setup:
-
-| Setup | Recommended model | Notes |
-|-------|------------------|-------|
-| Local (Ollama) | `snowflake-arctic-embed2` | High quality, ~568 M params, runs on CPU |
-| Local (Ollama) | `nomic-embed-text` | Lighter alternative (~137 M params) |
-| Cloud (OpenAI) | `text-embedding-3-small` | Fast, cheap, good quality |
-| Cloud (OpenAI) | `text-embedding-3-large` | Higher quality, higher cost |
-
-::: warning Model consistency
-Once you index papers with a specific model, you **must** use the same model for all future queries and indexing. Changing the model without running `mosaic index --reindex` will cause a `ValueError`. MOSAIC stores the model name in the database and validates it on every run.
-:::
-
-For the latest benchmarks, see the [MTEB leaderboard](https://huggingface.co/spaces/mteb/leaderboard). The [Ollama model library](https://ollama.com/library) lists all locally available models.
-
-## Local setup with Ollama (recommended)
-
-Ollama is the easiest way to run embedding and generation models locally.
-
-**1. Install Ollama**: follow instructions at [ollama.com](https://ollama.com).
-
-**2. Pull models:**
-
-```bash
-# Embedding model
-ollama pull snowflake-arctic-embed2
-
-# Generation model (for mosaic ask / mosaic chat)
-ollama pull llama3.2
-```
-
-**3. Configure MOSAIC:**
-
-```bash
-# Embedding model — use the Ollama OpenAI-compatible API
-mosaic config \
-  --embedding-model snowflake-arctic-embed2 \
-  --embedding-base-url http://localhost:11434/v1 \
-  --embedding-api-key ollama
-
-# LLM for generation (if not already set)
-mosaic config \
-  --llm-provider openai \
-  --llm-base-url http://localhost:11434/v1 \
-  --llm-api-key ollama \
-  --llm-model llama3.2
-```
-
-::: tip Single server for both
-When the embedding server is the same as the LLM server (e.g. both are Ollama on `localhost:11434`), you can omit `--embedding-base-url` and `--embedding-api-key`. MOSAIC will fall back to `llm.base_url` and `llm.api_key` automatically.
-:::
-
-## Cloud setup with OpenAI
-
-```bash
-# Embedding model
-mosaic config \
-  --embedding-model text-embedding-3-small \
-  --embedding-api-key sk-...
-
-# LLM (if not already set)
-mosaic config \
-  --llm-provider openai \
-  --llm-api-key sk-... \
-  --llm-model gpt-4o-mini
-```
-
-## Configuration reference
-
-The `[rag]` section in `~/.config/mosaic/config.toml`:
+## Configuration
 
 ```toml
+[llm]
+provider = "openai"                     # openai | anthropic; "openai" for any compatible server
+api_key  = "ollama"
+model    = "qwen3:8b"
+base_url = "http://localhost:11434/v1"  # empty for the cloud services
+
 [rag]
-# Embedding model name — required for mosaic index / ask / chat
-embedding_model = "snowflake-arctic-embed2"
-
-# Base URL for the embedding server.
-# Leave empty to use the official OpenAI API endpoint.
-# When empty, inherits llm.base_url if set.
-# Examples:
-#   Ollama     → http://localhost:11434/v1
-#   LM Studio  → http://localhost:1234/v1
-embedding_base_url = "http://localhost:11434/v1"
-
-# API key for the embedding server.
-# Any non-empty string works for local servers (e.g. "ollama").
-# When empty, inherits llm.api_key if set.
-embedding_api_key = "ollama"
-
-# Provider string — leave empty to inherit from [llm].
-# Set explicitly only if your embedding and generation servers differ.
-embedding_provider = ""
-
-# Number of papers retrieved per RAG query (default: 10)
-top_k = 10
-
-# Max characters per text chunk — reserved for future full-PDF mode
-chunk_size = 512
-
-# Silently index new papers after each search / get run
-auto_index = false
+embedding_model    = "qwen3-embedding:0.6b"
+embedding_base_url = ""      # empty: llm.base_url, then the OpenAI API
+embedding_api_key  = ""      # empty: llm.api_key
+top_k              = 10      # papers per question         (mosaic config --rag-top-k)
+chunk_size         = 512     # tokens per full-text chunk  (edit the file)
+chunk_overlap      = 50      # tokens shared by neighbours (mosaic config --chunk-overlap)
+full_text_index    = true    # chunk downloaded PDFs       (mosaic config --no-full-text-index)
+auto_index         = false   # index new papers after search and get (mosaic config --rag-auto-index)
 ```
 
-## `mosaic index` command
-
-Build or update the vector index.
-
-```
-mosaic index [OPTIONS]
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `--reindex` | flag | off | Re-embed all papers, even already-indexed ones. Required after changing the embedding model. |
-| `--query` / `-q` | str | | Embed only papers matching this cache query |
-| `--from` | path | | Embed only papers listed in a `.bib` or `.csv` file |
-| `--batch-size` | int | `96` | Texts sent per embedding API call |
-
-Without `--query` or `--from`, all papers in the cache are indexed. Already-indexed papers are skipped automatically.
-
-**Examples:**
-
-```bash
-# Index all cached papers
-mosaic index
-
-# Re-embed everything after switching to a new model
-mosaic index --reindex
-
-# Index only papers matching a topic
-mosaic index --query "transformer attention"
-
-# Index papers from a BibTeX file
-mosaic index --from refs.bib
-```
-
-![Index demo](/gifs/15_rag_index.gif)
-
-## `mosaic ask` command
-
-Ask a question about your indexed papers.
-
-```
-mosaic ask [OPTIONS] QUESTION
-```
-
-| Option | Short | Type | Default | Description |
-|--------|-------|------|---------|-------------|
-| `--mode` | | str | `synthesis` | Prompt mode: `synthesis`, `gaps`, `compare`, `extract` |
-| `--query` / `-q` | `-q` | str | | Pre-filter: restrict retrieval to papers matching this query |
-| `--from` | | path | | Pre-filter: restrict retrieval to papers from a `.bib`/`.csv` |
-| `--year` / `-y` | `-y` | str | | Year filter (e.g. `2020-2024`) |
-| `--top` / `-n` | `-n` | int | config | Override `rag.top_k` for this query |
-| `--output` / `-o` | `-o` | path | | Save answer to `.md` or `.json` file |
-| `--show-sources` | | flag | off | Print retrieved papers before the answer |
-
-### Prompt modes
-
-| Mode | What it produces |
-|------|-----------------|
-| `synthesis` | Comprehensive state-of-the-art summary with citations |
-| `gaps` | Open problems, contradictions, and methodological limitations |
-| `compare` | Structured comparison of methods, datasets, metrics, and results |
-| `extract` | Per-paper structured extraction: Task, Method, Dataset, Metric, Key Result |
-
-**Examples:**
-
-```bash
-# Default synthesis
-mosaic ask "What are the main approaches to neural machine translation?"
-
-# Gap analysis
-mosaic ask "What open problems remain in protein structure prediction?" --mode gaps
-
-# Compare methods
-mosaic ask "transformer vs. LSTM for sequence modelling" --mode compare
-
-# Extract structured info
-mosaic ask "summarise each paper" --mode extract
-
-# Narrow retrieval to recent papers
-mosaic ask "diffusion model scaling" --year 2023-2025
-
-# Restrict to a specific topic already in cache
-mosaic ask "RLHF alignment" -q "reinforcement learning human feedback"
-
-# Retrieve more papers for a broad question
-mosaic ask "survey of graph neural networks" -n 25
-
-# Save the answer to Markdown
-mosaic ask "transformer architectures" --output analysis.md
-
-# Save as JSON (structured, for scripting)
-mosaic ask "CRISPR therapeutic applications" --output crispr.json
-
-# Show retrieved papers before the answer
-mosaic ask "attention mechanism variants" --show-sources
-```
-
-![Ask demo](/gifs/16_rag_ask.gif)
-
-## `mosaic chat` command
-
-Start an interactive multi-turn RAG session.
-
-```
-mosaic chat [OPTIONS]
-```
-
-| Option | Short | Type | Default | Description |
-|--------|-------|------|---------|-------------|
-| `--query` / `-q` | `-q` | str | | Narrow retrieval to papers matching this query |
-| `--from` | | path | | Narrow retrieval to papers from a `.bib`/`.csv` |
-| `--mode` | | str | `synthesis` | Default prompt mode for the session |
-
-Once inside the session, type your question and press Enter. Special commands:
-
-| Command | Effect |
-|---------|--------|
-| `/mode synthesis` | Switch prompt mode (also: `gaps`, `compare`, `extract`) |
-| `/sources` | Show the papers retrieved for the last question |
-| `/clear` | Clear conversation history (papers are re-retrieved fresh) |
-| `/quit` | Exit the chat |
-
-**Examples:**
-
-```bash
-# Start a general chat
-mosaic chat
-
-# Focus on a subset of papers
-mosaic chat -q "protein folding"
-
-# Start in gaps mode
-mosaic chat --mode gaps
-
-# Focus on papers from a BibTeX bibliography
-mosaic chat --from refs.bib
-```
-
-![Chat demo](/gifs/17_rag_chat.gif)
-
-## Typical workflow
-
-```bash
-# 1. Build your corpus with normal searches
-mosaic search "diffusion model image generation" -n 50
-mosaic search "score-based generative models" -n 50 --source arxiv
-
-# 2. Index everything (once)
-mosaic index
-
-# 3. Ask questions
-mosaic ask "What training objectives do diffusion models use?" --show-sources
-
-# 4. Explore interactively
-mosaic chat
-
-# 5. Export a report
-mosaic ask "Compare DDPM, DDIM, and score SDE approaches" \
-  --mode compare --output diffusion_comparison.md
-```
-
-## Semantic search — `mosaic search --semantic`
-
-Once papers are indexed, you can search the vector index directly and get a ranked
-list of papers — without generating a natural-language answer. This is useful when you
-want to **explore** the library rather than synthesise it.
-
-```bash
-# Retrieve by meaning, not keyword overlap
-mosaic search "self-supervised contrastive learning" --semantic
-
-# Limit to papers you have on disk
-mosaic search "attention mechanism" --semantic --downloaded-only
-
-# More results, sorted by citation count after semantic retrieval
-mosaic search "diffusion generative model" --semantic -n 30 --sort citations
-```
-
-The results table shows a **Sim.** column (0 – 1) — a normalised cosine similarity score.
-The same embedding model used by `mosaic index` is used to embed the query at search time.
-
-::: tip When to use `--semantic` vs `mosaic ask`
-- `--semantic` returns a ranked **paper list** — fast, no LLM needed at query time.
-- `mosaic ask` retrieves papers and then **synthesises an answer** — requires an LLM.
-
-Use `--semantic` to explore and curate; use `mosaic ask` to analyse and summarise.
-:::
-
----
-
-## Hands-free corpus growth with `auto_index`
-
-Set `auto_index = true` in `[rag]` (or via `mosaic config --rag-auto-index`) to silently embed new papers after every `mosaic search` or `mosaic get` run. Indexing failures are always silent and never block the main operation.
-
-```bash
-mosaic config --rag-auto-index
-```
-
-After that, every search automatically extends the vector index:
-
-```bash
-mosaic search "vision transformers" -n 30   # papers indexed silently
-mosaic ask "What makes ViT different from ResNets?"  # ready to use
-```
-
-## Offline usage
-
-Once papers are indexed, `mosaic ask` and `mosaic chat` only need the **LLM** at query time — not the embedding model. If you are offline and running a local LLM (e.g. via Ollama), the entire pipeline works without internet access.
-
-The embedding model is only needed when:
-- Running `mosaic index` (or `mosaic index --reindex`)
-- Using `auto_index = true`
-
-## Citation graph
-
-The vector index can be augmented with a **citation graph** that boosts papers
-sharing bibliographic edges with other retrieved results. The graph is built
-from OpenAlex (primary) and CrossRef (fallback), requires no LLM, and is
-stored as a lightweight edge table in the same SQLite cache.
-
-```bash
-# Enrich after indexing
-mosaic index --enrich-citations
-```
-
-To enable boosting, add the following to `~/.config/mosaic/config.toml`:
-
-```toml
-[rag.citations]
-enabled = true
-```
-
-Citation boosting re-ranks retrieved papers using a combined score:
-
-```
-score = (1 / rank) × (1 + α × citation_links_in_result_set)
-```
-
-The default `boost_alpha = 0.3` gives a modest nudge; tune it up for tightly
-scoped corpora where citation relationships are highly informative.
-
-See [Citation Graph](./citation-graph) for the full reference.
-
-## Notes and limitations (v1)
-
-- **Indexed text**: each paper is embedded as `Title / Authors / Venue / Abstract`. Full-PDF chunking is reserved for a future release (`chunk_size` is already in the config for forward compatibility).
-- **Model consistency**: the embedding model is stored in the database. Changing it requires `mosaic index --reindex` to rebuild all vectors.
-- **No incremental updates to changed metadata**: if a paper's abstract, authors, or venue are enriched after initial indexing, re-run `mosaic index` (without `--reindex` — only new/un-indexed papers are processed) or `mosaic index --reindex` to rebuild all vectors.
-- **sqlite-vec required**: install with `pipx inject mosaic-search sqlite-vec`. The rest of MOSAIC works without it.
+With `auto_index = true`, `mosaic search` and `mosaic get` embed the papers they return. Failures there are
+silent: if the embedding server is down, nothing is indexed and nothing tells you. Run `mosaic index` to catch up.
+
+## Limits and troubleshooting
+
+- `sqlite-vec` comes with the `rag` extra: `pipx install 'mosaic-search[rag]'`, or `[all]`. Full-text chunking
+  also needs `pymupdf`, which no extra installs: `pipx inject mosaic-search pymupdf`. Without it `mosaic index`
+  prints a warning and indexes metadata only (silence it with `mosaic config --no-full-text-index`).
+- Answers can only be as good as what was indexed: for papers without an abstract and without a PDF, the model sees
+  little more than a title.
+- `ask` and `chat` need the embedding server at question time (the question is embedded), and the language model.
+- "Embedding model changed": you configured a model other than the one that built the index. Switch back, or
+  `mosaic index --reindex`.
+
+See also: [tutorial chapter 9](/tutorial/09-library), [recipes](/cookbook/ai), [`mosaic index`](/reference/index-command),
+[`mosaic ask`](/reference/ask), [`mosaic chat`](/reference/chat).

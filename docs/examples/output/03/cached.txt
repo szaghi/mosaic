@@ -1,0 +1,16 @@
+$ mosaic search "thruster simulation" --cached --sort year
+Searching local cache for 'thruster simulation'…
+ #     Title                             Authors       Year   DOI                 Source         OA     PDF       Cited
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 1     Near-Wall Pathways of Anomalous   Zhe Liu et    2026   10.1103/p8v6-66mq   arXiv          yes    ✓             –
+       Electron Transport in Hall        al.
+       Thrusters Revealed b…
+ 2     Axial-azimuthal Fluid Modelling   Poli D &      2026   10.21203/rs.3.rs-   Europe PMC     no     –             –
+       of the Hall Effect Thruster       Ahedo E.             10852565/v1
+       Discharge
+ 3     Analysis of plasma oscillations   Miranda RA    2025   10.21203/rs.3.rs-   Europe PMC     no     –             –
+       in numerical simulations of a     et al.               6346950/v1
+       Hall thruster usi…
+ 4     Data-driven analysis of           Bayón-Buján   2025   10.1007/s44205-02   Europe PMC     yes    ✓             –
+  ⋮  (115 lines not shown)
+40 result(s)

@@ -3,3 +3,59 @@
 
 html.dark .light-only { display: none;  }
 html.dark .dark-only  { display: block; }
+
+/* home page: the sections below the features */
+.mosaic-home {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 2rem 24px 1rem;
+}
+
+.mosaic-home h2 {
+  border-top: 0;
+  margin-top: 2.5rem;
+  text-align: center;
+}
+
+.mosaic-home .mosaic-lead {
+  text-align: center;
+  color: var(--vp-c-text-2);
+  max-width: 720px;
+  margin: 0.5rem auto 1.5rem;
+}
+
+.mosaic-home img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.mosaic-home div[class*='language-'] {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* captured terminal output: long tables scroll instead of wrapping */
+.vp-doc div[class*='language-console'] pre {
+  white-space: pre;
+}
+
+/* tutorial chapters: terminal output needs ~120 columns; prose stays at a readable width */
+.tutorial-page .VPDoc .content-container {
+  max-width: 1000px;
+}
+.tutorial-page .vp-doc > div > :not(div[class*='language-']) {
+  max-width: 740px;
+}
+
+/* captured output: compact, in the text colour; only the command line keeps its highlighting */
+.vp-doc div.language-console {
+  --vp-code-font-size: 12.5px;
+  --vp-code-line-height: 1.45;
+}
+.vp-doc div.language-console pre code .line:not(:first-child) span {
+  color: var(--vp-c-text-1) !important;
+}
