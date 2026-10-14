@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import parse_authors_name_key
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, http_client
 
 _BASE = "https://api.semanticscholar.org/graph/v1"
 _FIELDS = "title,authors,year,abstract,externalIds,openAccessPdf,publicationVenue,journal,isOpenAccess,citationCount"
@@ -46,7 +44,7 @@ class SemanticScholarSource(BaseSource):
                 y_from = filters.year_from or filters.year_to
                 y_to = filters.year_to or filters.year_from
                 params["year"] = f"{y_from}-{y_to}" if y_from != y_to else str(y_from)
-        with httpx.Client(timeout=30, headers=self._headers) as client:
+        with http_client(timeout=30, headers=self._headers) as client:
             resp = client.get(
                 f"{_BASE}/paper/search",
                 params=params,

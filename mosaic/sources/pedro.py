@@ -5,10 +5,8 @@ from __future__ import annotations
 import re
 import time
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, http_client
 
 _SESSION_URL = "https://search.pedro.org.au/advanced-search"
 _SEARCH_URL = "https://search.pedro.org.au/advanced-search/results"
@@ -108,7 +106,7 @@ class PEDroSource(BaseSource):
             if y_from:
                 params["year_of_publication"] = y_from
 
-        with httpx.Client(
+        with http_client(
             headers={
                 "User-Agent": (
                     "MOSAIC (non-commercial research tool; https://github.com/szaghi/mosaic)"

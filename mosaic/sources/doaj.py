@@ -6,7 +6,7 @@ import httpx
 
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import parse_authors_name_key, parse_year
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.sources.base import BaseSource, build_field_query, http_client
 
 _BASE = "https://doaj.org/api/v3/search/articles"
 
@@ -51,7 +51,7 @@ class DoajSource(BaseSource):
                 if filters.year_to:
                     doaj_query += f" AND bibjson.year:<={filters.year_to}"
         # DOAJ uses path-based query: /search/articles/{query}
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(
                 f"https://doaj.org/api/v3/search/articles/{httpx.URL(doaj_query)}",
                 params={"pageSize": min(max_results, 100)},

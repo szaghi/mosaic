@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from mosaic.models import Paper
@@ -11,6 +12,25 @@ log = logging.getLogger(__name__)
 
 # NotebookLM enforces a hard cap of 50 sources per notebook.
 _SOURCE_LIMIT = 50
+
+
+@dataclass
+class NotebookResult:
+    """Outcome of a notebook creation.
+
+    ``artifacts_skipped`` lists the requested artifacts that were not queued
+    because no source could be added (NotebookLM cannot generate from an
+    empty notebook).
+    """
+
+    nb_id: str
+    sources_added: int
+    artifacts_skipped: list[str] = field(default_factory=list)
+
+    @property
+    def url(self) -> str:
+        return f"https://notebooklm.google.com/notebook/{self.nb_id}"
+
 
 # Mapping from flag name to artifacts client method name
 _ARTIFACT_METHODS: dict[str, str] = {
@@ -81,22 +101,30 @@ def check_notebooklm_status() -> dict[str, object]:
     return status
 
 
-async def _generate_artifacts(client, nb_id: str, artifacts: set[str], added: int) -> None:
-    """Queue artifact generation for *nb_id* based on the *artifacts* set."""
-    if not artifacts or added == 0:
-        return
+async def _generate_artifacts(client, nb_id: str, artifacts: set[str], added: int) -> list[str]:
+    """Queue artifact generation for *nb_id* based on the *artifacts* set.
+
+    Returns the requested artifacts that were skipped because the notebook
+    has no sources, so callers can tell the user (issue #30).
+    """
+    if not artifacts:
+        return []
+    if added == 0:
+        log.warning("Notebook %s has no sources; skipping artifacts %s", nb_id, sorted(artifacts))
+        return sorted(artifacts)
     for flag, method_name in _ARTIFACT_METHODS.items():
         if flag in artifacts:
             method = getattr(client.artifacts, method_name, None)
             if method is not None:
                 await method(nb_id)
+    return []
 
 
 async def create_notebook(
     name: str,
     papers_with_paths: list[tuple[Paper, Path | None]],
     artifacts: set[str] | None = None,
-) -> str:
+) -> NotebookResult:
     """Create a NotebookLM notebook and populate it with papers.
 
     For each (paper, path) pair:
@@ -108,7 +136,7 @@ async def create_notebook(
     *artifacts* is a set of flag names (e.g. {"podcast", "briefing"}) — any
     matching artifact generation is queued after import.
 
-    Returns the new notebook ID.
+    Returns a NotebookResult with the new notebook ID.
     """
     from notebooklm import NotebookLMClient
 
@@ -132,23 +160,23 @@ async def create_notebook(
             except Exception:
                 log.debug("Failed to add source %s to notebook", paper.title, exc_info=True)
 
-        await _generate_artifacts(client, nb_id, artifacts, added)
+        skipped = await _generate_artifacts(client, nb_id, artifacts, added)
 
-        return nb_id
+        return NotebookResult(nb_id, added, skipped)
 
 
 async def create_notebook_from_dir(
     name: str,
     directory: Path,
     artifacts: set[str] | None = None,
-) -> str:
+) -> NotebookResult:
     """Create a NotebookLM notebook from all PDFs in *directory*.
 
     PDFs are added in alphabetical order, up to the 50-source limit.
     *artifacts* is a set of flag names (e.g. {"podcast", "slide_deck"}) — any
     matching artifact generation is queued after import.
 
-    Returns the new notebook ID.
+    Returns a NotebookResult with the new notebook ID.
     Raises ValueError if no PDFs are found in *directory*.
     """
     from notebooklm import NotebookLMClient
@@ -170,6 +198,6 @@ async def create_notebook_from_dir(
             except Exception:
                 log.debug("Failed to add PDF %s to notebook", pdf.name, exc_info=True)
 
-        await _generate_artifacts(client, nb_id, artifacts, added)
+        skipped = await _generate_artifacts(client, nb_id, artifacts, added)
 
-        return nb_id
+        return NotebookResult(nb_id, added, skipped)

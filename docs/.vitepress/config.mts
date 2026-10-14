@@ -43,6 +43,7 @@ export default withMermaid({
           { text: 'Authenticated Access', link: '/guide/authenticated-access' },
           { text: 'Find Similar Papers', link: '/guide/similar' },
           { text: 'Cache Management',    link: '/guide/cache' },
+          { text: 'Watch Searches',      link: '/guide/watch' },
         ],
       },
       {
@@ -94,6 +95,7 @@ export default withMermaid({
             { text: 'Authenticated Access', link: '/guide/authenticated-access' },
             { text: 'Find Similar Papers', link: '/guide/similar' },
             { text: 'Cache Management',    link: '/guide/cache' },
+            { text: 'Watch Searches',      link: '/guide/watch' },
           ],
         },
         {

@@ -98,22 +98,25 @@ Download
 
 ## verify
 
-Check whether each tracked PDF file still exists on disk:
+Check that each tracked download still exists on disk **and is a real PDF**:
 
 ```bash
 mosaic cache verify
 ```
 
 ```
-  ✓  ~/mosaic-papers/2017_arXiv_Vaswani_Attention_Is_All_You_Need.pdf
-  ✗  ~/mosaic-papers/2019_arXiv_Devlin_BERT.pdf  [missing]
-  ...
-2 of 47 files are missing.
+45 file(s) OK, 1 missing, 1 not a PDF
+ UID                        Problem     Path
+ 10.18653/v1/n19-1423       missing     ~/mosaic-papers/2019_arXiv_Devlin_BERT.pdf
+ 10.1038/s41586-021-03819   not a PDF   ~/mosaic-papers/2021_Nature_Jumper_Highly.pdf
+Run mosaic cache clean to drop these records; the next mosaic get retries them.
 ```
+
+"Not a PDF" means the file is an HTML page (a publisher bot-check, "Client Challenge", or an abstract landing page) that versions before 1.6 saved under a `.pdf` name. Current versions reject such responses at download time.
 
 ## clean
 
-Remove download records whose files no longer exist on disk:
+Remove download records whose files are missing or are not PDFs:
 
 ```bash
 mosaic cache clean
@@ -123,7 +126,7 @@ mosaic cache clean
 Removed 2 stale download record(s).
 ```
 
-Only records with `status=ok` are checked — records with `status=failed` are left untouched. The paper metadata itself is never deleted; only the download tracking entry is removed.
+Only records with `status=ok` are checked — failed downloads are left untouched. The paper metadata is never deleted, and neither are files on disk: only the download tracking entry is removed, so the next `mosaic get` downloads the paper again.
 
 ## clear
 

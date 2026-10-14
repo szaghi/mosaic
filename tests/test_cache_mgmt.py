@@ -130,17 +130,28 @@ class TestListPapers:
 class TestVerifyAndClean:
     def test_verify_existing_file(self, tmp_cache, tmp_path, paper):
         f = tmp_path / "paper.pdf"
-        f.write_bytes(b"pdf")
+        f.write_bytes(b"%PDF-1.7 body")
         tmp_cache.save(paper)
         tmp_cache.set_download(paper.uid, str(f), "ok")
         results = tmp_cache.verify_downloads()
         assert results[0]["exists"] is True
+        assert results[0]["is_pdf"] is True
+
+    def test_verify_flags_html_saved_as_pdf(self, tmp_cache, tmp_path, paper):
+        f = tmp_path / "paper.pdf"
+        f.write_bytes(b"<html>Making sure you're not a bot!</html>")
+        tmp_cache.save(paper)
+        tmp_cache.set_download(paper.uid, str(f), "ok")
+        results = tmp_cache.verify_downloads()
+        assert results[0]["exists"] is True
+        assert results[0]["is_pdf"] is False
 
     def test_verify_missing_file(self, tmp_cache, paper):
         tmp_cache.save(paper)
         tmp_cache.set_download(paper.uid, "/nonexistent/path.pdf", "ok")
         results = tmp_cache.verify_downloads()
         assert results[0]["exists"] is False
+        assert results[0]["is_pdf"] is False
 
     def test_clean_removes_missing(self, tmp_cache, paper):
         tmp_cache.save(paper)
@@ -149,9 +160,18 @@ class TestVerifyAndClean:
         assert removed == 1
         assert tmp_cache.get_download(paper.uid) is None
 
+    def test_clean_removes_non_pdf_but_keeps_file(self, tmp_cache, tmp_path, paper):
+        f = tmp_path / "paper.pdf"
+        f.write_bytes(b"<html>Client Challenge</html>")
+        tmp_cache.save(paper)
+        tmp_cache.set_download(paper.uid, str(f), "ok")
+        assert tmp_cache.clean_stubs() == 1
+        assert tmp_cache.get_download(paper.uid) is None
+        assert f.exists()
+
     def test_clean_keeps_existing(self, tmp_cache, tmp_path, paper):
         f = tmp_path / "paper.pdf"
-        f.write_bytes(b"pdf")
+        f.write_bytes(b"%PDF-1.7 body")
         tmp_cache.save(paper)
         tmp_cache.set_download(paper.uid, str(f), "ok")
         removed = tmp_cache.clean_stubs()

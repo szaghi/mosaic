@@ -8,7 +8,9 @@ from pathlib import Path
 import httpx
 
 from mosaic.db import Cache
+from mosaic.errors import DownloadError
 from mosaic.models import Paper
+from mosaic.pdf import HEADER_WINDOW, has_pdf_header, is_pdf_file
 from mosaic.sources import unpaywall
 
 log = logging.getLogger(__name__)
@@ -26,22 +28,29 @@ def download(
     Tries: 1) known pdf_url  2) Unpaywall lookup by DOI  3) browser session
     """
     rec = cache.get_download(paper.uid)
-    if rec and rec["status"] == "ok" and Path(rec["local_path"]).exists():
-        return rec["local_path"]
+    if rec and rec["status"] == "ok":
+        if is_pdf_file(rec["local_path"]):
+            return rec["local_path"]
+        # Missing file, or an HTML page cached as "ok" by an older version: retry.
+        log.info("Cached download for %s is missing or not a PDF; retrying", paper.uid)
 
     dest_dir = Path(download_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / paper.safe_filename(filename_pattern)
 
     # ── step 1: known pdf_url ─────────────────────────────────────────────────
+    failure = "no pdf found"
     pdf_url = paper.pdf_url
     if pdf_url:
         try:
             _fetch(pdf_url, str(dest))
             cache.set_download(paper.uid, str(dest), "ok")
             return str(dest)
+        except DownloadError as e:
+            failure = str(e)
+            log.debug("Direct PDF download rejected for %s: %s", pdf_url, e)
         except Exception:
-            log.debug("Direct PDF download failed for %s: %s", pdf_url, exc_info=True)
+            log.debug("Direct PDF download failed for %s", pdf_url, exc_info=True)
 
     # ── step 2: Unpaywall ─────────────────────────────────────────────────────
     if paper.doi and unpaywall_email:
@@ -51,8 +60,11 @@ def download(
                 _fetch(upw_url, str(dest))
                 cache.set_download(paper.uid, str(dest), "ok")
                 return str(dest)
+            except DownloadError as e:
+                failure = str(e)
+                log.debug("Unpaywall download rejected for %s: %s", upw_url, e)
             except Exception:
-                log.debug("Unpaywall download failed for %s: %s", upw_url, exc_info=True)
+                log.debug("Unpaywall download failed for %s", upw_url, exc_info=True)
 
     # ── step 3: browser session ───────────────────────────────────────────────
     landing_url = paper.url or (f"https://doi.org/{paper.doi}" if paper.doi else None)
@@ -83,7 +95,7 @@ def download(
         except Exception:
             log.debug("Browser session download failed for %s", landing_url, exc_info=True)
 
-    cache.set_download(paper.uid, "", "error: no pdf found")
+    cache.set_download(paper.uid, "", f"error: {failure}")
     return None
 
 
@@ -99,8 +111,44 @@ def _resolve_redirect(url: str) -> str:
 
 
 def _fetch(url: str, dest: str) -> None:
-    with httpx.stream("GET", url, timeout=120, follow_redirects=True) as r:
-        r.raise_for_status()
-        with open(dest, "wb") as f:
-            for chunk in r.iter_bytes(8192):
-                f.write(chunk)
+    """Stream *url* to *dest*, accepting only a PDF body.
+
+    Publisher bot-checks and landing pages answer 200 with HTML, so the status
+    code alone proves nothing. The body is written to a sibling ``.part`` file
+    and renamed onto *dest* only once complete, so a failure never leaves a
+    truncated or non-PDF file under the final name.
+
+    Raises
+    ------
+    DownloadError
+        If the body does not start with the PDF magic bytes.
+    httpx.HTTPError
+        On transport or HTTP status errors.
+    """
+    part = Path(dest).with_name(Path(dest).name + ".part")
+    try:
+        with httpx.stream("GET", url, timeout=120, follow_redirects=True) as r:
+            r.raise_for_status()
+            ctype = r.headers.get("content-type", "unknown").split(";")[0].strip()
+            with open(part, "wb") as f:
+                head = b""
+                checked = False
+                for chunk in r.iter_bytes(8192):
+                    if checked:
+                        f.write(chunk)
+                        continue
+                    # Buffer until the header window is filled: a chunk may be
+                    # shorter than the magic itself.
+                    head += chunk
+                    if len(head) >= HEADER_WINDOW:
+                        if not has_pdf_header(head):
+                            raise DownloadError(f"not a pdf ({ctype})")
+                        f.write(head)
+                        checked = True
+                if not checked:
+                    if not has_pdf_header(head):
+                        raise DownloadError(f"not a pdf ({ctype})")
+                    f.write(head)
+        part.replace(dest)
+    finally:
+        part.unlink(missing_ok=True)

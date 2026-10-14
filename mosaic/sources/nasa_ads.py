@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import extract_first, parse_year
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, http_client
 
 _BASE = "https://api.adsabs.harvard.edu/v1/search/query"
 _FIELDS = "title,author,year,doi,abstract,bibcode,identifier,pub,property"
@@ -74,7 +72,7 @@ class NASAADSSource(BaseSource):
             if y_from or y_to:
                 ads_query += f" year:{y_from or y_to}-{y_to or y_from}"
 
-        with httpx.Client(timeout=30, headers=self._headers) as client:
+        with http_client(timeout=30, headers=self._headers) as client:
             resp = client.get(
                 _BASE,
                 params={

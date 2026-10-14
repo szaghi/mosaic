@@ -889,13 +889,15 @@ def _run_notebook_from_query(name, query, max_results, filters, oa_only, pdf_onl
         path = dl_paper(p, dl_dir, cache, email, pattern)
         papers_with_paths.append((p, Path(path) if path else None))
 
-    nb_id = asyncio.run(create_notebook(name, papers_with_paths, artifacts=artifacts))
-    added = sum(1 for _, path in papers_with_paths if path)
+    nb = asyncio.run(create_notebook(name, papers_with_paths, artifacts=artifacts))
+    downloaded = sum(1 for _, path in papers_with_paths if path)
     return {
         "ok": True,
-        "nb_id": nb_id,
+        "nb_id": nb.nb_id,
         "paper_count": len(papers),
-        "downloaded": added,
+        "downloaded": downloaded,
+        "sources_added": nb.sources_added,
+        "artifacts_skipped": nb.artifacts_skipped,
     }
 
 
@@ -912,11 +914,34 @@ def _run_notebook_from_dir(name, from_dir, artifacts, cfg):
         return {"ok": False, "msg": f"Directory not found: {from_dir}"}
 
     try:
-        nb_id = asyncio.run(create_notebook_from_dir(name, directory, artifacts=artifacts))
+        nb = asyncio.run(create_notebook_from_dir(name, directory, artifacts=artifacts))
     except ValueError as e:
         return {"ok": False, "msg": str(e)}
 
-    return {"ok": True, "nb_id": nb_id}
+    return {
+        "ok": True,
+        "nb_id": nb.nb_id,
+        "sources_added": nb.sources_added,
+        "artifacts_skipped": nb.artifacts_skipped,
+    }
+
+
+def _notebooklm_preflight() -> str:
+    """Return an HTML-safe message if NotebookLM cannot be used, else ``""``."""
+    from mosaic.notebooklm_bridge import check_notebooklm_status
+
+    status = check_notebooklm_status()
+    if not status["installed"]:
+        return (
+            "notebooklm-py is not installed. Install it with: "
+            "<code>pip install 'mosaic-search[notebooklm]'</code>"
+        )
+    if not status["authenticated"]:
+        return (
+            "NotebookLM is not authenticated. Run <code>notebooklm login</code> "
+            "on this machine, then retry."
+        )
+    return ""
 
 
 @bp.route("/notebook")
@@ -933,6 +958,10 @@ def notebook_submit():
     name = request.form.get("name", "").strip()
     if not name:
         return "<article>Please enter a notebook name.</article>"
+
+    problem = _notebooklm_preflight()
+    if problem:
+        return f"<article><mark>{problem}</mark></article>"
 
     input_mode = request.form.get("input_mode", "query")
     artifacts: set[str] = set(request.form.getlist("artifacts"))
@@ -1001,7 +1030,16 @@ def notebook_status(job_id):
     lines = ["<ins>Notebook created successfully!</ins>"]
     if "paper_count" in result:
         lines.append(
-            f"<p>{result['paper_count']} paper(s) found, {result['downloaded']} PDF(s) added.</p>"
+            f"<p>{result['paper_count']} paper(s) found, {result['downloaded']} PDF(s) "
+            f"downloaded, {result['sources_added']} source(s) added to the notebook.</p>"
+        )
+    if result.get("artifacts_skipped"):
+        skipped = ", ".join(escape(a) for a in result["artifacts_skipped"])
+        lines.append(
+            f"<p><mark>No source could be added, so the notebook is empty and these "
+            f"artifacts were not generated: {skipped}.</mark> Try open-access results "
+            f"(OA only), set an Unpaywall email, or log in to a publisher with "
+            f"<code>mosaic auth login</code>.</p>"
         )
     lines.append(
         f'<p><a href="{nb_url}" target="_blank" rel="noopener">Open in NotebookLM &rarr;</a></p>'

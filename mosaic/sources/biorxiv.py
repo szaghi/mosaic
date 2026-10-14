@@ -8,7 +8,7 @@ import urllib.parse
 import httpx
 
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, http_client
 
 _BASE_API = "https://api.biorxiv.org/details"
 # Extract DOI (without version suffix) from href="/content/10.1101/..."
@@ -54,7 +54,7 @@ class BioRxivSource(BaseSource):
         """
         search_query = self._build_query(query, filters)
         papers: list[Paper] = []
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             for server in ("biorxiv", "medrxiv"):
                 try:
                     papers.extend(self._search_server(client, server, search_query, max_results))

@@ -304,6 +304,27 @@ class TestJobs:
         finally:
             mgr.shutdown()
 
+    def test_job_captures_system_exit(self):
+        """SystemExit from library code must end the job, not leave it running (#30)."""
+
+        def exiting_fn():
+            raise SystemExit(1)
+
+        mgr = JobManager(max_workers=1)
+        try:
+            job = mgr.get(mgr.submit(exiting_fn))
+            assert job is not None
+            assert job.wait(timeout=5) is True
+            assert job.status == "error"
+            assert job.error_message
+            # The single worker thread must survive and run the next job.
+            nxt = mgr.get(mgr.submit(lambda: "still alive"))
+            assert nxt is not None
+            assert nxt.wait(timeout=5) is True
+            assert nxt.result == "still alive"
+        finally:
+            mgr.shutdown()
+
     def test_job_wait(self):
         """job.wait() blocks until done."""
         mgr = JobManager(max_workers=2)

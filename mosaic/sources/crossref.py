@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import extract_first, parse_authors_given_family, parse_year, strip_html
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, http_client
 
 _BASE = "https://api.crossref.org/works"
 
@@ -80,7 +78,7 @@ class CrossrefSource(BaseSource):
         if self._email:
             params["mailto"] = self._email
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(_BASE, params=params)
             resp.raise_for_status()
             items = resp.json().get("message", {}).get("items", [])

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich import box
@@ -22,6 +22,9 @@ from mosaic.search import search_all
 from mosaic.services import build_filters, filter_papers, sort_by_relevance
 from mosaic.source_registry import SRC_MAP, build_sources
 
+if TYPE_CHECKING:
+    from mosaic.notebooklm_bridge import NotebookResult
+
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -38,10 +41,12 @@ notebook_app = typer.Typer(
 auth_app = typer.Typer(help="Manage browser sessions for authenticated PDF access.")
 cache_app = typer.Typer(help="Inspect and manage the local SQLite cache.")
 skill_app = typer.Typer(help="Manage the bundled MOSAIC Claude Code skill.")
+watch_app = typer.Typer(help="Saved searches that report only papers new since the last run.")
 app.add_typer(notebook_app, name="notebook")
 app.add_typer(auth_app, name="auth")
 app.add_typer(cache_app, name="cache")
 app.add_typer(skill_app, name="skill")
+app.add_typer(watch_app, name="watch")
 
 
 _verbose: bool = False
@@ -1051,56 +1056,12 @@ def chat(
         messages.append({"role": "user", "content": user_input})
 
         try:
-            import httpx as _httpx
+            from mosaic import llm
 
-            llm_cfg = cfg.get("llm", {})
-            provider = llm_cfg.get("provider", "").lower()
-            api_key = llm_cfg.get("api_key", "")
-            llm_model = llm_cfg.get("model", "") or (
-                "gpt-4o-mini" if provider == "openai" else "claude-haiku-4-5-20251001"
-            )
-            base_url = llm_cfg.get("base_url", "").rstrip("/")
-
-            if not api_key or not provider:
-                rprint(
-                    "[red]No LLM configured. Run: mosaic config --llm-provider ... "
-                    "--llm-api-key ... --llm-model ...[/red]"
-                )
+            if not llm.is_configured(cfg):
+                rprint(f"[red]{llm.NOT_CONFIGURED_HINT}[/red]")
                 continue
-
-            if provider == "openai" or base_url:
-                url = (
-                    f"{base_url}/chat/completions"
-                    if base_url
-                    else "https://api.openai.com/v1/chat/completions"
-                )
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                resp = _httpx.post(
-                    url,
-                    headers=headers,
-                    json={"model": llm_model, "messages": messages},
-                    timeout=180,
-                )
-                resp.raise_for_status()
-                answer = resp.json()["choices"][0]["message"]["content"]
-            elif provider == "anthropic":
-                url = "https://api.anthropic.com/v1/messages"
-                headers = {
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                }
-                resp = _httpx.post(
-                    url,
-                    headers=headers,
-                    json={"model": llm_model, "max_tokens": 2048, "messages": messages},
-                    timeout=180,
-                )
-                resp.raise_for_status()
-                answer = resp.json()["content"][0]["text"]
-            else:
-                rprint(f"[red]Unknown provider: {provider}[/red]")
-                continue
+            answer = llm.complete(messages, cfg, max_tokens=2048)
 
             history.append({"role": "user", "content": user_input})
             history.append({"role": "assistant", "content": answer})
@@ -1999,15 +1960,11 @@ def notebook_create(
         ) as prog:
             prog.add_task(f"Creating notebook [bold]{name}[/bold] from {from_dir}…")
             try:
-                nb_id = asyncio.run(create_notebook_from_dir(name, from_dir, artifacts=_artifacts))
+                nb = asyncio.run(create_notebook_from_dir(name, from_dir, artifacts=_artifacts))
             except ValueError as e:
                 rprint(f"[red]{e}[/red]")
                 raise typer.Exit(1) from None
-        rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
-        if _artifacts:
-            rprint(
-                f"[dim]{', '.join(sorted(_artifacts))} queued — check NotebookLM in a few minutes.[/dim]"
-            )
+        _report_notebook(nb, _artifacts)
         return
 
     # ── query path: search → download → import ────────────────────────────────
@@ -2071,12 +2028,22 @@ def notebook_create(
         SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
     ) as prog:
         prog.add_task(f"Importing into NotebookLM notebook [bold]{name}[/bold]…")
-        nb_id = asyncio.run(create_notebook(name, papers_with_paths, artifacts=_artifacts))
+        nb = asyncio.run(create_notebook(name, papers_with_paths, artifacts=_artifacts))
 
-    rprint(f"[green]Notebook created:[/green] https://notebooklm.google.com/notebook/{nb_id}")
-    if _artifacts:
+    _report_notebook(nb, _artifacts)
+
+
+def _report_notebook(nb: NotebookResult, artifacts: set[str]) -> None:
+    """Print the notebook link and whether the requested artifacts were queued."""
+    rprint(f"[green]Notebook created:[/green] {nb.url}")
+    if nb.artifacts_skipped:
         rprint(
-            f"[dim]{', '.join(sorted(_artifacts))} queued — check NotebookLM in a few minutes.[/dim]"
+            f"[yellow]No source could be added, so these artifacts were not generated: "
+            f"{', '.join(nb.artifacts_skipped)}.[/yellow]"
+        )
+    elif artifacts:
+        rprint(
+            f"[dim]{', '.join(sorted(artifacts))} queued — check NotebookLM in a few minutes.[/dim]"
         )
 
 
@@ -2459,8 +2426,13 @@ def auth_login(
     import asyncio
 
     from mosaic.auth import login as do_login
+    from mosaic.errors import DependencyError
 
-    asyncio.run(do_login(name, url))
+    try:
+        asyncio.run(do_login(name, url))
+    except DependencyError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
 
 
 @auth_app.command("logout")
@@ -2636,7 +2608,7 @@ def cache_show(
 
 @cache_app.command("verify")
 def cache_verify() -> None:
-    """Check that all tracked download files still exist on disk."""
+    """Check that all tracked download files exist on disk and are real PDFs."""
     cache, _ = _cache_and_cfg()
     results = cache.verify_downloads()
 
@@ -2644,30 +2616,40 @@ def cache_verify() -> None:
         rprint("[dim]No completed downloads tracked.[/dim]")
         return
 
-    ok = [r for r in results if r["exists"]]
+    ok = [r for r in results if r["is_pdf"]]
     missing = [r for r in results if not r["exists"]]
+    not_pdf = [r for r in results if r["exists"] and not r["is_pdf"]]
 
-    rprint(f"[green]{len(ok)} file(s) OK[/green], [red]{len(missing)} missing[/red]")
+    rprint(
+        f"[green]{len(ok)} file(s) OK[/green], [red]{len(missing)} missing[/red], "
+        f"[red]{len(not_pdf)} not a PDF[/red]"
+    )
 
-    if missing:
+    if missing or not_pdf:
         table = Table(show_header=True, header_style="cyan", box=box.SIMPLE, show_edge=False)
         table.add_column("UID", style="dim")
-        table.add_column("Missing path")
+        table.add_column("Problem")
+        table.add_column("Path")
         for r in missing:
-            table.add_row(r["uid"], r["local_path"] or "[dim]–[/dim]")
+            table.add_row(r["uid"], "missing", r["local_path"] or "[dim]–[/dim]")
+        for r in not_pdf:
+            table.add_row(r["uid"], "not a PDF", r["local_path"])
         console.print(table)
-        rprint("[dim]Run [bold]mosaic cache clean[/bold] to remove stale records.[/dim]")
+        rprint(
+            "[dim]Run [bold]mosaic cache clean[/bold] to drop these records; "
+            "the next [bold]mosaic get[/bold] retries them.[/dim]"
+        )
 
 
 @cache_app.command("clean")
 def cache_clean() -> None:
-    """Remove download records for files that no longer exist on disk."""
+    """Remove download records whose files are missing or are not PDFs."""
     cache, _ = _cache_and_cfg()
     removed = cache.clean_stubs()
     if removed:
         rprint(f"[green]Removed {removed} stale download record(s).[/green]")
     else:
-        rprint("[dim]Nothing to clean — all tracked files are present.[/dim]")
+        rprint("[dim]Nothing to clean — all tracked files are present PDFs.[/dim]")
 
 
 @cache_app.command("clear")
@@ -2715,3 +2697,216 @@ def cache_export(
 
 if __name__ == "__main__":
     app()
+
+
+# ── mosaic watch ──────────────────────────────────────────────────────────────
+
+
+@watch_app.command("add")
+def watch_add(
+    query: Annotated[str, typer.Argument(help="Search query to watch")],
+    name: Annotated[str, typer.Option("--name", "-n", help="Unique watch name")],
+    max_results: Annotated[int, typer.Option("--max", "-m", help="Max results per source")] = 25,
+    source: Annotated[
+        str, typer.Option("--source", "-s", help="Restrict to one source shorthand")
+    ] = "",
+    year: Annotated[
+        str, typer.Option("--year", "-y", help="Year filter: 2020, 2020-2024, 2020,2022")
+    ] = "",
+    author: Annotated[
+        list[str], typer.Option("--author", "-a", help="Author name filter (repeatable)")
+    ] = [],
+    journal: Annotated[str, typer.Option("--journal", "-j", help="Journal filter")] = "",
+    field: Annotated[str, typer.Option("--field", help="all | title | abstract")] = "all",
+    raw_query: Annotated[str, typer.Option("--raw-query", help="Raw query override")] = "",
+    oa_only: Annotated[bool, typer.Option("--oa-only", help="Open-access papers only")] = False,
+) -> None:
+    """Save a watch and record its current results as the baseline.
+
+    The baseline run prints nothing but a count, so the first `mosaic watch run`
+    (e.g. from cron) reports only genuinely new papers.
+    """
+    import sqlite3
+
+    from mosaic.errors import ConfigError
+    from mosaic.watch import WatchSpec, run_watch
+
+    spec = WatchSpec(
+        query=query,
+        source=source,
+        max_results=max_results,
+        year=year,
+        authors=list(author),
+        journal=journal,
+        field=field,
+        raw_query=raw_query,
+        oa_only=oa_only,
+    )
+    try:
+        spec.validate()
+    except ConfigError as e:
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    cache, cfg = _cache_and_cfg()
+    try:
+        watch_id = cache.add_watch(name, spec.to_json())
+    except sqlite3.IntegrityError:
+        rprint(f"[red]A watch named '{name}' already exists.[/red]")
+        raise typer.Exit(1) from None
+
+    try:
+        with Progress(
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
+        ) as prog:
+            prog.add_task(f"Recording baseline for [bold]{name}[/bold]…")
+            run = run_watch(name, watch_id, spec, cfg, cache)
+    except ConfigError as e:
+        cache.remove_watch(name)
+        rprint(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+    for err in run.errors:
+        warn(f"[dark_orange]Warning:[/dark_orange] {err}")
+    rprint(f"[green]Watch '{name}' saved[/green] — baseline of {run.total} paper(s) recorded.")
+
+
+@watch_app.command("list")
+def watch_list() -> None:
+    """List saved watches."""
+    from mosaic.watch import WatchSpec
+
+    cache, _ = _cache_and_cfg()
+    watches = cache.list_watches()
+    if not watches:
+        rprint(
+            "[dim]No watches. Create one with [bold]mosaic watch add QUERY --name NAME[/bold].[/dim]"
+        )
+        return
+    table = Table(show_header=True, header_style="cyan", box=box.SIMPLE, show_edge=False)
+    table.add_column("Name", style="bold")
+    table.add_column("Query")
+    table.add_column("Source")
+    table.add_column("Seen", justify="right")
+    table.add_column("Last run (UTC)", style="dim")
+    for w in watches:
+        spec = WatchSpec.from_json(w["spec_json"])
+        table.add_row(
+            w["name"],
+            spec.raw_query or spec.query,
+            spec.source or "all",
+            str(w["hit_count"]),
+            w["last_run"] or "never",
+        )
+    console.print(table)
+
+
+@watch_app.command("run")
+def watch_run(
+    names: Annotated[
+        list[str] | None, typer.Argument(help="Watch name(s) to run; default: all")
+    ] = None,
+    download: Annotated[
+        bool, typer.Option("--download", "-d", help="Download PDFs of new papers")
+    ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit JSON (for cron jobs and scripts)")
+    ] = False,
+) -> None:
+    """Re-run watches and show only papers they have not returned before."""
+    import json as _json
+
+    from mosaic.errors import ConfigError
+    from mosaic.watch import WatchSpec, run_watch
+
+    cache, cfg = _cache_and_cfg()
+
+    if names:
+        watches = []
+        for n in names:
+            w = cache.get_watch(n)
+            if w is None:
+                rprint(f"[red]No watch named '{n}'.[/red]")
+                raise typer.Exit(1)
+            watches.append(w)
+    else:
+        watches = cache.list_watches()
+        if not watches and not json_output:
+            rprint("[dim]No watches to run.[/dim]")
+            return
+
+    report: list[dict] = []
+    for w in watches:
+        spec = WatchSpec.from_json(w["spec_json"])
+        try:
+            if json_output:
+                run = run_watch(w["name"], w["id"], spec, cfg, cache)
+            else:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    transient=True,
+                ) as prog:
+                    prog.add_task(f"Running watch [bold]{w['name']}[/bold]…")
+                    run = run_watch(w["name"], w["id"], spec, cfg, cache)
+        except ConfigError as e:
+            report.append({"name": w["name"], "query": spec.query, "error": str(e), "new": []})
+            if not json_output:
+                rprint(f"[red]{w['name']}: {e}[/red]")
+            continue
+
+        downloaded = 0
+        if download and run.new:
+            downloaded = sum(
+                1
+                for p in run.new
+                if dl_paper(
+                    p,
+                    cfg["download_dir"],
+                    cache,
+                    cfg.get("unpaywall", {}).get("email", ""),
+                    cfg.get("filename_pattern", "{year}_{source}_{author}_{title}"),
+                )
+            )
+
+        if json_output:
+            import dataclasses
+
+            report.append(
+                {
+                    "name": run.name,
+                    "query": run.query,
+                    "total": run.total,
+                    "new": [dataclasses.asdict(p) | {"uid": p.uid} for p in run.new],
+                    "downloaded": downloaded,
+                    "errors": run.errors,
+                }
+            )
+            continue
+
+        for err in run.errors:
+            warn(f"[dark_orange]Warning:[/dark_orange] {err}")
+        if run.new:
+            rprint(
+                f"\n[bold]{run.name}[/bold] — [green]{len(run.new)} new[/green] "
+                f"of {run.total} result(s)"
+            )
+            _print_results(run.new)
+            if download:
+                rprint(f"[dim]{downloaded} PDF(s) downloaded.[/dim]")
+        else:
+            rprint(f"[bold]{run.name}[/bold] — [dim]nothing new ({run.total} result(s))[/dim]")
+
+    if json_output:
+        print(_json.dumps({"status": "ok", "watches": report}, indent=2, default=str))
+
+
+@watch_app.command("remove")
+def watch_remove(
+    name: Annotated[str, typer.Argument(help="Watch name")],
+) -> None:
+    """Delete a watch and its history of seen papers."""
+    cache, _ = _cache_and_cfg()
+    if not cache.remove_watch(name):
+        rprint(f"[red]No watch named '{name}'.[/red]")
+        raise typer.Exit(1)
+    rprint(f"[green]Watch '{name}' removed.[/green]")

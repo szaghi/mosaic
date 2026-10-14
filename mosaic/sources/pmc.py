@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import parse_authors_name_key, parse_year_earliest
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, http_client
 
 _ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _ESUMMARY = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
@@ -78,7 +76,7 @@ class PMCSource(BaseSource):
         if self._api_key:
             params["api_key"] = self._api_key
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(_ESEARCH, params=params)
             resp.raise_for_status()
             pmc_ids = resp.json().get("esearchresult", {}).get("idlist", [])

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import parse_year, split_authors
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, http_client
 
 _BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 
@@ -32,17 +30,8 @@ class EuropePMCSource(BaseSource):
         Returns:
             A list of Paper objects parsed from the ``resultList.result`` array.
         """
-        epmc_query = build_field_query(query, filters, 'TITLE:"{}"', 'ABSTRACT:"{}"')
-        if filters:
-            if filters.authors:
-                for author in filters.authors:
-                    epmc_query += f' AND AUTH:"{author}"'
-            if filters.journal:
-                epmc_query += f' AND JOURNAL:"{filters.journal}"'
-            y_from, y_to = extract_year_range(filters)
-            if y_from or y_to:
-                epmc_query += f" AND PUB_YEAR:[{y_from or y_to} TO {y_to or y_from}]"
-        with httpx.Client(timeout=30) as client:
+        epmc_query = self._build_query(query, filters)
+        with http_client(timeout=30) as client:
             resp = client.get(
                 _BASE,
                 params={
@@ -55,6 +44,20 @@ class EuropePMCSource(BaseSource):
             resp.raise_for_status()
             data = resp.json()
         return [self._parse(item) for item in data.get("resultList", {}).get("result", [])]
+
+    def _build_query(self, query: str, filters: SearchFilters | None) -> str:
+        """Translate *query* and *filters* into a Europe PMC query string."""
+        epmc_query = build_field_query(query, filters, 'TITLE:"{}"', 'ABSTRACT:"{}"')
+        if filters:
+            if filters.authors:
+                for author in filters.authors:
+                    epmc_query += f' AND AUTH:"{author}"'
+            if filters.journal:
+                epmc_query += f' AND JOURNAL:"{filters.journal}"'
+            y_from, y_to = extract_year_range(filters)
+            if y_from or y_to:
+                epmc_query += f" AND PUB_YEAR:[{y_from or y_to} TO {y_to or y_from}]"
+        return epmc_query
 
     def _parse(self, item: dict) -> Paper:
         """Parse a single Europe PMC result dict into a Paper.

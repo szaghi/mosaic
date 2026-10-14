@@ -258,10 +258,14 @@ class TestAbsolutise:
 
 
 class TestRequirePlaywright:
-    def test_raises_system_exit_when_not_installed(self):
+    def test_raises_dependency_error_when_not_installed(self):
+        """A typed error, never SystemExit: it must not escape ``except Exception`` (#30)."""
+        from mosaic.errors import DependencyError, MosaicError
+
         with patch.dict("sys.modules", {"playwright": None}):
-            with pytest.raises((SystemExit, ImportError)):
+            with pytest.raises(DependencyError, match="mosaic-search\\[browser\\]") as exc_info:
                 _require_playwright()
+        assert isinstance(exc_info.value, MosaicError)
 
 
 # ── _find_pdf_url ─────────────────────────────────────────────────────────────
@@ -380,3 +384,63 @@ class TestBrowserDownload:
             assert result is False
         finally:
             auth_mod._SESSIONS_DIR = orig
+
+
+class TestBrowserDownloadContentCheck:
+    """Issue #42: a 200 HTML challenge page from the browser must not be saved."""
+
+    def _download(self, tmp_path, body: bytes) -> bool:
+        import sys
+
+        import mosaic.auth as auth_mod
+
+        response = AsyncMock()
+        response.ok = True
+        response.headers = {"content-type": "text/html"}
+        response.body = AsyncMock(return_value=body)
+
+        mock_page = AsyncMock()
+        mock_page.url = "https://sciencedirect.com/article/123"
+        mock_page.goto = AsyncMock()
+
+        mock_context = AsyncMock()
+        mock_context.new_page = AsyncMock(return_value=mock_page)
+        mock_context.request.get = AsyncMock(return_value=response)
+
+        mock_browser = AsyncMock()
+        mock_browser.new_context = AsyncMock(return_value=mock_context)
+
+        mock_pw_cm = AsyncMock()
+        mock_pw_cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        mock_pw_cm.__aexit__ = AsyncMock(return_value=False)
+        mock_pw_module = MagicMock()
+        mock_pw_module.async_playwright = MagicMock(return_value=mock_pw_cm)
+
+        orig = auth_mod._SESSIONS_DIR
+        auth_mod._SESSIONS_DIR = tmp_path
+        try:
+            _make_session(tmp_path, "elsevier", "https://sciencedirect.com/user/login")
+            with (
+                patch("mosaic.auth._require_playwright", return_value=None),
+                patch("mosaic.auth._launch_browser", AsyncMock(return_value=mock_browser)),
+                patch("mosaic.auth._find_pdf_url", AsyncMock(return_value="https://x/p.pdf")),
+                patch.dict(sys.modules, {"playwright.async_api": mock_pw_module}),
+            ):
+                return asyncio.run(
+                    browser_download(
+                        "https://sciencedirect.com/article/123",
+                        str(tmp_path / "out.pdf"),
+                        "elsevier",
+                    )
+                )
+        finally:
+            auth_mod._SESSIONS_DIR = orig
+
+    def test_html_body_rejected(self, tmp_path):
+        assert self._download(tmp_path, b"<html>Client Challenge</html>") is False
+        assert not (tmp_path / "out.pdf").exists()
+
+    def test_pdf_body_saved(self, tmp_path):
+        assert self._download(tmp_path, b"%PDF-1.7 body") is True
+        assert (tmp_path / "out.pdf").read_bytes() == b"%PDF-1.7 body"
+        assert not (tmp_path / "out.pdf.part").exists()

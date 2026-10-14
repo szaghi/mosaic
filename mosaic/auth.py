@@ -10,6 +10,9 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+from mosaic.errors import DependencyError
+from mosaic.pdf import has_pdf_header
+
 log = logging.getLogger(__name__)
 
 _SESSIONS_DIR = Path.home() / ".config" / "mosaic" / "sessions"
@@ -227,9 +230,19 @@ async def browser_download(landing_url: str, dest: str, session_name: str) -> bo
             response = await context.request.get(pdf_url, timeout=120_000)
             if not response.ok:
                 return False
+            body = await response.body()
+            if not has_pdf_header(body):
+                # Publisher walls answer 200 with an HTML challenge page.
+                log.debug(
+                    "Browser download for %s is not a PDF (%s)",
+                    pdf_url,
+                    response.headers.get("content-type", "unknown"),
+                )
+                return False
             Path(dest).parent.mkdir(parents=True, exist_ok=True)
-            with open(dest, "wb") as f:
-                f.write(await response.body())
+            part = Path(dest).with_name(Path(dest).name + ".part")
+            part.write_bytes(body)
+            part.replace(dest)
             return True
         except Exception:
             log.debug("Browser download failed for %s", landing_url, exc_info=True)
@@ -278,17 +291,19 @@ def _absolutise(href: str, base_url: str) -> str:
 
 
 def _require_playwright() -> None:
+    """Raise DependencyError if Playwright is not installed.
+
+    Library code must not raise SystemExit: it escapes ``except Exception``
+    handlers in downloaders, sources and web-UI worker threads (issue #30).
+    """
     try:
         import playwright  # noqa: F401
     except ImportError:
-        from rich import print as rprint
-
-        rprint(
-            "[red]Playwright is not installed.[/red]\n"
-            "Install it with: [bold]pip install 'mosaic-search[browser]'[/bold]\n"
-            "Then run: [bold]playwright install chromium[/bold]"
-        )
-        raise SystemExit(1) from None
+        raise DependencyError(
+            "Playwright is not installed. "
+            "Install it with: pip install 'mosaic-search[browser]', "
+            "then run: playwright install chromium"
+        ) from None
 
 
 def has_browser() -> bool:

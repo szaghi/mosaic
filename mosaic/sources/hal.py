@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import re
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.sources.base import BaseSource, build_field_query, http_client
 
 _BASE = "https://api.archives-ouvertes.fr/search/"
 _FL = "title_s,authFullName_s,producedDate_s,doiId_s,abstract_s,journalTitle_s,fileMain_s,openAccess_bool,uri_s"
@@ -99,7 +97,7 @@ class HALSource(BaseSource):
             "wt": "json",
         }
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(_BASE, params=params)
             resp.raise_for_status()
             docs = resp.json().get("response", {}).get("docs", [])

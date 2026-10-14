@@ -69,6 +69,7 @@ mosaic search [OPTIONS] QUERY
 | `springer` | Springer Nature (API) | Free API key |
 | `doaj` | DOAJ | — |
 | `epmc` | Europe PMC | — |
+| `cochrane` | Cochrane (CDSR, via Europe PMC) | — |
 | `oa` | OpenAlex | — (email optional) |
 | `base` | BASE | — |
 | `core` | CORE | Free API key |
@@ -110,6 +111,7 @@ Each filter is applied at the **source API level** where supported, then as a **
 | Semantic Scholar | ✓ native | post-process | post-process |
 | ScienceDirect | ✓ native | ✓ native | ✓ native |
 | Europe PMC | ✓ native | ✓ native | ✓ native |
+| Cochrane | ✓ native | ✓ native | ✓ native |
 | DOAJ | ✓ native | ✓ native | ✓ native |
 | OpenAlex | ✓ native | post-process | post-process |
 | BASE | ✓ native | ✓ native | ✓ native |
@@ -845,25 +847,25 @@ mosaic cache show IDENTIFIER
 
 ### `cache verify`
 
-Check whether each tracked PDF file still exists on disk.
+Check that each tracked download still exists on disk and is a real PDF.
 
 ```bash
 mosaic cache verify
 ```
 
-Prints a line per tracked download with a ✓ / ✗ indicator and a final count of missing files.
+Prints counts of OK, missing, and not-a-PDF files, then a table of the problem files. "Not a PDF" catches HTML landing or bot-check pages that versions before 1.6 saved as PDFs.
 
 ---
 
 ### `cache clean`
 
-Remove download records whose PDF files no longer exist on disk.
+Remove download records whose files are missing or are not PDFs, so the next `mosaic get` retries them.
 
 ```bash
 mosaic cache clean
 ```
 
-Only records with `status=ok` are checked. Paper metadata is never deleted.
+Only records with `status=ok` are checked. Paper metadata and files on disk are never deleted.
 
 ---
 
@@ -896,6 +898,54 @@ mosaic cache export [OPTIONS] OUTPUT
 | `--query` | `-q` | str | | Substring filter before exporting |
 
 Supported extensions: `.csv`, `.json`, `.bib`, `.md`, `.markdown` — same semantics as `--output` on `search`.
+
+---
+
+### `watch add`
+
+Save a search as a watch and record its current results as the baseline.
+
+```
+mosaic watch add [OPTIONS] QUERY
+```
+
+| Option | Short | Type | Default | Description |
+|--------|-------|------|---------|-------------|
+| `--name` | `-n` | str | required | Unique watch name |
+| `--max` | `-m` | int | 25 | Max results per source |
+| `--source` | `-s` | str | all | Restrict to one source shorthand |
+| `--year` | `-y` | str | | `2020`, `2020-2024`, or `2020,2022` |
+| `--author` | `-a` | str | | Author filter (repeatable) |
+| `--journal` | `-j` | str | | Journal filter |
+| `--field` | | str | `all` | `all`, `title`, or `abstract` |
+| `--raw-query` | | str | | Raw query override |
+| `--oa-only` | | flag | | Open-access papers only |
+
+---
+
+### `watch run`
+
+Re-run watches and show only papers each watch has not returned before.
+
+```
+mosaic watch run [OPTIONS] [NAMES]...
+```
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--download` | `-d` | Download PDFs of new papers |
+| `--json` | | Emit JSON (for cron jobs and scripts) |
+
+With no names, all watches run.
+
+---
+
+### `watch list` / `watch remove`
+
+```bash
+mosaic watch list            # name, query, source, papers seen, last run
+mosaic watch remove NAME     # delete the watch and its seen history
+```
 
 ---
 

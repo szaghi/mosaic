@@ -5,10 +5,8 @@ from __future__ import annotations
 import time
 import xml.etree.ElementTree as ET
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, http_client
 
 _BASE = "https://export.arxiv.org/api/query"
 _NS = {
@@ -61,7 +59,7 @@ class ArxivSource(BaseSource):
                 d_to = f"{y_to or '9999'}12312359"
                 search_query += f" AND submittedDate:[{d_from} TO {d_to}]"
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(
                 _BASE,
                 params={

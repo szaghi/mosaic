@@ -243,9 +243,11 @@ mosaic --verbose search "transformer attention"
 ```
 
 ```
-Warning: Source Semantic Scholar failed: 429 Too Many Requests
-Warning: Source DBLP failed: 500 Internal Server Error
+Warning: Semantic Scholar: rate limited (HTTP 429); retry in ~60s
+Warning: DBLP: HTTP 500 from dblp.org
 ```
+
+Short rate-limit waits are retried automatically before a warning is shown; see [Sources → Rate limits and quotas](./sources#rate-limits-and-quotas).
 
 Useful when debugging connectivity or API key issues.
 

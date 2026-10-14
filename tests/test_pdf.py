@@ -69,3 +69,31 @@ class TestExtractText:
         with patch.dict("sys.modules", {"fitz": None}):
             with pytest.raises(ImportError, match="pymupdf"):
                 extract_text("/some/file.pdf")
+
+
+class TestPdfMagic:
+    def test_header_at_offset_zero(self):
+        from mosaic.pdf import has_pdf_header
+
+        assert has_pdf_header(b"%PDF-1.7\n...")
+
+    def test_header_after_leading_junk(self):
+        from mosaic.pdf import has_pdf_header
+
+        assert has_pdf_header(b"\xef\xbb\xbf\n%PDF-1.4")
+
+    def test_html_rejected(self):
+        from mosaic.pdf import has_pdf_header
+
+        assert not has_pdf_header(b"<!DOCTYPE html><html>")
+
+    def test_header_beyond_window_rejected(self):
+        from mosaic.pdf import HEADER_WINDOW, has_pdf_header
+
+        assert not has_pdf_header(b" " * HEADER_WINDOW + b"%PDF-1.7")
+
+    def test_is_pdf_file_missing_path(self, tmp_path):
+        from mosaic.pdf import is_pdf_file
+
+        assert not is_pdf_file(tmp_path / "nope.pdf")
+        assert not is_pdf_file("")

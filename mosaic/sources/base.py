@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import datetime
+import logging
+import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from email.utils import parsedate_to_datetime
+from typing import Any
+
+import httpx
 
 from mosaic.models import Paper, SearchFilters
+
+log = logging.getLogger(__name__)
 
 
 class BaseSource(ABC):
@@ -115,3 +125,127 @@ def build_scopus_query(query: str, filters: SearchFilters | None) -> str:
         if filters.journal:
             scopus_query += f' AND SRCTITLE("{filters.journal}")'
     return scopus_query
+
+
+# ---------------------------------------------------------------------------
+# HTTP: rate-limit retry and readable error messages (issue #16)
+# ---------------------------------------------------------------------------
+
+# Statuses that mean "slow down", not "you are wrong": retried when the wait is short.
+_RETRY_STATUSES = frozenset({429, 503})
+# Phrases quota-limited APIs put in 401/403 bodies (IEEE "Developer Over Rate",
+# Springer/Elsevier "quota exceeded", ...).
+_QUOTA_MARKERS = ("quota", "over rate", "rate limit", "limit exceeded", "too many requests")
+
+
+def retry_after_seconds(value: str | None) -> float | None:
+    """Parse a ``Retry-After`` header (delta-seconds or HTTP-date) into seconds.
+
+    Returns None when the header is absent or unparseable.
+    """
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return max(float(value), 0.0)
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=datetime.UTC)
+    return max((when - datetime.datetime.now(datetime.UTC)).total_seconds(), 0.0)
+
+
+class RetryTransport(httpx.BaseTransport):
+    """Transport that retries 429/503 responses when the server asks for a short wait.
+
+    The wait is the server's ``Retry-After`` when present, else exponential
+    backoff (1 s, 2 s, ...). A requested wait longer than *max_wait* is not
+    honoured: the response is returned as-is so the source fails fast and the
+    caller reports it, instead of a search hanging for minutes.
+
+    Parameters
+    ----------
+    max_retries : int
+        Retries after the first attempt.
+    max_wait : float
+        Longest single wait, in seconds, that will be honoured.
+    transport : httpx.BaseTransport or None
+        Wrapped transport; defaults to ``httpx.HTTPTransport()``.
+    sleep : callable
+        Injected for tests.
+    """
+
+    def __init__(
+        self,
+        max_retries: int = 2,
+        max_wait: float = 10.0,
+        transport: httpx.BaseTransport | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._inner = transport or httpx.HTTPTransport()
+        self._max_retries = max_retries
+        self._max_wait = max_wait
+        self._sleep = sleep
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        for attempt in range(self._max_retries + 1):
+            response = self._inner.handle_request(request)
+            if response.status_code not in _RETRY_STATUSES or attempt == self._max_retries:
+                return response
+            wait = retry_after_seconds(response.headers.get("retry-after"))
+            if wait is None:
+                wait = float(2**attempt)
+            if wait > self._max_wait:
+                return response
+            response.close()
+            log.info(
+                "HTTP %s from %s; retrying in %.1fs (%d/%d)",
+                response.status_code,
+                request.url.host,
+                wait,
+                attempt + 1,
+                self._max_retries,
+            )
+            self._sleep(wait)
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def close(self) -> None:
+        self._inner.close()
+
+
+def http_client(**kwargs: Any) -> httpx.Client:
+    """Return an ``httpx.Client`` whose requests retry short rate-limit waits.
+
+    Drop-in for ``httpx.Client(...)`` in sources. httpx mounts proxies from
+    ``HTTP(S)_PROXY`` env vars as separate transports, so proxied requests
+    still work but skip the retry layer.
+    """
+    kwargs.setdefault("transport", RetryTransport())
+    return httpx.Client(**kwargs)
+
+
+def describe_http_error(exc: BaseException) -> str:
+    """Turn a source failure into a one-line, user-actionable message."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        resp = exc.response
+        code = resp.status_code
+        if code == 429:
+            wait = retry_after_seconds(resp.headers.get("retry-after"))
+            hint = f"; retry in ~{wait:.0f}s" if wait is not None else "; try again later"
+            return f"rate limited (HTTP 429){hint}"
+        if code in (401, 403):
+            try:
+                body = resp.text[:1000].lower()
+            except Exception:
+                body = ""
+            if any(m in body for m in _QUOTA_MARKERS):
+                return f"API quota exhausted (HTTP {code}); try again later or tomorrow"
+            return f"access denied (HTTP {code}); check the API key / credentials"
+        return f"HTTP {code} from {resp.request.url.host}"
+    if isinstance(exc, httpx.TimeoutException):
+        return "timed out"
+    return str(exc)

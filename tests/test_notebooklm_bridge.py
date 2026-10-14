@@ -80,7 +80,7 @@ class TestCreateNotebook:
 
     def test_returns_notebook_id(self):
         result, _ = self._run_create([])
-        assert result == "nb-42"
+        assert result.nb_id == "nb-42"
 
     def test_uploads_local_pdf_when_path_exists(self, tmp_path):
         pdf = tmp_path / "paper.pdf"
@@ -123,8 +123,18 @@ class TestCreateNotebook:
 
     def test_podcast_not_generated_when_no_sources_added(self):
         paper = Paper(title="No URL and no path")
-        _, client = self._run_create([(paper, None)], artifacts={"podcast"})
+        result, client = self._run_create([(paper, None)], artifacts={"podcast"})
         client.artifacts.generate_audio.assert_not_awaited()
+        assert result.sources_added == 0
+        assert result.artifacts_skipped == ["podcast"]
+
+    def test_url_only_sources_still_generate_artifacts(self):
+        """Zero PDFs is not zero sources: URL fallbacks keep artifacts (issue #30)."""
+        paper = Paper(title="A Paper", url="https://example.com/paper")
+        result, client = self._run_create([(paper, None)], artifacts={"podcast"})
+        client.artifacts.generate_audio.assert_awaited_once_with("nb-42")
+        assert result.sources_added == 1
+        assert result.artifacts_skipped == []
 
     def test_source_failure_is_non_fatal(self):
         from mosaic.notebooklm_bridge import create_notebook
@@ -134,7 +144,8 @@ class TestCreateNotebook:
         client.sources.add_url = AsyncMock(side_effect=Exception("NLM error"))
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
             result = _run(create_notebook("Test NB", [(paper, None)]))
-        assert result == "nb-001"  # notebook was still created
+        assert result.nb_id == "nb-001"  # notebook was still created
+        assert result.sources_added == 0
 
     def test_prefers_local_pdf_over_url(self, tmp_path):
         pdf = tmp_path / "paper.pdf"
@@ -182,7 +193,7 @@ class TestCreateNotebookFromDir:
     def test_returns_notebook_id(self, tmp_path):
         (tmp_path / "paper.pdf").write_bytes(b"%PDF")
         result, _ = self._run_from_dir(tmp_path)
-        assert result == "nb-dir"
+        assert result.nb_id == "nb-dir"
 
     def test_podcast_queued_when_flag_set(self, tmp_path):
         (tmp_path / "paper.pdf").write_bytes(b"%PDF")
@@ -197,4 +208,4 @@ class TestCreateNotebookFromDir:
         client.sources.add_file = AsyncMock(side_effect=Exception("upload error"))
         with patch.dict(sys.modules, {"notebooklm": fake_mod}):
             result = _run(create_notebook_from_dir("Test", tmp_path))
-        assert result == "nb-001"
+        assert result.nb_id == "nb-001"

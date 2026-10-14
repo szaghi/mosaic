@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 import textwrap
 
-import httpx
-
+from mosaic import llm
 from mosaic.db import Cache
 from mosaic.models import Paper
 
@@ -472,7 +471,7 @@ def ask(
     template = _PROMPTS.get(mode, _PROMPTS["synthesis"])
     prompt = template.format(query=query, context=context)
 
-    answer = _call_llm(prompt, cfg)
+    answer = llm.complete(prompt, cfg)
     return answer, papers
 
 
@@ -565,53 +564,3 @@ def _expand_neighbors(uids: list[str], cache: Cache, top_k: int) -> list[str]:
                 seen.add(neighbor)
                 extended.append(neighbor)
     return extended
-
-
-def _call_llm(prompt: str, cfg: dict) -> str:
-    """Call the configured LLM generator and return the response text."""
-    llm_cfg = cfg.get("llm", {})
-    provider = llm_cfg.get("provider", "").lower()
-    api_key = llm_cfg.get("api_key", "")
-    model = llm_cfg.get("model", "")
-    base_url = llm_cfg.get("base_url", "").rstrip("/")
-
-    if not api_key or not provider:
-        raise ValueError(
-            "No LLM configured. Run: mosaic config --llm-provider openai --llm-api-key KEY --llm-model MODEL"
-        )
-
-    if not model:
-        model = "gpt-4o-mini" if provider == "openai" else "claude-haiku-4-5-20251001"
-
-    if provider == "openai" or base_url:
-        url = (
-            f"{base_url}/chat/completions"
-            if base_url
-            else "https://api.openai.com/v1/chat/completions"
-        )
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        payload: dict = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        resp = httpx.post(url, headers=headers, json=payload, timeout=180)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-    if provider == "anthropic":
-        url = "https://api.anthropic.com/v1/messages"
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": model,
-            "max_tokens": 4096,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        resp = httpx.post(url, headers=headers, json=payload, timeout=180)
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"]
-
-    raise ValueError(f"Unknown LLM provider: {provider!r}")

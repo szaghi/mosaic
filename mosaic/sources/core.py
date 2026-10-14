@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import parse_authors_name_key
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.sources.base import BaseSource, build_field_query, http_client
 
 _BASE = "https://api.core.ac.uk/v3/search/works/"
 
@@ -55,7 +53,7 @@ class CORESource(BaseSource):
                 y_to = filters.year_to or filters.year_from
                 core_query += f" AND yearPublished>={y_from} AND yearPublished<={y_to}"
 
-        with httpx.Client(timeout=30, headers=self._headers) as client:
+        with http_client(timeout=30, headers=self._headers) as client:
             resp = client.get(
                 _BASE,
                 params={

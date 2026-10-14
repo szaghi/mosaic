@@ -52,10 +52,14 @@ class JobManager:
             try:
                 job.result = future.result()
                 job.status = "done"
-            except Exception as e:
+            except BaseException as e:
+                # BaseException, not Exception: a SystemExit leaking from library
+                # code would otherwise leave the job "running" forever and kill
+                # this pool worker thread (issue #30).
                 job.status = "error"
-                job.error_message = str(e)
-            job._event.set()
+                job.error_message = str(e) or type(e).__name__
+            finally:
+                job._event.set()
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:

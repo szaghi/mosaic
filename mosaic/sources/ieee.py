@@ -7,11 +7,9 @@ proceedings. The source is disabled when ``api_key`` is empty.
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import parse_authors_name_key
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, http_client
 
 _BASE = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
 
@@ -86,7 +84,7 @@ class IEEEXploreSource(BaseSource):
             if y_to:
                 params["end_year"] = y_to
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(_BASE, params=params)
             resp.raise_for_status()
             articles = resp.json().get("articles", [])

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import extract_first, parse_year
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.sources.base import BaseSource, build_field_query, http_client
 
 _BASE = "https://api.base-search.net/cgi-bin/BaseHttpSearchInterface.fcgi"
 
@@ -48,7 +46,7 @@ class BASESource(BaseSource):
                 y_to = filters.year_to or filters.year_from
                 base_query += f" AND dcyear:[{y_from} TO {y_to}]"
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(
                 _BASE,
                 params={

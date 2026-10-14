@@ -1,6 +1,7 @@
 from mosaic.sources.arxiv import ArxivSource
 from mosaic.sources.base_search import BASESource
 from mosaic.sources.biorxiv import BioRxivSource
+from mosaic.sources.cochrane import CochraneSource
 from mosaic.sources.core import CORESource
 from mosaic.sources.crossref import CrossrefSource
 from mosaic.sources.custom import CustomSource
@@ -28,6 +29,7 @@ __all__ = [
     "BASESource",
     "BioRxivSource",
     "CORESource",
+    "CochraneSource",
     "CrossrefSource",
     "CustomSource",
     "DBLPSource",

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import parse_authors_name_key, parse_year, strip_html
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, http_client
 
 _BASE = "https://zenodo.org/api/records"
 
@@ -91,7 +89,7 @@ class ZenodoSource(BaseSource):
         if self._token:
             params["access_token"] = self._token
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(_BASE, params=params)
             resp.raise_for_status()
             hits = resp.json().get("hits", {}).get("hits", [])

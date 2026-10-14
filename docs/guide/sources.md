@@ -15,6 +15,7 @@ flowchart TD
     Q --> SPN[Springer Nature API]
     Q --> D[DOAJ]
     Q --> E[Europe PMC]
+    Q --> CO[Cochrane]
     Q --> F[OpenAlex]
     Q --> G[BASE]
     Q --> H[CORE]
@@ -28,7 +29,7 @@ flowchart TD
     Q --> PMC[PubMed Central]
     Q --> PED[PEDro]
     Q --> SC[Scopus]
-    A & B & C & SP & SPN & D & E & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM & PMC & PED & SC --> I{Deduplicate\nby DOI}
+    A & B & C & SP & SPN & D & E & CO & F & G & H & N & IEEE & Z & CR & DBLP & HAL & PM & PMC & PED & SC --> I{Deduplicate\nby DOI}
     I --> J[Result table]
     J -->|download| K{Has pdf_url?}
     K -- yes --> L[(Local disk)]
@@ -174,6 +175,26 @@ Every result from DOAJ is fully open access by definition. Good source for human
 | Base URL | `https://www.ebi.ac.uk/europepmc/webservices/rest/search` |
 
 Europe PMC is the best source for biomedical literature. Open-access papers with a PubMed Central ID (PMCID) include a direct PDF link.
+
+## Cochrane — shorthand `cochrane`
+
+| Property | Value |
+|----------|-------|
+| Auth | None |
+| Content | Cochrane Database of Systematic Reviews (CDSR): reviews and protocols |
+| PDF | PMC full-text PDF when the review is open access |
+| Rate limit | Same as Europe PMC |
+| Base URL | Europe PMC REST API, restricted to `ISSN:"1469-493X"` |
+
+Systematic reviews and meta-analyses from the Cochrane Library. Results link to the review page on `cochranelibrary.com`.
+
+```bash
+mosaic search "exercise for chronic low back pain" --source cochrane
+```
+
+::: info Why via Europe PMC
+Cochrane's own APIs need OAuth credentials issued on request, and automated access to `cochranelibrary.com` is blocked and not permitted by Wiley's terms. Europe PMC indexes the CDSR with DOIs and abstracts, usually within days of publication, so MOSAIC queries it with a journal restriction instead. All Europe PMC filters (year, author, field scoping, `--raw-query`) work unchanged.
+:::
 
 ## OpenAlex
 
@@ -604,6 +625,20 @@ mosaic search "transformer attention mechanism" --source scopus --field title --
 Scopus is a metadata index only — it does not expose PDF download URLs. For open-access papers, Unpaywall resolves a PDF link by DOI automatically during download.
 :::
 
+## Rate limits and quotas
+
+When a source answers `429 Too Many Requests` or `503 Service Unavailable`, MOSAIC waits and retries, up to 2 times. The wait is the server's `Retry-After` header when present, otherwise 1 s and then 2 s. If the server asks for more than 10 s (for example, a daily quota reset), MOSAIC does not wait: the source is skipped and the search continues with the others.
+
+Failures are reported in plain language rather than raw HTTP errors:
+
+```
+Warning: IEEE: API quota exhausted (HTTP 403); try again later or tomorrow
+Warning: Semantic Scholar: rate limited (HTTP 429); retry in ~60s
+Warning: CORE: access denied (HTTP 401); check the API key / credentials
+```
+
+Free-tier quotas to keep in mind: IEEE Xplore 200 requests/day, NASA ADS 5 000/day, Springer Nature API 5 000/day.
+
 ## Unpaywall (PDF resolver)
 
 Unpaywall is not a search source — it is a resolver used during download. For any paper with a DOI but no known PDF URL, MOSAIC calls:
@@ -613,6 +648,8 @@ GET https://api.unpaywall.org/v2/{doi}?email=you@example.com
 ```
 
 Unpaywall checks 50 000+ repositories (PubMed Central, institutional repos, author pages, preprint servers) and returns the `best_oa_location.url_for_pdf` if a legal copy exists.
+
+Every download, whatever its origin, is checked for the PDF signature (`%PDF-`) before it is saved. Publisher bot-checks and landing pages often answer `200 OK` with HTML; those are rejected, MOSAIC tries the next strategy, and the failure is recorded as `error: not a pdf (text/html)` rather than as a successful download.
 
 ::: tip
 Set your email in the config to enable this fallback:

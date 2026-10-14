@@ -40,5 +40,9 @@ class DownloadError(MosaicError):
     """Raised when a PDF download fails."""
 
 
+class DependencyError(MosaicError):
+    """Raised when an optional dependency (extra) needed for a feature is missing."""
+
+
 class ConfigError(MosaicError):
     """Raised when configuration is invalid or missing."""

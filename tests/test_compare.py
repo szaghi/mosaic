@@ -154,7 +154,7 @@ class TestComparePapers:
         papers = [_paper("T", abstract="uses Transformer on CIFAR-10")]
         cfg = {"llm": {"provider": "openai", "api_key": "sk-fake", "model": "gpt-4o-mini"}}
         fake_response = '[{"method": "Transformer", "dataset": "CIFAR-10"}]'
-        with patch("mosaic.compare._call_llm", return_value=fake_response):
+        with patch("mosaic.llm.complete", return_value=fake_response):
             rows = compare_papers(papers, ["method", "dataset"], cfg)
         assert rows[0]["method"] == "Transformer"
         assert rows[0]["dataset"] == "CIFAR-10"

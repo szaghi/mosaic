@@ -313,3 +313,88 @@ class TestHistoryFilters:
         assert resp.status_code == 200
         assert b'value="2023"' in resp.data
         assert b'value="Smith"' in resp.data
+
+
+# ---------------------------------------------------------------------------
+# NotebookLM (issue #30)
+# ---------------------------------------------------------------------------
+
+
+class TestNotebookPreflight:
+    def _post(self, client, status):
+        with patch("mosaic.notebooklm_bridge.check_notebooklm_status", return_value=status):
+            return client.post("/notebook", data={"name": "NB", "query": "q"})
+
+    def test_not_installed_is_reported_without_starting_a_job(self, client):
+        status = {"installed": False, "authenticated": False}
+        with patch("mosaic.ui.jobs.JobManager.submit") as submit:
+            resp = self._post(client, status)
+        submit.assert_not_called()
+        assert b"mosaic-search[notebooklm]" in resp.data
+
+    def test_not_authenticated_points_to_login(self, client):
+        status = {"installed": True, "authenticated": False}
+        with patch("mosaic.ui.jobs.JobManager.submit") as submit:
+            resp = self._post(client, status)
+        submit.assert_not_called()
+        assert b"notebooklm login" in resp.data
+
+    def test_ready_starts_polling_job(self, client):
+        status = {"installed": True, "authenticated": True}
+        with patch("mosaic.ui.jobs.JobManager.submit", return_value="abc123") as submit:
+            resp = self._post(client, status)
+        submit.assert_called_once()
+        assert b"/notebook/status/abc123" in resp.data
+
+
+class TestNotebookStatus:
+    def _status(self, app, client, result):
+        jm = app.config["JOB_MANAGER"]
+        job_id = jm.submit(lambda: result)
+        jm.get(job_id).wait(timeout=5)
+        return client.get(f"/notebook/status/{job_id}").data.decode()
+
+    def test_skipped_artifacts_are_reported(self, app, client):
+        html = self._status(
+            app,
+            client,
+            {
+                "ok": True,
+                "nb_id": "nb1",
+                "paper_count": 3,
+                "downloaded": 0,
+                "sources_added": 0,
+                "artifacts_skipped": ["briefing", "podcast"],
+            },
+        )
+        assert "notebook/nb1" in html
+        assert "briefing, podcast" in html
+        assert "were not generated" in html
+
+    def test_no_warning_when_artifacts_queued(self, app, client):
+        html = self._status(
+            app,
+            client,
+            {
+                "ok": True,
+                "nb_id": "nb1",
+                "paper_count": 3,
+                "downloaded": 0,
+                "sources_added": 3,
+                "artifacts_skipped": [],
+            },
+        )
+        assert "3 source(s) added" in html
+        assert "were not generated" not in html
+
+    def test_system_exit_in_job_ends_polling(self, app, client):
+        jm = app.config["JOB_MANAGER"]
+
+        def boom():
+            raise SystemExit(1)
+
+        job_id = jm.submit(boom)
+        jm.get(job_id).wait(timeout=5)
+        html = client.get(f"/notebook/status/{job_id}").data.decode()
+        assert "Notebook creation failed" in html
+        assert "hx-trigger" not in html

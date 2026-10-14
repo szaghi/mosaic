@@ -7,8 +7,7 @@ import io
 import json
 import logging
 
-import httpx
-
+from mosaic import llm
 from mosaic.models import Paper
 
 _log = logging.getLogger(__name__)
@@ -39,10 +38,9 @@ def compare_papers(
         List of dicts with exactly *dimensions* as keys, one dict per paper.
         Missing or unavailable fields are ``"-"``.
     """
-    llm_cfg = cfg.get("llm", {})
-    if llm_cfg.get("api_key") and llm_cfg.get("provider"):
+    if llm.is_configured(cfg):
         try:
-            return _llm_extract(papers, dimensions, llm_cfg)
+            return _llm_extract(papers, dimensions, cfg)
         except Exception as exc:
             _log.warning("LLM comparison failed (%s) — using metadata fallback", exc)
     return _metadata_fallback(papers, dimensions)
@@ -82,15 +80,12 @@ def _metadata_fallback(papers: list[Paper], dimensions: list[str]) -> list[dict[
 def _llm_extract(
     papers: list[Paper],
     dimensions: list[str],
-    llm_cfg: dict,
+    cfg: dict,
 ) -> list[dict[str, str]]:
     """Send papers to the configured LLM in batches to extract *dimensions*."""
     from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
 
-    provider = llm_cfg.get("provider", "").lower()
-    api_key = llm_cfg["api_key"]
-    model = llm_cfg.get("model") or _default_model(provider)
-    base_url = llm_cfg.get("base_url", "").rstrip("/")
+    model = llm.resolve(cfg).model
     dims_str = ", ".join(f'"{d}"' for d in dimensions)
 
     rows: list[dict[str, str]] = []
@@ -120,7 +115,7 @@ def _llm_extract(
                 f'Use "-" when a dimension cannot be inferred from the title or abstract.\n\n'
                 f"{snippets}"
             )
-            raw = _call_llm(provider, api_key, model, prompt, base_url=base_url)
+            raw = llm.complete(prompt, cfg, max_tokens=2048, json_mode=True, timeout=120)
             extracted = _parse_obj_list(raw, len(batch), dimensions)
             rows.extend(extracted)
             progress.advance(task, len(batch))
@@ -129,48 +124,6 @@ def _llm_extract(
 
 
 # ── LLM helpers ──────────────────────────────────────────────────────────────
-
-
-def _call_llm(
-    provider: str,
-    api_key: str,
-    model: str,
-    prompt: str,
-    base_url: str = "",
-) -> str:
-    """Call the configured LLM and return the raw response text."""
-    if provider == "openai" or base_url:
-        url = (
-            f"{base_url}/chat/completions"
-            if base_url
-            else "https://api.openai.com/v1/chat/completions"
-        )
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        payload: dict = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        if not base_url:
-            payload["response_format"] = {"type": "json_object"}
-        resp = httpx.post(url, headers=headers, json=payload, timeout=120)
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-    if provider == "anthropic":
-        url = "https://api.anthropic.com/v1/messages"
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": model,
-            "max_tokens": 2048,
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        resp = httpx.post(url, headers=headers, json=payload, timeout=120)
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"]
-    raise ValueError(f"Unknown LLM provider: {provider!r}")
 
 
 def _parse_obj_list(
@@ -222,14 +175,6 @@ def _parse_obj_list(
         rows.append(dict.fromkeys(dimensions, "–"))
 
     return rows
-
-
-def _default_model(provider: str) -> str:
-    if provider == "openai":
-        return "gpt-4o-mini"
-    if provider == "anthropic":
-        return "claude-haiku-4-5-20251001"
-    return ""
 
 
 # ── Output formatters ─────────────────────────────────────────────────────────

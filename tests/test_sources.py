@@ -339,6 +339,67 @@ class TestScienceDirectSource:
 # ── Europe PMC ────────────────────────────────────────────────────────────────
 
 
+_COCHRANE_JSON = {
+    "resultList": {
+        "result": [
+            {
+                "id": "41000001",
+                "source": "MED",
+                "title": "Exercise therapy for chronic low back pain",
+                "authorString": "Hayden JA, Ellis J",
+                "pubYear": "2026",
+                "doi": "10.1002/14651858.CD009790.pub2",
+                "abstractText": "Systematic review.",
+                "journalTitle": "",
+                "isOpenAccess": "N",
+            }
+        ]
+    }
+}
+
+
+class TestCochraneSource:
+    """Issue #27: Cochrane as a Europe PMC search restricted to the CDSR ISSN."""
+
+    def _search(self, query="back pain", filters=None, data=None):
+        from mosaic.sources.cochrane import CochraneSource
+
+        cls, mc = _mock_client(get_return=_mock_get(json_data=data or _COCHRANE_JSON))
+        with patch("httpx.Client", cls):
+            papers = CochraneSource().search(query, filters=filters)
+        return papers, mc.get.call_args.kwargs["params"]["query"]
+
+    def test_query_restricted_to_cdsr_issn(self):
+        _, query = self._search()
+        assert query.endswith('AND ISSN:"1469-493X"')
+
+    def test_raw_query_with_or_is_parenthesised(self):
+        """Without parentheses, 'a OR b AND ISSN' would leak non-Cochrane hits."""
+        _, query = self._search(filters=SearchFilters(raw_query="TENS OR acupuncture"))
+        assert query == '(TENS OR acupuncture) AND ISSN:"1469-493X"'
+
+    def test_inherits_europepmc_filters(self):
+        _, query = self._search(filters=SearchFilters(year_from=2020, year_to=2024))
+        assert "PUB_YEAR:[2020 TO 2024]" in query
+
+    def test_parsed_as_cochrane_with_library_link(self):
+        papers, _ = self._search()
+        (p,) = papers
+        assert p.source == "Cochrane"
+        assert p.journal == "Cochrane Database of Systematic Reviews"
+        assert p.url == (
+            "https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD009790.pub2/full"
+        )
+
+    def test_registered_with_shorthand(self):
+        from mosaic.source_registry import SHORTHAND_TO_CFG_KEY, SRC_MAP, build_sources
+
+        assert SRC_MAP["cochrane"] == "Cochrane"
+        assert SHORTHAND_TO_CFG_KEY["cochrane"] == "cochrane"
+        names = {s.name for s in build_sources({"sources": {}})}
+        assert "Cochrane" in names
+
+
 class TestEuropePMCSource:
     def _source(self):
         from mosaic.sources.europepmc import EuropePMCSource

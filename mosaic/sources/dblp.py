@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
-from mosaic.sources.base import BaseSource, build_field_query
+from mosaic.sources.base import BaseSource, build_field_query, http_client
 
 _BASE = "https://dblp.org/search/publ/api"
 
@@ -73,7 +71,7 @@ class DBLPSource(BaseSource):
             "format": "json",
         }
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(_BASE, params=params)
             resp.raise_for_status()
             hits = resp.json().get("result", {}).get("hits", {})

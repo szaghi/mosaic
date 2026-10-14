@@ -9,11 +9,9 @@ credentials and covers all Springer content, not just OA.
 
 from __future__ import annotations
 
-import httpx
-
 from mosaic.models import Paper, SearchFilters
 from mosaic.parsing import parse_authors_name_key, parse_year
-from mosaic.sources.base import BaseSource, build_field_query, extract_year_range
+from mosaic.sources.base import BaseSource, build_field_query, extract_year_range, http_client
 
 _BASE = "https://api.springernature.com/openaccess/json"
 
@@ -79,7 +77,7 @@ class SpringerAPISource(BaseSource):
             if y_from or y_to:
                 q += f" date:{y_from or y_to}-{y_to or y_from}"
 
-        with httpx.Client(timeout=30) as client:
+        with http_client(timeout=30) as client:
             resp = client.get(
                 _BASE,
                 params={

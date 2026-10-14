@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 
 from mosaic.models import Paper
+from mosaic.pdf import is_pdf_file
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +93,19 @@ def _init(con: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS rag_meta (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS watches (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT NOT NULL UNIQUE,
+            spec_json  TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            last_run   TEXT
+        );
+        CREATE TABLE IF NOT EXISTS watch_hits (
+            watch_id   INTEGER NOT NULL,
+            uid        TEXT NOT NULL,
+            first_seen TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (watch_id, uid)
         );
     """)
     con.commit()
@@ -295,6 +309,68 @@ class Cache:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    # ── Watches (saved searches with change detection) ────────────────────────
+
+    def add_watch(self, name: str, spec_json: str) -> int:
+        """Create watch *name*; return its id. Raises sqlite3.IntegrityError if it exists."""
+        with self._lock:
+            cur = self.con.execute(
+                "INSERT INTO watches(name, spec_json) VALUES (?, ?)", (name, spec_json)
+            )
+            self.con.commit()
+            return int(cur.lastrowid)
+
+    def get_watch(self, name: str) -> dict | None:
+        with self._lock:
+            row = self.con.execute("SELECT * FROM watches WHERE name=?", (name,)).fetchone()
+            return dict(row) if row else None
+
+    def list_watches(self) -> list[dict]:
+        """Return all watches with their hit counts, oldest first."""
+        with self._lock:
+            rows = self.con.execute(
+                """
+                SELECT w.*, COUNT(h.uid) AS hit_count
+                FROM watches w LEFT JOIN watch_hits h ON h.watch_id = w.id
+                GROUP BY w.id ORDER BY w.id
+                """
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def remove_watch(self, name: str) -> bool:
+        """Delete watch *name* and its seen-set. Returns False if it did not exist."""
+        with self._lock:
+            row = self.con.execute("SELECT id FROM watches WHERE name=?", (name,)).fetchone()
+            if row is None:
+                return False
+            self.con.execute("DELETE FROM watch_hits WHERE watch_id=?", (row["id"],))
+            self.con.execute("DELETE FROM watches WHERE id=?", (row["id"],))
+            self.con.commit()
+            return True
+
+    def record_watch_hits(self, watch_id: int, uids: list[str]) -> set[str]:
+        """Add *uids* to the watch's seen-set and stamp ``last_run``.
+
+        Returns the subset of *uids* this watch had never seen. "New" is per
+        watch: a paper already cached through another search still counts as
+        new here, which a global cache lookup would miss.
+        """
+        with self._lock:
+            before = {
+                r["uid"]
+                for r in self.con.execute(
+                    "SELECT uid FROM watch_hits WHERE watch_id=?", (watch_id,)
+                ).fetchall()
+            }
+            new = {u for u in uids if u not in before}
+            self.con.executemany(
+                "INSERT OR IGNORE INTO watch_hits(watch_id, uid) VALUES (?, ?)",
+                [(watch_id, u) for u in new],
+            )
+            self.con.execute("UPDATE watches SET last_run=datetime('now') WHERE id=?", (watch_id,))
+            self.con.commit()
+            return new
+
     # ── Richness predicate (Phase 5) ──────────────────────────────────────────
 
     def is_rich(self, uid: str) -> bool:
@@ -385,27 +461,35 @@ class Cache:
             return self.con.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
 
     def verify_downloads(self) -> list[dict]:
-        """Check whether each tracked download file still exists on disk.
+        """Check each tracked download file on disk.
 
-        Returns a list of dicts with keys ``uid``, ``local_path``, ``exists``.
+        Returns a list of dicts with keys ``uid``, ``local_path``, ``exists`` and
+        ``is_pdf``. ``is_pdf`` is False for missing files and for HTML pages
+        (bot-checks, landing pages) that older versions saved as PDFs.
         """
         with self._lock:
             rows = self.con.execute(
                 "SELECT uid, local_path FROM downloads WHERE status='ok'"
             ).fetchall()
-        return [
-            {
-                "uid": row["uid"],
-                "local_path": row["local_path"],
-                "exists": bool(row["local_path"] and Path(row["local_path"]).exists()),
-            }
-            for row in rows
-        ]
+        results = []
+        for row in rows:
+            path = row["local_path"]
+            exists = bool(path and Path(path).exists())
+            results.append(
+                {
+                    "uid": row["uid"],
+                    "local_path": path,
+                    "exists": exists,
+                    "is_pdf": exists and is_pdf_file(path),
+                }
+            )
+        return results
 
     def clean_stubs(self) -> int:
-        """Remove download records whose files no longer exist on disk.
+        """Remove download records whose files are missing or are not PDFs.
 
-        Returns the number of records removed.
+        A removed record makes the next ``mosaic get`` retry the download.
+        Files on disk are left untouched. Returns the number of records removed.
         """
         with self._lock:
             rows = self.con.execute(
@@ -413,7 +497,7 @@ class Cache:
             ).fetchall()
             removed = 0
             for row in rows:
-                if not row["local_path"] or not Path(row["local_path"]).exists():
+                if not row["local_path"] or not is_pdf_file(row["local_path"]):
                     self.con.execute("DELETE FROM downloads WHERE uid=?", (row["uid"],))
                     removed += 1
             if removed:

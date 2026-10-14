@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from mosaic.models import Paper, SearchFilters
 from mosaic.services import merge_papers
-from mosaic.sources.base import BaseSource
+from mosaic.sources.base import BaseSource, describe_http_error
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def search_all(
                 except Exception as e:
                     log.warning("Source %s failed: %s", source.name, e)
                     if errors is not None:
-                        errors.append(f"{source.name}: {e}")
+                        errors.append(f"{source.name}: {describe_http_error(e)}")
                     if progress_callback:
                         progress_callback(source.name, "error")
     else:
@@ -69,7 +69,7 @@ def search_all(
             except Exception as e:
                 log.warning("Source %s failed: %s", source.name, e)
                 if errors is not None:
-                    errors.append(f"{source.name}: {e}")
+                    errors.append(f"{source.name}: {describe_http_error(e)}")
                 if progress_callback:
                     progress_callback(source.name, "error")
                 continue
