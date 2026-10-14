@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
 from mosaic import llm
@@ -12,8 +13,8 @@ from mosaic.errors import ConfigError
 
 def _resp(payload: dict) -> MagicMock:
     r = MagicMock()
+    r.is_error = False
     r.json.return_value = payload
-    r.raise_for_status.return_value = None
     return r
 
 
@@ -103,3 +104,54 @@ class TestComplete:
         with patch("httpx.post") as post, pytest.raises(llm.LLMConfigError):
             llm.complete("q", {})
         post.assert_not_called()
+
+
+class TestServerErrors:
+    """The server's own reason must reach the user, not just "404 Not Found"."""
+
+    def _post_returning(self, status: int, **kw) -> httpx.Response:
+        req = httpx.Request("POST", "http://localhost:11434/v1/chat/completions")
+        return httpx.Response(status, request=req, **kw)
+
+    def test_ollama_model_not_found(self):
+        cfg = {
+            "llm": {"provider": "openai", "api_key": "x", "base_url": "http://localhost:11434/v1"}
+        }
+        body = {"error": {"message": "model 'qwen-x' not found", "type": "not_found_error"}}
+        with (
+            patch("httpx.post", return_value=self._post_returning(404, json=body)),
+            pytest.raises(llm.LLMRequestError) as exc_info,
+        ):
+            llm.complete("q", cfg)
+        assert str(exc_info.value) == (
+            "http://localhost:11434/v1 returned HTTP 404: model 'qwen-x' not found"
+        )
+
+    def test_anthropic_error_shape(self):
+        cfg = {"llm": {"provider": "anthropic", "api_key": "bad"}}
+        body = {
+            "type": "error",
+            "error": {"type": "authentication_error", "message": "invalid x-api-key"},
+        }
+        with (
+            patch("httpx.post", return_value=self._post_returning(401, json=body)),
+            pytest.raises(
+                llm.LLMRequestError, match="anthropic returned HTTP 401: invalid x-api-key"
+            ),
+        ):
+            llm.complete("q", cfg)
+
+    def test_non_json_body_falls_back_to_text(self):
+        cfg = {"llm": {"provider": "openai", "api_key": "sk"}}
+        with (
+            patch(
+                "httpx.post", return_value=self._post_returning(502, text="Bad gateway upstream")
+            ),
+            pytest.raises(llm.LLMRequestError, match="HTTP 502: Bad gateway upstream"),
+        ):
+            llm.complete("q", cfg)
+
+    def test_is_a_mosaic_error(self):
+        from mosaic.errors import MosaicError
+
+        assert issubclass(llm.LLMRequestError, MosaicError)

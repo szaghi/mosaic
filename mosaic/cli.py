@@ -208,6 +208,14 @@ def search(
             help="Emit structured JSON to stdout instead of a table (useful for scripting and AI agents)",
         ),
     ] = False,
+    summarise: Annotated[
+        bool,
+        typer.Option(
+            "--summarise",
+            "--summarize",
+            help="Add a one-paragraph LLM synthesis of the results (requires an LLM set via mosaic config)",
+        ),
+    ] = False,
 ):
     """Search for papers across all configured sources."""
     cfg = cfg_mod.load()
@@ -249,7 +257,7 @@ def search(
             # semantic ordering with BM25, so treat it as no sort.
             effective_sort = sort_by if sort_by in ("citations", "year") else ""
             if json_output:
-                _emit_json(papers, query=query)
+                _emit_search_json(papers, query, cfg, summarise=summarise)
                 return
             _post_process(
                 papers,
@@ -267,6 +275,7 @@ def search(
                 obsidian=obsidian,
                 obsidian_folder=obsidian_folder,
                 show_score=True,
+                summarise=summarise,
             )
         else:
             if not json_output:
@@ -278,7 +287,7 @@ def search(
                 dld = cache.get_downloaded_uids()
                 papers = [p for p in papers if p.uid in dld]
             if json_output:
-                _emit_json(papers, query=query)
+                _emit_search_json(papers, query, cfg, summarise=summarise)
                 return
             _post_process(
                 papers,
@@ -295,6 +304,7 @@ def search(
                 zotero_local=zotero_local,
                 obsidian=obsidian,
                 obsidian_folder=obsidian_folder,
+                summarise=summarise,
             )
         return
 
@@ -374,7 +384,7 @@ def search(
 
             for path in list(output):
                 export(papers, path)
-        _emit_json(papers, query=query, errors=errors)
+        _emit_search_json(papers, query, cfg, errors=errors, summarise=summarise)
         return
 
     if stats:
@@ -395,6 +405,7 @@ def search(
         zotero_local=zotero_local,
         obsidian=obsidian,
         obsidian_folder=obsidian_folder,
+        summarise=summarise,
     )
 
 
@@ -1456,12 +1467,69 @@ def skill_show() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _summary(query: str, papers: list, cfg: dict) -> tuple[str | None, str | None]:
+    """Run the --summarise synthesis; return ``(summary, problem)``.
+
+    Never raises: the results are already shown, so a failed summary is only
+    reported, not fatal.
+    """
+    from mosaic import llm
+    from mosaic.summarise import summarise
+
+    if not llm.is_configured(cfg):
+        return None, f"--summarise skipped: {llm.NOT_CONFIGURED_HINT}"
+    try:
+        text = summarise(query, papers, cfg)
+    except Exception as e:
+        return None, f"--summarise failed: {e}"
+    if text is None:
+        return None, "--summarise skipped: no result has an abstract"
+    return text, None
+
+
+def _print_summary(query: str, papers: list, cfg: dict) -> None:
+    from rich.markdown import Markdown
+    from rich.panel import Panel
+
+    with Progress(
+        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True
+    ) as prog:
+        prog.add_task("Summarising results…")
+        text, problem = _summary(query, papers, cfg)
+    if problem:
+        rprint(f"[dark_orange]{problem}[/dark_orange]")
+        return
+    console.print(
+        Panel(Markdown(text), title="AI summary", title_align="left", border_style="cyan")
+    )
+
+
+def _emit_search_json(
+    papers: list,
+    query: str,
+    cfg: dict,
+    *,
+    errors: list[str] | None = None,
+    summarise: bool = False,
+) -> None:
+    """``_emit_json`` for ``search``, adding the --summarise paragraph when asked."""
+    errors = list(errors or [])
+    summary = None
+    if summarise:
+        summary, problem = _summary(query, papers, cfg)
+        if problem:
+            errors.append(problem)
+    _emit_json(papers, query=query, errors=errors, summary=summary, include_summary=summarise)
+
+
 def _emit_json(
     papers: list,
     *,
     query: str = "",
     seed: str | None = None,
     errors: list[str] | None = None,
+    summary: str | None = None,
+    include_summary: bool = False,
 ) -> None:
     """Serialise *papers* as a JSON object and print to stdout."""
     import dataclasses
@@ -1481,6 +1549,8 @@ def _emit_json(
     }
     if seed is not None:
         result["seed"] = seed
+    if include_summary:
+        result["summary"] = summary  # null when --summarise was skipped or failed
     print(_json.dumps(result, indent=2, default=str))
 
 
@@ -1634,6 +1704,7 @@ def _post_process(
     obsidian: bool = False,
     obsidian_folder: str = "",
     show_score: bool = False,
+    summarise: bool = False,
 ) -> None:
     """Shared post-processing: filter, export, download, push to Zotero/Obsidian."""
     if sort_by and sort_by not in ("citations", "year", "relevance"):
@@ -1654,6 +1725,9 @@ def _post_process(
     show_rel = sort_by == "relevance" or show_score
     score_label = "Sim." if show_score else "Rel."
     _print_results(papers, show_relevance=show_rel, score_label=score_label)
+
+    if summarise:
+        _print_summary(query, papers, cfg)
 
     if output:
         from mosaic.exporter import export

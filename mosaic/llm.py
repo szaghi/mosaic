@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from mosaic.errors import ConfigError
+from mosaic.errors import ConfigError, MosaicError
 
 DEFAULT_MODELS: dict[str, str] = {
     "openai": "gpt-4o-mini",
@@ -30,6 +30,29 @@ class LLMConfigError(ConfigError, ValueError):
 
     Also a ValueError so existing ``except ValueError`` handlers keep working.
     """
+
+
+class LLMRequestError(MosaicError):
+    """Raised when the LLM server answers with an HTTP error.
+
+    The message carries the server's own explanation (e.g. Ollama's
+    "model 'x' not found"), which a bare HTTPStatusError hides.
+    """
+
+
+def _raise_for_status(resp: httpx.Response, s: LLMSettings) -> None:
+    if not resp.is_error:
+        return
+    detail = ""
+    try:
+        err = resp.json().get("error")
+        detail = err.get("message", "") if isinstance(err, dict) else str(err or "")
+    except Exception:
+        detail = resp.text[:300]
+    where = s.base_url or s.provider
+    raise LLMRequestError(
+        f"{where} returned HTTP {resp.status_code}: {detail or resp.reason_phrase}"
+    )
 
 
 @dataclass(frozen=True)
@@ -108,8 +131,10 @@ def complete(
     ------
     LLMConfigError
         If the LLM is not configured.
+    LLMRequestError
+        If the server answers with an HTTP error (message includes its reason).
     httpx.HTTPError
-        On transport or HTTP status errors.
+        On transport errors (connection refused, timeout).
     """
     s = resolve(cfg)
     messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
@@ -121,7 +146,7 @@ def complete(
         if json_mode and not s.base_url:
             payload["response_format"] = {"type": "json_object"}
         resp = httpx.post(url, headers=headers, json=payload, timeout=timeout)
-        resp.raise_for_status()
+        _raise_for_status(resp, s)
         return resp.json()["choices"][0]["message"]["content"]
 
     headers = {
@@ -131,5 +156,5 @@ def complete(
     }
     payload = {"model": s.model, "max_tokens": max_tokens, "messages": messages}
     resp = httpx.post(_ANTHROPIC_URL, headers=headers, json=payload, timeout=timeout)
-    resp.raise_for_status()
+    _raise_for_status(resp, s)
     return resp.json()["content"][0]["text"]

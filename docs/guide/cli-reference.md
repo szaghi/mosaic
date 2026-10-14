@@ -54,6 +54,7 @@ mosaic search [OPTIONS] QUERY
 | `--semantic` | | flag | off | Search the local **vector index** by meaning — requires `mosaic index` to have been run. Results are ranked by similarity and show a **Sim.** column (0 – 1). `--sort citations` / `--sort year` override the similarity ordering; `--sort relevance` is ignored (similarity is already the sort). |
 | `--downloaded-only` | | flag | off | Restrict results to papers with a locally downloaded PDF (only with `--cached` or `--semantic`) |
 | `--prefer-cache` | | flag | off | Substitute rich cached records for freshly fetched ones (see [Cache Management](./cache)) |
+| `--summarise` / `--summarize` | | flag | off | Append a one-paragraph LLM synthesis of the results, citing rows as `[n]` (see [Usage → AI summary](./usage#ai-summary-of-results)). Requires an LLM in `mosaic config`; with `--json` it is returned as `summary` |
 | `--zotero` | | flag | off | Export results to Zotero |
 | `--zotero-collection` | | str | | Zotero collection name (created if missing) |
 | `--zotero-local` | | flag | off | Force local API even when a web API key is configured |

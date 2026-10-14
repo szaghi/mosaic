@@ -251,6 +251,29 @@ Short rate-limit waits are retried automatically before a warning is shown; see 
 
 Useful when debugging connectivity or API key issues.
 
+## AI summary of results
+
+`--summarise` (or `--summarize`) adds a one-paragraph synthesis of the results below the table. It covers the main themes and methods and how they evolved, citing papers by their row number:
+
+```bash
+mosaic search "large eddy simulation wall model" --source arxiv --max 6 --summarise
+```
+
+```
+╭─ AI summary ──────────────────────────────────────────────────────────────╮
+│ The central thread across these papers is function enrichment within      │
+│ high-order discontinuous Galerkin schemes for coarse-mesh wall modeling.  │
+│ Initially proposed for incompressible LES [6], the approach was extended  │
+│ to RANS [5], hybrid RANS/LES [4], and detached-eddy simulation [1] ...    │
+╰───────────────────────────────────────────────────────────────────────────╯
+```
+
+- It uses the LLM configured for [RAG](./rag) and [relevance ranking](./relevance-ranking): OpenAI, Anthropic, or any OpenAI-compatible local server (Ollama, LM Studio, ...). Set it with `mosaic config --llm-provider ... --llm-api-key ... --llm-model ...`.
+- Only titles and abstracts are sent, at most the first 40 results and 1 000 characters per abstract. The model is told to use nothing else, but check any claim that matters against the paper itself.
+- No index is needed, unlike [`mosaic ask`](./rag), which answers questions over your indexed library.
+- It works with `--cached` and `--semantic` too. With `--json`, the paragraph is returned in a `summary` field, and `[n]` refers to the n-th entry of `papers`.
+- If no LLM is configured, the LLM call fails, or no result has an abstract, the results are still shown and a one-line note explains why there is no summary.
+
 ## Search stats
 
 Add `--stats` to a `search` command to print a per-source breakdown and deduplication report after the search completes:
