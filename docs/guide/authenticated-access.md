@@ -103,9 +103,23 @@ For each paper that failed, mosaic opens the article page in your default browse
 browser) and watches your Downloads folder. Click the PDF or Download button as you would anyway. When the file
 is complete, mosaic checks it is a PDF, files it under the usual name and opens the next paper.
 
-- **One paper at a time.** Only a PDF that appears after a paper was opened is filed for it, so files never get
-  mixed up. Each paper waits up to 5 minutes; once its PDF has arrived you need not press anything.
-- **Enter means "done with this paper".** After Enter, mosaic keeps watching for 8 seconds, and up to 2 minutes
+- **One paper at a time**, by default. Only a PDF that appears after a paper was opened is filed for it, so files
+  never get mixed up. Each paper waits up to 5 minutes; once its PDF has arrived you need not press anything.
+- **Several at a time with `--batch N`.** mosaic opens N papers in tabs, one second apart, and you download them
+  in any order. Each new PDF is filed for the paper of the batch it matches, tried in this order:
+  1. an identifier in the file name: the PII of ScienceDirect's `1-s2.0-<PII>-main.pdf`, or the DOI suffix
+     (Springer's `s10915-021-01234-5.pdf`);
+  2. the paper's DOI inside the PDF: in its metadata, or on its first two pages when pymupdf is installed. A PDF
+     that mentions the DOIs of two papers of the batch (one cites the other) matches neither this way;
+  3. elimination: when one paper of the batch is left, the next PDF is its own, as in one-at-a-time mode.
+
+  A PDF that still matches nothing stays in Downloads, and mosaic names it at the end of the batch. The batch
+  ends when every PDF has arrived, when you press Enter, or after 5 minutes without a new PDF.
+
+  ```bash
+  mosaic get --from refs.bib --handoff --batch 10
+  ```
+- **Enter means "done with this paper"** (or batch). After Enter, mosaic keeps watching for 8 seconds, and up to 2 minutes
   while a partial download (`.crdownload`, `.part`) shows the browser is still writing, so Enter pressed right
   after clicking Download does not lose the file. Enter without downloading skips the paper.
 - **A PDF that arrives too late** can be filed afterwards with [`mosaic import`](./downloads#pdfs-you-downloaded-yourself).
@@ -115,7 +129,11 @@ is complete, mosaic checks it is a PDF, files it under the usual name and opens 
 - **The file is moved** out of Downloads: copied to the library, then deleted. Partial downloads and non-PDF
   files are ignored. If Windows keeps the original locked, the library copy stays and the original is left in
   Downloads.
-- Nothing is automated in your browser: the download is an ordinary one that you make.
+- Nothing is automated in your browser: the download is an ordinary one that you make. Opening the publisher's
+  PDF link directly does not save the click: ScienceDirect answers it with "There was a problem providing the
+  content you requested" even in a logged-in browser.
+- **On WSL** the page opens through PowerShell's `Start-Process` (after `wslview`, if installed):
+  `explorer.exe` shows File Explorer instead of the browser for a URL with a query string.
 
 Combine the two retries with `-i --handoff`: the automated window takes what it can, your browser the rest.
 

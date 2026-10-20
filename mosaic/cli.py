@@ -644,6 +644,14 @@ def get(
             "--watch-dir", help="Browser download folder for --handoff (default: auto-detect)"
         ),
     ] = None,
+    batch: Annotated[
+        int,
+        typer.Option(
+            "--batch",
+            min=1,
+            help="Papers --handoff opens at once; download them in any order",
+        ),
+    ] = 1,
 ):
     """Download a paper by DOI, or bulk-download all DOIs from a .bib/.csv file."""
     cfg = cfg_mod.load()
@@ -669,6 +677,7 @@ def get(
             interactive=interactive,
             handoff=handoff,
             watch_dir=watch_dir,
+            batch=batch,
         )
         if failed:  # a script can tell; papers skipped with --oa-only do not count
             raise typer.Exit(1)
@@ -693,7 +702,7 @@ def get(
     if not path and interactive:
         path = _interactive_retry([paper], cfg, cache).get(paper.uid)
     if not path and handoff:
-        path = _handoff_retry([paper], cfg, cache, watch_dir).get(paper.uid)
+        path = _handoff_retry([paper], cfg, cache, watch_dir, batch).get(paper.uid)
     if path:
         console.print(f"[green]Saved:[/green] {_tilde(path)}", soft_wrap=True)
     else:
@@ -1682,7 +1691,9 @@ def _no_email(cfg: dict) -> bool:
     return not cfg.get("unpaywall", {}).get("email", "")
 
 
-def _handoff_retry(papers: list, cfg: dict, cache: Cache, watch_dir: Path | None) -> dict[str, str]:
+def _handoff_retry(
+    papers: list, cfg: dict, cache: Cache, watch_dir: Path | None, batch: int = 1
+) -> dict[str, str]:
     """Hand *papers* to the user's own browser; return uid -> saved path."""
     from mosaic.downloader import resolve_landing
     from mosaic.handoff import default_downloads_dir, handoff_download
@@ -1710,24 +1721,49 @@ def _handoff_retry(papers: list, cfg: dict, cache: Cache, watch_dir: Path | None
 
     def announce(n: int, total: int, label: str, url: str) -> None:
         rprint(f"\n[bold]\\[{n}/{total}][/bold] {label}\n  [dim]{url}[/dim]")
-        rprint(
-            "  Opened in your browser: download the PDF there. "
-            "[dim]Press Enter when done, or to skip this paper.[/dim]"
+
+    def opened(size: int) -> None:
+        if size == 1:
+            rprint(
+                "  Opened in your browser: download the PDF there. "
+                "[dim]Press Enter when done, or to skip this paper.[/dim]"
+            )
+        else:
+            rprint(
+                f"\n  Opened {size} papers in your browser: download each PDF, in any order. "
+                "[dim]Press Enter when done with this batch.[/dim]"
+            )
+
+    def unmatched(name: str) -> None:
+        console.print(
+            f"  [yellow]?[/yellow] {name} matches no paper of this batch: left in place",
+            soft_wrap=True,
         )
 
     def report(key: str, path: str | None, original: str | None) -> None:
         if path:
             cache.set_download(by_key[key].uid, path, "ok")
             console.print(f"  [green]✓[/green] {original} → {Path(path).name}", soft_wrap=True)
+        elif batch > 1:
+            rprint(f"  [dim]– skipped: {_clip(by_key[key].title or key, 90)}[/dim]")
         else:
             rprint("  [dim]– skipped[/dim]")
 
     console.print(
         f"\n[bold]Hand-off of {len(items)} paper(s) to your browser[/bold]: "
-        f"watching [cyan]{_tilde(folder)}[/cyan] for each PDF you download (one paper at a time).",
+        f"watching [cyan]{_tilde(folder)}[/cyan] for each PDF you download "
+        + ("(one paper at a time)." if batch == 1 else f"({batch} papers at a time)."),
         soft_wrap=True,
     )
-    saved = handoff_download(items, Path(folder), on_result=report, announce=announce)
+    saved = handoff_download(
+        items,
+        Path(folder),
+        batch=batch,
+        on_result=report,
+        announce=announce,
+        on_opened=opened,
+        on_unmatched=unmatched,
+    )
     return {by_key[k].uid: v for k, v in saved.items()}
 
 
@@ -1785,6 +1821,7 @@ def _bulk_download(
     interactive: bool = False,
     handoff: bool = False,
     watch_dir: Path | None = None,
+    batch: int = 1,
 ) -> int:
     from mosaic.bulk import read_dois
     from mosaic.cite import paper_for_download
@@ -1840,7 +1877,7 @@ def _bulk_download(
         rescued.update(_interactive_retry(failed, cfg, cache))
     remaining = [p for p in failed if p.uid not in rescued]
     if handoff and remaining:
-        rescued.update(_handoff_retry(remaining, cfg, cache, watch_dir))
+        rescued.update(_handoff_retry(remaining, cfg, cache, watch_dir, batch))
     pdf_map.update(rescued)
     ok += len(rescued)
     if oa_only:

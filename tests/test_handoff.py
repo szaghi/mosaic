@@ -58,6 +58,21 @@ class TestDownloadWatcher:
         (tmp_path / "access-denied.pdf").write_bytes(b"<html>403</html>")
         assert _poll_until(w) is None
 
+    def test_file_vanishing_between_listing_and_stat_is_skipped(self, tmp_path):
+        """Chrome renames "Unconfirmed 123.crdownload" while the folder is listed."""
+        (tmp_path / "Unconfirmed 544429.crdownload").write_bytes(b"...")
+        (tmp_path / "paper.pdf").write_bytes(PDF)
+        real_scandir = handoff.os.scandir
+
+        def racing_scandir(folder):
+            entries = list(real_scandir(folder))
+            (tmp_path / "Unconfirmed 544429.crdownload").unlink()
+            return iter(entries)
+
+        with patch.object(handoff.os, "scandir", racing_scandir):
+            snap = handoff._snapshot(tmp_path)
+        assert set(snap) == {"paper.pdf"}
+
     def test_overwritten_existing_file_counts_as_new(self, tmp_path):
         f = tmp_path / "paper.pdf"
         f.write_bytes(b"<html>old</html>")
@@ -351,3 +366,141 @@ class TestEnterMeansDone:
                 opener=opener,
             )
         assert out == {"k": str(tmp_path / "lib" / "x.pdf")}
+
+
+class TestBatch:
+    """--batch N: N papers open at once, PDFs downloaded in any order."""
+
+    @staticmethod
+    def _browser(folder: Path, files: dict[str, tuple[str, bytes]]):
+        """An opener that downloads ``files[url] = (name, body)``, in reverse order."""
+        opened = []
+
+        def opener(url: str) -> bool:
+            opened.append(url)
+            if len(opened) == len(files):
+
+                def write():
+                    for u in reversed(opened):
+                        name, body = files[u]
+                        time.sleep(0.05)
+                        (folder / name).write_bytes(body)
+
+                threading.Thread(target=write, daemon=True).start()
+            return True
+
+        return opener, opened
+
+    def test_pdfs_in_any_order_are_matched_by_file_name(self, tmp_path):
+        downloads = tmp_path / "Downloads"
+        downloads.mkdir()
+        sd = "https://www.sciencedirect.com/science/article/pii/S0021999121005039"
+        sp = "https://link.springer.com/article/10.1007/s10915-021-01234-5"
+        opener, opened = self._browser(
+            downloads,
+            {
+                sd: ("1-s2.0-S0021999121005039-main.pdf", PDF + b"elsevier"),
+                sp: ("s10915-021-01234-5.pdf", PDF + b"springer"),
+            },
+        )
+        items = [
+            ("10.1016/j.jcp.2021.110503", "A", sd, str(tmp_path / "a.pdf")),
+            ("10.1007/s10915-021-01234-5", "B", sp, str(tmp_path / "b.pdf")),
+        ]
+        out = handoff_download(
+            items, downloads, batch=2, wait_s=5, poll_s=0.02, open_gap_s=0, opener=opener
+        )
+        assert opened == [sd, sp]
+        assert out == {k: d for k, _, _, d in items}
+        assert (tmp_path / "a.pdf").read_bytes().endswith(b"elsevier")
+        assert (tmp_path / "b.pdf").read_bytes().endswith(b"springer")
+
+    def test_pdf_named_after_nothing_is_matched_by_its_doi(self, tmp_path):
+        downloads = tmp_path / "Downloads"
+        downloads.mkdir()
+        body = PDF + b"<</doi (10.1137/20M1345678)>>"
+        opener, _ = self._browser(
+            downloads, {"https://a": ("download.pdf", body), "https://b": ("other.pdf", PDF)}
+        )
+        items = [
+            ("10.1137/20M1345678", "A", "https://a", str(tmp_path / "a.pdf")),
+            ("10.4208/x", "B", "https://b", str(tmp_path / "b.pdf")),
+        ]
+        out = handoff_download(
+            items, downloads, batch=2, wait_s=0.5, poll_s=0.02, open_gap_s=0, opener=opener
+        )
+        # "other.pdf" names nothing and carries no DOI; once "download.pdf" is
+        # filed, B is the only paper left, so it takes it.
+        assert out == {
+            "10.1137/20M1345678": str(tmp_path / "a.pdf"),
+            "10.4208/x": str(tmp_path / "b.pdf"),
+        }
+        assert (tmp_path / "a.pdf").read_bytes() == body
+
+    def test_ambiguous_pdf_is_left_in_downloads(self, tmp_path):
+        """A PDF citing both papers of the batch is filed for neither."""
+        downloads = tmp_path / "Downloads"
+        downloads.mkdir()
+        body = PDF + b"https://doi.org/10.1/aaaaaa https://doi.org/10.1/bbbbbb"
+        opener, _ = self._browser(
+            downloads, {"https://a": ("review.pdf", body), "https://b": ("review2.pdf", body)}
+        )
+        unmatched, results = [], []
+        out = handoff_download(
+            [
+                ("10.1/aaaaaa", "A", "https://a", str(tmp_path / "a.pdf")),
+                ("10.1/bbbbbb", "B", "https://b", str(tmp_path / "b.pdf")),
+            ],
+            downloads,
+            batch=2,
+            wait_s=0.5,
+            poll_s=0.02,
+            open_gap_s=0,
+            opener=opener,
+            on_unmatched=unmatched.append,
+            on_result=lambda *a: results.append(a),
+        )
+        assert out == {}
+        assert sorted(unmatched) == ["review.pdf", "review2.pdf"]
+        assert (downloads / "review.pdf").exists()
+        assert sorted(results) == [("10.1/aaaaaa", None, None), ("10.1/bbbbbb", None, None)]
+
+    def test_batches_open_in_turn(self, tmp_path):
+        opened = []
+        handoff_download(
+            [(f"k{i}", "L", f"https://{i}", str(tmp_path / f"{i}.pdf")) for i in range(5)],
+            tmp_path,
+            batch=2,
+            wait_s=0.05,
+            poll_s=0.01,
+            open_gap_s=0,
+            opener=lambda u: opened.append(u) or True,
+            on_opened=lambda n: opened.append(f"batch of {n}"),
+        )
+        assert opened == [
+            "https://0",
+            "https://1",
+            "batch of 2",
+            "https://2",
+            "https://3",
+            "batch of 2",
+            "https://4",
+            "batch of 1",
+        ]
+
+
+class TestOpenInBrowser:
+    def test_wsl_uses_powershell_not_explorer(self):
+        """explorer.exe shows File Explorer for a URL with a query string."""
+        url = "https://x.org/a?b=1&c='d'"
+        with (
+            patch.object(handoff, "is_wsl", return_value=True),
+            patch.object(
+                handoff.shutil, "which", side_effect=lambda c: None if c == "wslview" else c
+            ),
+            patch.object(handoff.subprocess, "Popen") as popen,
+        ):
+            assert handoff.open_in_browser(url) is True
+        cmd = popen.call_args.args[0]
+        assert cmd[0] == "powershell.exe"
+        assert cmd[-1] == "Start-Process 'https://x.org/a?b=1&c=''d'''"
