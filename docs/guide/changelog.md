@@ -2,6 +2,15 @@
 title: Changelog
 ---
 
+## [1.11.2] — 2026-10-21
+### Fixed
+- **ui**: Show the [ui] extra in the missing-Flask install hint
+
+- **cli**: Print error messages literally instead of as Rich markup
+
+- **ui**: Escape the year warning and upload errors in HTML responses
+
+
 ## [1.11.1] — 2026-10-21
 ### Fixed
 - **get**: Make --auto report a missing browser extra; fix CI reference check
