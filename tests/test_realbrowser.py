@@ -7,6 +7,8 @@ and the download folder is a real tmp directory so the watcher logic runs.
 from __future__ import annotations
 
 import asyncio
+import sys
+import types
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +24,23 @@ PDFFT = ARTICLE.split("?")[0] + "/pdfft?md5=z&pid=1-s2.0-S0021999109006068-main.
 ASSET = "https://pdf.sciencedirectassets.com/272570/xx/main.pdf?X-Amz-Signature=z"
 DOI = "10.1016/j.jcp.2009.10.045"
 NAME = "1-s2.0-S0021999109006068-main.pdf"
+
+
+@pytest.fixture(autouse=True)
+def fake_playwright(monkeypatch):
+    """A stub ``playwright.async_api``: CI has no browser extra, and ``connect`` is faked anyway."""
+
+    class _Manager:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    api = types.ModuleType("playwright.async_api")
+    api.async_playwright = _Manager
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.async_api", api)
 
 
 # ── pure helpers ─────────────────────────────────────────────────────────────
@@ -501,6 +520,16 @@ def test_auto_download_no_chrome_raises(monkeypatch, tmp_path):
         return await rb.auto_download(items)
 
     with pytest.raises(DependencyError):
+        asyncio.run(run())
+
+
+def test_auto_download_without_playwright_raises(monkeypatch):
+    monkeypatch.setitem(sys.modules, "playwright.async_api", None)  # import -> ImportError
+
+    async def run():
+        return await rb.auto_download([rb.AutoItem(key="a", url="u", dest="d")])
+
+    with pytest.raises(DependencyError, match=r"mosaic-search\[browser\]"):
         asyncio.run(run())
 
 

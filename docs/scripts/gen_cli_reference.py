@@ -69,8 +69,9 @@ _TYPES = {"STR": "TEXT", "STRING": "TEXT", "INT": "INTEGER", "BOOL": "BOOLEAN"}
 def _value(p: Any) -> str:
     if _is_option(p) and (p.is_flag or p.count):
         return ""
-    name = (p.type.name or "TEXT").upper()
-    return f"`{_TYPES.get(name, name)}`"
+    # word by word: IntRange is "integer range" in click, "int range" in typer's copy
+    words = (p.type.name or "TEXT").upper().split()
+    return f"`{' '.join(_TYPES.get(w, w) for w in words)}`"
 
 
 def _default(p: Any) -> str:

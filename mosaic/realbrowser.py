@@ -573,7 +573,13 @@ async def auto_download(
     """
     if not items:
         return {}
-    from playwright.async_api import async_playwright
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        # only the CDP client is needed: no `playwright install`, the browser is the system one
+        raise DependencyError(
+            "Playwright is not installed. Install it with: pip install 'mosaic-search[browser]'"
+        ) from None
 
     exe = find_chrome()
     if exe is None:

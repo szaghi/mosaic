@@ -1852,7 +1852,8 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
     )
     if state == "dependency":
         rprint(
-            "[yellow]No Chrome found to drive: install Google Chrome, or use --handoff.[/yellow]"
+            "[yellow]--auto needs Google Chrome (or Edge) and the browser extra "
+            "(pip install 'mosaic-search\\[browser]'); or use --handoff.[/yellow]"
         )
     elif state == "failed":
         rprint("[yellow]The auto pass saved nothing; try --handoff for these papers.[/yellow]")
