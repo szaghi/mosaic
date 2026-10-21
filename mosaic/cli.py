@@ -11,6 +11,7 @@ import typer
 from rich import box
 from rich import print as rprint
 from rich.console import Console
+from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
@@ -251,12 +252,12 @@ def search(
                     query, cache, cfg, k=max_results, downloaded_only=downloaded_only
                 )
             except RuntimeError as e:
-                rprint(f"[red]{e}[/red]")
+                rprint(f"[red]{escape(str(e))}[/red]")
                 raise typer.Exit(1) from None
             except ValueError as e:
                 from mosaic.embeddings import EmbeddingError
 
-                rprint(f"[red]{e}[/red]")
+                rprint(f"[red]{escape(str(e))}[/red]")
                 if not isinstance(e, EmbeddingError):
                     rprint(
                         "[dim]Hint: run mosaic config --embedding-model <model> to configure an embedding model.[/dim]"
@@ -376,7 +377,7 @@ def search(
 
     if not json_output:
         for err in errors:
-            warn(f"[dark_orange]Warning:[/dark_orange] {err}")
+            warn(f"[dark_orange]Warning:[/dark_orange] {escape(err)}")
     cache.save_search(
         query=query,
         filters_json=json.dumps(
@@ -515,7 +516,7 @@ def similar(
                 ss_api_key=ss_api_key,
             )
         except Exception as e:
-            rprint(f"[red]Error looking up paper: {e}[/red]")
+            rprint(f"[red]Error looking up paper: {escape(str(e))}[/red]")
             raise typer.Exit(1) from None
     else:
         with Progress(
@@ -530,7 +531,7 @@ def similar(
                     ss_api_key=ss_api_key,
                 )
             except Exception as e:
-                rprint(f"[red]Error looking up paper: {e}[/red]")
+                rprint(f"[red]Error looking up paper: {escape(str(e))}[/red]")
                 raise typer.Exit(1) from None
 
     if seed_title is None:
@@ -791,7 +792,7 @@ def import_cmd(
             res = import_pdf(f.expanduser(), cache, cfg, doi=doi or None, force=force)
         except PdfImportError as e:
             failures += 1
-            rprint(f"  [red]✗[/red] {e}")
+            rprint(f"  [red]✗[/red] {escape(str(e))}")
             continue
         note = (
             ""
@@ -954,7 +955,7 @@ def index(
                 f"  [dim]└─ {full_text} full-text (PDF), {newly - full_text} metadata-only[/dim]"
             )
     except (ValueError, RuntimeError) as e:  # no embedding model, server error, no sqlite-vec
-        rprint(f"[red]{e}[/red]")
+        rprint(f"[red]{escape(str(e))}[/red]")
         if not want_citations:
             raise typer.Exit(1) from None
         index_failed = True
@@ -972,7 +973,7 @@ def index(
                 f"{n_skipped} skipped (already enriched or no local matches)."
             )
         except Exception as e:
-            rprint(f"[yellow]Citation enrichment warning: {e}[/yellow]")
+            rprint(f"[yellow]Citation enrichment warning: {escape(str(e))}[/yellow]")
     if index_failed:
         raise typer.Exit(1)
 
@@ -1052,7 +1053,7 @@ def ask(
     try:
         answer, papers = rag_ask(question, cfg, cache, mode=mode, k=n, pre_filter=pre_filter)
     except ValueError as e:
-        rprint(f"[red]{e}[/red]")
+        rprint(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1) from None
 
     if show_sources:
@@ -1179,7 +1180,7 @@ def chat(
         try:
             papers = retrieve(user_input, cfg, cache, pre_filter=pre_filter)
         except Exception as e:
-            rprint(f"[red]Retrieval error: {e}[/red]")
+            rprint(f"[red]Retrieval error: {escape(str(e))}[/red]")
             continue
 
         if not papers:
@@ -1214,7 +1215,7 @@ def chat(
             rprint()
 
         except Exception as e:
-            rprint(f"[red]LLM error: {e}[/red]")
+            rprint(f"[red]LLM error: {escape(str(e))}[/red]")
 
 
 @app.command()
@@ -1414,7 +1415,9 @@ def config(
             cfg["zotero"]["user_id"] = uid
             rprint(f"[green]Zotero web API configured for user {uid}[/green]")
         except Exception as e:
-            warn(f"[dark_orange]Could not auto-discover Zotero user ID: {e}[/dark_orange]")
+            warn(
+                f"[dark_orange]Could not auto-discover Zotero user ID: {escape(str(e))}[/dark_orange]"
+            )
     if unpaywall_email:
         cfg["unpaywall"]["email"] = unpaywall_email
 
@@ -1582,7 +1585,7 @@ def skill_install(
     try:
         skill_text = (_res.files("mosaic.data") / "SKILL.md").read_text(encoding="utf-8")
     except Exception as e:
-        rprint(f"[red]Could not read bundled skill: {e}[/red]")
+        rprint(f"[red]Could not read bundled skill: {escape(str(e))}[/red]")
         raise typer.Exit(1) from None
 
     target = (Path.home() if global_ else Path(".")) / ".claude" / "skills" / "mosaic" / "SKILL.md"
@@ -1601,7 +1604,7 @@ def skill_show() -> None:
         skill_text = (_res.files("mosaic.data") / "SKILL.md").read_text(encoding="utf-8")
         print(skill_text)
     except Exception as e:
-        rprint(f"[red]Could not read bundled skill: {e}[/red]")
+        rprint(f"[red]Could not read bundled skill: {escape(str(e))}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -1640,7 +1643,7 @@ def _print_summary(query: str, papers: list, cfg: dict) -> None:
         prog.add_task("Summarising results…")
         text, problem = _summary(query, papers, cfg)
     if problem:
-        rprint(f"[dark_orange]{problem}[/dark_orange]")
+        rprint(f"[dark_orange]{escape(problem)}[/dark_orange]")
         return
     console.print(
         Panel(Markdown(text), title="AI summary", title_align="left", border_style="cyan")
@@ -1896,7 +1899,7 @@ def _interactive_retry(papers: list, cfg: dict, cache: Cache) -> dict[str, str]:
     try:
         saved = asyncio.run(interactive_download(items, on_result=report))
     except (DependencyError, RuntimeError) as e:
-        rprint(f"[red]{e}[/red]")
+        rprint(f"[red]{escape(str(e))}[/red]")
         return {}
     return {by_key[k].uid: v for k, v in saved.items()}
 
@@ -1928,7 +1931,7 @@ def _bulk_download(
     try:
         dois = read_dois(from_file)
     except ValueError as e:
-        rprint(f"[red]{e}[/red]")
+        rprint(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1) from None
 
     if not dois:
@@ -2113,7 +2116,7 @@ def _post_process(
                 export(papers, path)
                 rprint(f"[green]Saved:[/green] {path}")
             except ValueError as e:
-                rprint(f"[red]{e}[/red]")
+                rprint(f"[red]{escape(str(e))}[/red]")
                 raise typer.Exit(1) from None
 
     pdf_map: dict[str, str] = {}
@@ -2293,10 +2296,10 @@ def _push_to_zotero(
         )
 
     if not result["ok"]:
-        rprint(f"[red]{result['msg']}[/red]")
+        rprint(f"[red]{escape(result['msg'])}[/red]")
         raise typer.Exit(1)
 
-    rprint(f"[green]Zotero:[/green] {result['msg']}")
+    rprint(f"[green]Zotero:[/green] {escape(result['msg'])}")
     if result.get("attached"):
         rprint(f"[dim]{result['attached']} PDF(s) linked.[/dim]")
 
@@ -2312,10 +2315,10 @@ def _push_to_obsidian(
 
     result = push_to_obsidian(papers, cfg, subfolder_override=subfolder_override)
     if not result["ok"]:
-        rprint(f"[red]{result['msg']}[/red]")
+        rprint(f"[red]{escape(result['msg'])}[/red]")
         raise typer.Exit(1)
 
-    rprint(f"[green]Obsidian:[/green] {result['msg']}")
+    rprint(f"[green]Obsidian:[/green] {escape(result['msg'])}")
 
 
 @notebook_app.command("create")
@@ -2443,7 +2446,7 @@ def notebook_create(
             try:
                 nb = asyncio.run(create_notebook_from_dir(name, from_dir, artifacts=_artifacts))
             except ValueError as e:
-                rprint(f"[red]{e}[/red]")
+                rprint(f"[red]{escape(str(e))}[/red]")
                 raise typer.Exit(1) from None
         _report_notebook(nb, _artifacts)
         return
@@ -2474,7 +2477,7 @@ def notebook_create(
         )
 
     for err in errors:
-        warn(f"[dark_orange]Warning:[/dark_orange] {err}")
+        warn(f"[dark_orange]Warning:[/dark_orange] {escape(err)}")
 
     papers = filter_papers(papers, oa_only=oa_only, pdf_only=pdf_only)
 
@@ -2617,7 +2620,7 @@ def network(
             export_graph(nodes, adj, papers_map, output, clusters)
             rprint(f"[green]Graph written to:[/green] {output}")
         except ValueError as e:
-            rprint(f"[red]{e}[/red]")
+            rprint(f"[red]{escape(str(e))}[/red]")
             raise typer.Exit(1) from None
 
     # Terminal report
@@ -2912,7 +2915,7 @@ def auth_login(
     try:
         asyncio.run(do_login(name, url))
     except DependencyError as e:
-        rprint(f"[red]{e}[/red]")
+        rprint(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -3182,7 +3185,7 @@ def cache_export(
         export(papers, output)
         rprint(f"[green]Exported {len(papers)} paper(s) to[/green] {output}")
     except ValueError as e:
-        rprint(f"[red]{e}[/red]")
+        rprint(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1) from None
 
 
@@ -3236,7 +3239,7 @@ def watch_add(
     try:
         spec.validate()
     except ConfigError as e:
-        rprint(f"[red]{e}[/red]")
+        rprint(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1) from None
 
     cache, cfg = _cache_and_cfg()
@@ -3254,10 +3257,10 @@ def watch_add(
             run = run_watch(name, watch_id, spec, cfg, cache)
     except ConfigError as e:
         cache.remove_watch(name)
-        rprint(f"[red]{e}[/red]")
+        rprint(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(1) from None
     for err in run.errors:
-        warn(f"[dark_orange]Warning:[/dark_orange] {err}")
+        warn(f"[dark_orange]Warning:[/dark_orange] {escape(err)}")
     rprint(f"[green]Watch '{name}' saved[/green] — baseline of {run.total} paper(s) recorded.")
 
 
@@ -3342,7 +3345,7 @@ def watch_run(
         except ConfigError as e:
             report.append({"name": w["name"], "query": spec.query, "error": str(e), "new": []})
             if not json_output:
-                rprint(f"[red]{w['name']}: {e}[/red]")
+                rprint(f"[red]{w['name']}: {escape(str(e))}[/red]")
             continue
 
         downloaded = 0
@@ -3375,7 +3378,7 @@ def watch_run(
             continue
 
         for err in run.errors:
-            warn(f"[dark_orange]Warning:[/dark_orange] {err}")
+            warn(f"[dark_orange]Warning:[/dark_orange] {escape(err)}")
         if run.new:
             rprint(
                 f"\n[bold]{run.name}[/bold] — [green]{len(run.new)} new[/green] "

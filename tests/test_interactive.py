@@ -246,6 +246,22 @@ class TestInteractiveDownload:
 
 class TestGetInteractiveCli:
     def _invoke(self, tmp_path, tmp_cache, args, rescued: dict):
+        async def fake_interactive(items, on_result=None, **kw):
+            out = {}
+            for key, _landing, dest in items:
+                path = dest if key in rescued else None
+                if path:
+                    out[key] = path
+                if on_result:
+                    on_result(key, path)
+            return out
+
+        with patch("mosaic.auth.interactive_download", side_effect=fake_interactive) as interactive:
+            result, _ = self._invoke_raw(tmp_path, tmp_cache, args)
+        return result, interactive
+
+    def _invoke_raw(self, tmp_path, tmp_cache, args):
+        """``get --from`` over two DOIs; the caller patches ``interactive_download``."""
         from typer.testing import CliRunner
 
         from mosaic.cli import app
@@ -259,16 +275,6 @@ class TestGetInteractiveCli:
             "unpaywall": {"email": ""},
         }
 
-        async def fake_interactive(items, on_result=None, **kw):
-            out = {}
-            for key, _landing, dest in items:
-                path = dest if key in rescued else None
-                if path:
-                    out[key] = path
-                if on_result:
-                    on_result(key, path)
-            return out
-
         with (
             patch("mosaic.cli.cfg_mod.load", return_value=cfg),
             patch("mosaic.cli.Cache", return_value=tmp_cache),
@@ -277,11 +283,10 @@ class TestGetInteractiveCli:
                 side_effect=lambda d, *a: Paper(title=f"T {d}", doi=d, year=2020),
             ),
             patch("mosaic.cli.dl_paper", return_value=None),
-            patch("mosaic.auth.interactive_download", side_effect=fake_interactive) as interactive,
             patch("mosaic.downloader.resolve_landing", side_effect=lambda u: u),
         ):
             result = CliRunner().invoke(app, ["get", "--from", str(csv), *args])
-        return result, interactive
+        return result, None
 
     def test_failures_retried_interactively_and_counted(self, tmp_path, tmp_cache):
         r, interactive = self._invoke(tmp_path, tmp_cache, ["--interactive"], rescued={"10.1/b"})
@@ -297,3 +302,13 @@ class TestGetInteractiveCli:
         r, interactive = self._invoke(tmp_path, tmp_cache, [], rescued=set())
         interactive.assert_not_called()
         assert "--interactive" in r.output
+
+    def test_error_text_is_printed_verbatim_not_as_markup(self, tmp_path, tmp_cache):
+        """Rich dropped ``[browser]`` from install hints, and crashed on a stray ``[/x]``."""
+        from mosaic.errors import DependencyError
+
+        msg = "pip install 'mosaic-search[browser]' (server said [/x])"
+        with patch("mosaic.auth.interactive_download", side_effect=DependencyError(msg)):
+            r, _ = self._invoke_raw(tmp_path, tmp_cache, ["--interactive"])
+        assert r.exception is None or isinstance(r.exception, SystemExit), r.exception
+        assert msg in " ".join(r.output.split())

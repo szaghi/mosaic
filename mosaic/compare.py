@@ -44,8 +44,11 @@ def compare_papers(
         except Exception as exc:
             _log.warning("LLM comparison failed (%s) — using metadata fallback", exc)
             from rich import print as rprint
+            from rich.markup import escape
 
-            rprint(f"[yellow]The LLM comparison failed ({exc}); showing metadata only.[/yellow]")
+            rprint(
+                f"[yellow]The LLM comparison failed ({escape(str(exc))}); showing metadata only.[/yellow]"
+            )
     return _metadata_fallback(papers, dimensions)
 
 
