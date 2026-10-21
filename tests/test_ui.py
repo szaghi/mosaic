@@ -349,6 +349,33 @@ class TestNotebookPreflight:
         submit.assert_called_once()
         assert b"/notebook/status/abc123" in resp.data
 
+    def test_invalid_year_is_echoed_escaped(self, client):
+        status = {"installed": True, "authenticated": True}
+        payload = "<img src=x onerror=alert(1)>"
+        with (
+            patch("mosaic.notebooklm_bridge.check_notebooklm_status", return_value=status),
+            patch("mosaic.ui.jobs.JobManager.submit") as submit,
+        ):
+            resp = client.post("/notebook", data={"name": "NB", "query": "q", "year": payload})
+        submit.assert_not_called()
+        assert b"Invalid year format" in resp.data
+        assert payload.encode() not in resp.data
+        assert b"&lt;img src=x onerror=alert(1)&gt;" in resp.data
+
+
+class TestBulkUploadErrors:
+    def test_parse_error_is_escaped(self, client):
+        import io
+
+        with patch("mosaic.bulk.read_dois", side_effect=ValueError("bad <script>x</script>")):
+            resp = client.post(
+                "/bulk",
+                data={"file": (io.BytesIO(b"@article{x}"), "refs.bib")},
+                content_type="multipart/form-data",
+            )
+        assert b"<script>" not in resp.data
+        assert b"bad &lt;script&gt;x&lt;/script&gt;" in resp.data
+
 
 class TestNotebookStatus:
     def _status(self, app, client, result):

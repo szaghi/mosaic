@@ -979,7 +979,7 @@ def notebook_submit():
         max_results = _safe_int(request.form.get("max_results", 10))
         filters, year_warning = _build_filters(request.form)
         if year_warning:
-            return f"<article>{year_warning}</article>"
+            return f"<article>{escape(year_warning)}</article>"
         oa_only = request.form.get("oa_only") == "on"
         pdf_only = request.form.get("pdf_only") == "on"
         job_id = _jobs().submit(
@@ -1109,7 +1109,7 @@ def bulk_submit():
 
         dois = read_dois(tmp_path)
     except ValueError as e:
-        return f"<article>{e}</article>"
+        return f"<article>{escape(str(e))}</article>"
     finally:
         tmp_path.unlink(missing_ok=True)
 
