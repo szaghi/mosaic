@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 source .venv/bin/activate
 
 make dev          # create .venv, install mosaic editable with the dev extra
-make test         # pytest with coverage (writes docs/public/coverage*.json: do not commit those by accident)
+make test         # pytest with coverage (also writes docs/public/coverage*.json, git-ignored)
 make lint         # ruff check + ruff format --check (read-only)
 make fmt          # ruff check --fix + ruff format
 

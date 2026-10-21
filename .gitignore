@@ -12,8 +12,9 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
-# coverage JSONs in docs/public/ are intentionally tracked (used for badges)
-# so they are NOT listed here
+# written by tests/conftest.py on every run; CI rebuilds them for the Pages badge
+docs/public/coverage.json
+docs/public/coverage-badge.json
 
 # VitePress
 docs/node_modules/
