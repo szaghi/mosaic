@@ -2,6 +2,13 @@
 title: Changelog
 ---
 
+## [1.11.0] — 2026-10-21
+### Added
+- **get**: Download several hand-off papers at once with --batch N
+
+- **get**: Add --auto to download paywalled PDFs through your own Chrome
+
+
 ## [1.10.1] — 2026-10-14
 ### Fixed
 - **docs**: Make the docs checks work with typer's vendored click
