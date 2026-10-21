@@ -2870,7 +2870,7 @@ def ui(
         from mosaic.ui import create_app
     except ImportError:
         rprint("[red]Flask is required for the web UI. Install it with:[/red]")
-        rprint("  pip install 'mosaic-search[ui]'")
+        rprint("  pip install 'mosaic-search\\[ui]'")
         raise typer.Exit(1) from None
 
     flask_app = create_app()
