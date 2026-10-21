@@ -2,6 +2,11 @@
 title: Changelog
 ---
 
+## [1.11.1] — 2026-10-21
+### Fixed
+- **get**: Make --auto report a missing browser extra; fix CI reference check
+
+
 ## [1.11.0] — 2026-10-21
 ### Added
 - **get**: Download several hand-off papers at once with --batch N

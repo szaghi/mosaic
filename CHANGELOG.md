@@ -4,6 +4,11 @@ All notable changes to MOSAIC are documented here.
 Versions follow [Semantic Versioning](https://semver.org/).
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.11.1] — 2026-10-21
+### Fixed
+- **get**: Make --auto report a missing browser extra; fix CI reference check
+
+
 ## [1.11.0] — 2026-10-21
 ### Added
 - **get**: Download several hand-off papers at once with --batch N
