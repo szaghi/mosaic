@@ -10,13 +10,31 @@ The 2005 review of electric propulsion modelling by Boyd is an Elsevier paper wi
 
 <<< @/examples/output/05/get.txt{console}
 
-If your institution subscribes, you can read it in your browser. mosaic has three ways to turn that access into a
-file in the library; the one that always works is the simplest.
+If your institution subscribes, you can read it in your browser. mosaic has four ways to turn that access into a
+file in the library; for Elsevier the first one now finishes the job without you clicking anything.
+
+## Driving your Chrome (`--auto`)
+
+```bash
+mosaic get 10.1016/j.paerosci.2006.01.001 --auto
+```
+
+`--auto` opens *your* Chrome (or Edge; on WSL the Windows one) with a dedicated mosaic profile and walks the
+same moves you would make: article page, the paper's "Download PDF" link, and Chrome's own download. The PDF
+lands in a mosaic watch folder and is filed under the paper's name. ScienceDirect's PDF endpoints sit behind
+fingerprint checks that every automatically installed browser fails; a genuine Chrome passes them, so this is
+the pass that finishes Elsevier unattended.
+
+You log in once per publisher; browsers' session cookies die with the window, so a fresh run may ask again and
+wait three minutes per site. The pass is strictly sequential with a pause between papers and stops a site after
+three consecutive walls, so re-running is always safe. [Authenticated access](/guide/authenticated-access) has
+the full description and the guardrails.
 
 ## Your browser does the download
 
 <<< @/examples/output/05/handoff.txt{console}
 
+When a publisher needs a click mosaic cannot type for you (a CAPTCHA, or a wall the auto pass could not pass),
 `--handoff` opens the article page in your default browser (on WSL, the Windows one), where your institutional
 login already lives, and watches your Downloads folder. You click "Download PDF" as usual; when the file is
 complete, mosaic checks that it is a PDF, moves it into the library under the paper's name and opens the next
@@ -51,12 +69,14 @@ mosaic get 10.1088/1361-6595/ab46c5 --interactive             # a visible window
 <<< @/examples/output/05/auth.txt{console}
 
 Sessions expire with the publisher's login cookies, within hours or days; `mosaic auth status` shows how old each
-one is. Elsevier refuses every automated browser, logged in or not, so for ScienceDirect use `--handoff`.
-[Authenticated access](/guide/authenticated-access) compares the three methods publisher by publisher.
+one is. ScienceDirect works with `--auto`; for the next best, `--handoff` (your own browser, your click) always
+works.
+[Authenticated access](/guide/authenticated-access) compares the four methods publisher by publisher.
 
 ::: tip What you learned
-`get --handoff` files what you download in your own browser; `mosaic import` files PDFs you already have;
-`auth login` and `--interactive` let mosaic drive a browser where publishers allow it.
+`get --auto` drives your Chrome through Elsevier's PDF chain and files each download unattended; `get --handoff`
+files what you download in your own browser; `mosaic import` files PDFs you already have; `auth login` and
+`--interactive` let mosaic drive a browser where publishers allow it.
 Reference: [`get`](/reference/get), [`import`](/reference/import), [`auth`](/reference/auth).
 :::
 

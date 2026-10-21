@@ -5,21 +5,103 @@ title: Authenticated Access
 # Authenticated Access
 
 Papers you can read through a subscription, your institution or a personal account, but that have no open copy.
-mosaic has three ways to get them, from most to least automated: a saved browser session, an interactive browser
-window, and a hand-off to your own browser.
+mosaic has four ways to get them, from most to least automated: the auto pass with your Chrome, a saved browser
+session, an interactive browser window, and a hand-off to your own browser.
 
 | Method | You do | Works when |
 |---|---|---|
+| Auto pass (`mosaic get --auto`) | log in once per browser session | your machine has a Chrome/Edge mosaic can drive (Windows Chrome from WSL included); follows you through fingerprint-guarded publishers like Elsevier |
 | Saved session (`mosaic auth login`) | log in once | the publisher accepts a headless browser with your cookies |
 | `mosaic get --interactive` | log in or solve a check in a window mosaic drives | the publisher accepts a visible automated browser |
-| `mosaic get --handoff` | click Download in your own browser | always, including Elsevier |
+| `mosaic get --handoff` | click Download in your own browser | always, including Elsevier without Chrome |
 
-All three need a legitimate right to the content. mosaic automates what you would do by hand in a browser; it
+All of them need a legitimate right to the content. mosaic automates what you would do by hand in a browser; it
 does not get around paywalls, access controls or bot detection.
 
 ::: info Prerequisite
 Saved sessions and `--interactive` need the `browser` extra and a Playwright browser (Firefox is tried first,
-then Chromium, then WebKit); see [Installation](./installation). `--handoff` needs neither.
+then Chromium, then WebKit); see [Installation](./installation). `--auto` needs the `browser` extra too, plus an
+installed Chrome or Edge. `--handoff` needs neither.
+:::
+
+## Auto pass with your Chrome (`--auto`) {#auto-pass-with-your-chrome-auto}
+
+```bash
+mosaic get 10.1016/j.paerosci.2006.01.001 --auto
+mosaic get --from refs.bib --auto
+```
+
+Some publishers put their PDFs behind fingerprint checks that every Playwright-installed browser fails,
+logged in or not, while a genuine Chrome passes. The auto pass therefore drives *your* Chrome, the same binary
+you use every day, through exactly the moves you would make: it opens the article page, opens the paper's
+"Download PDF" link, lets Chrome save the file as a normal download, and files it into the library under the
+usual name. It runs Chrome with a separate mosaic profile and never opens your daily one. On WSL it drives the
+Windows Chrome or Edge, with the profile in `mosaic-cdp-profile` under your Windows user folder; the PDFs land
+first in `mosaic-auto-downloads` next to it.
+
+The first `--auto` run on a fresh mosaic profile opens a Chrome window and asks for the institutional sign-in;
+complete it once, and the pass runs unattended. Publishers' session cookies die with the browser, so one login
+per browser session is all the interaction you should expect; after that, papers come one at a time, 8 to 15
+seconds apart on the same site, with 3 more seconds between sites.
+
+- **Opt-in by design**: without `--auto` nothing is driven, and the pass never runs as a fallback on its own.
+- **Guardrails**: at most 50 papers per run (`--max-auto N` changes it). After 3 papers in a row on one
+  publisher site end with no PDF, mosaic skips that site's remaining papers, reported as "stopped after
+  repeated walls", and goes on with the other sites. A login page does not count toward the 3. Re-run later:
+  the failed papers stay marked in the cache.
+- **Rescue chain**: `--auto --interactive --handoff` together run them in this order; each takes what it can
+  and passes the rest on.
+- **Account risk**: automating browser actions can conflict with a publisher's terms even when the papers are
+  yours to read. The pass paces itself to look like a person reading; how you weigh the terms is yours to
+  decide.
+
+Works best where the bot checks are the *only* obstacle, Elsevier above all: the probe behind this pass saved
+all 5 sampled subscribed PDFs unattended on the first try. A paper whose PDF link needs a CAPTCHA (IOP) still
+ends in the interactive window; combine the flags for that.
+
+### Why mosaic drives your Chrome on Elsevier {#linkinghub-auto}
+
+ScienceDirect refuses two kinds of client. A plain HTTP request for its PDF URLs gets HTTP 403 even when it
+carries your session cookies. A browser that Playwright launches announces itself through `navigator.webdriver`
+and gets the same 403 page as the [hand-off](#hand-off-to-your-own-browser-handoff) section describes. A
+Chrome you could have started yourself, without the automation switches, passes. So mosaic starts your installed
+Chrome or Edge as a normal browser, with only a remote-debugging port added. It then attaches to it over the
+Chrome DevTools Protocol (CDP) and makes the moves a reader makes.
+
+For each paper the pass:
+
+1. **Starts at `https://doi.org/<DOI>`.** Journal DOIs resolve to Elsevier's `linkinghub.elsevier.com`, which
+   moves on to ScienceDirect through a delayed redirect in the page. A real navigation follows that redirect,
+   and mosaic waits up to 30 seconds for the ScienceDirect article page. An article URL opened directly can
+   land on a challenge page that never clears, so the pass always starts at doi.org.
+2. **Reads the PDF link from the article page.** mosaic polls the page for up to 30 seconds for the
+   `citation_pdf_url` meta tag or a `/pdfft` link that carries the article's PII. If the page sends you to
+   `id.elsevier.com` or a login page instead, the paper counts as "login needed".
+3. **Opens the link in a second tab.** The article tab stays open: closing the page that started a download
+   cancels it. The link leads to an interstitial page whose own script sends the browser to a signed copy of
+   the file on `pdf.sciencedirectassets.com`. If no file arrives within 8 seconds, mosaic runs the page's own
+   `redirectUser()`, or goes to the signed address it finds in the page, and then waits up to 75 seconds more.
+4. **Lets Chrome save the file as a normal download.** The mosaic profile is set to download PDFs instead of
+   showing them in the viewer, without asking where to save, and with automatic downloads allowed for the two
+   ScienceDirect hosts. Chrome blocks repeated downloads from one site otherwise. At the start of each run,
+   mosaic also tells the running browser over CDP to save downloads into `mosaic-auto-downloads`. Without that
+   instruction, downloads started from pages that mosaic opened over CDP are lost.
+5. **Files the PDF.** A new file counts as the paper's only when its name holds the paper's PII
+   (`1-s2.0-<PII>-main.pdf`) or its DOI suffix. mosaic checks for the `%PDF-` signature, moves the file into the
+   library under the usual name and records it in the cache.
+
+The login lives in the mosaic profile, not in your daily one, so you sign in to ScienceDirect there once.
+ScienceDirect's login cookies (`sd_session_id`) are session cookies and end when that Chrome exits. mosaic only
+disconnects from the browser at the end of a run, so Chrome stays open. A later `--auto` run attaches to the
+same window and reuses the login. Close the window and the next run asks you to sign in again.
+
+When a page asks for a login, mosaic opens that site's article in a window and prints `Login needed`. It then
+waits up to 3 minutes for a login cookie, retries the paper once, and does not ask again for that site in the
+same run. Press Enter in the terminal to stop waiting.
+
+::: warning Automated access and publisher terms ⚠
+Automated access may conflict with a publisher's terms. mosaic does not disguise itself here; it drives a real
+browser at a reader's pace. Use your own judgment about your institution's account.
 :::
 
 ## Saved sessions
@@ -88,9 +170,9 @@ every saved session. Without a download nothing is written back, so a dead sessi
 Some publishers block every automated browser, visible or not. ScienceDirect (Elsevier) answers any browser
 driven by Playwright with HTTP 403, "There was a problem providing the content you requested", logged in or not:
 such browsers announce themselves through `navigator.webdriver`. No session or `--interactive` run gets past
-that, and mosaic does not disguise its automation.
-
-`--handoff` uses your normal browser, with the logins you already have there:
+that, and mosaic does not disguise its automation. For ScienceDirect the pass that works unattended is
+[`--auto`](#auto-pass-with-your-chrome-auto), your own Chrome; `--handoff` is the fallback that needs no Chrome
+at all: it uses your normal browser, with the logins you already have there:
 
 ```bash
 mosaic get 10.1016/j.paerosci.2006.01.001 --handoff
@@ -150,8 +232,8 @@ itself, and session domain matching sees `www.sciencedirect.com`.
 |---|---|
 | Springer Nature | PDF download of subscribed content |
 | Wiley, Taylor & Francis, Cambridge | PDF download (standard cookie sessions) |
-| IOP Publishing | nothing headless: use `--interactive` and pass the check yourself |
-| ScienceDirect, Scopus (Elsevier) | search only (see below); PDFs through `--handoff` |
+| IOP Publishing | nothing headless: use `--auto` and pass the check yourself, or `--interactive` |
+| ScienceDirect, Scopus (Elsevier) | search only; PDFs through `--auto` or `--handoff` |
 
 `--handoff` works with every publisher, since the download happens in your own browser.
 
@@ -172,8 +254,9 @@ pressing Enter. A session counts for search while at least one of its timed cook
 search lands on the Elsevier login page instead, mosaic prints `ScienceDirect session has expired.` and skips the
 source.
 
-PDFs never come from the session: ScienceDirect refuses automated browsers. Open-access copies come through
-Unpaywall; for subscribed papers use `--handoff`.
+PDFs never come from the headless session: ScienceDirect refuses automated browsers there. Open-access copies
+come through Unpaywall; for subscribed papers use `--auto` (your own Chrome, one login per session) or
+`--handoff`.
 
 ### Scopus (Elsevier) {#scopus}
 

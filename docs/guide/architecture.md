@@ -65,6 +65,7 @@ with `--verbose` or returned in the JSON.
 | `pdf.py` | `is_pdf_file()`, the `%PDF` signature check that rejects HTML saved as PDF; text extraction with pymupdf |
 | `auth.py` | browser sessions (Playwright): `auth login`, session health, downloads through a session, `get --interactive` |
 | `handoff.py` | `get --handoff`: opens papers in your own browser and files the PDFs that appear in the download folder |
+| `realbrowser.py` | `get --auto`: drives your own Chrome over CDP through the article's PDF chain and files the native download; download-folder watcher reuses `handoff` |
 | `importer.py` | `mosaic import`: detects a PDF's DOI (metadata, ScienceDirect file name, content) and files it |
 | `bulk.py` | DOIs from `.bib` and `.csv` files (`get --from`, `--from` on the library commands) |
 | `cite.py` | `mosaic cite` (BibTeX locally, other styles by Crossref content negotiation); `paper_for_download()`, a paper's metadata from the cache or Crossref |

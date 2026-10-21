@@ -638,6 +638,22 @@ def get(
             "(works where publishers block automated browsers, e.g. Elsevier)",
         ),
     ] = False,
+    auto: Annotated[
+        bool,
+        typer.Option(
+            "--auto",
+            help="Retry failed papers with your own Chrome driven by mosaic over CDP "
+            "(the Elsevier-included real-browser pass; needs Chrome/Edge installed)",
+        ),
+    ] = False,
+    max_auto: Annotated[
+        int,
+        typer.Option(
+            "--max-auto",
+            min=1,
+            help="Papers --auto may attempt per run (it drives a real browser: keep it sane)",
+        ),
+    ] = 50,
     watch_dir: Annotated[
         Path | None,
         typer.Option(
@@ -674,6 +690,8 @@ def get(
             zotero_local=zotero_local,
             obsidian=obsidian,
             obsidian_folder=obsidian_folder,
+            auto=auto,
+            max_papers=max_auto,
             interactive=interactive,
             handoff=handoff,
             watch_dir=watch_dir,
@@ -699,6 +717,8 @@ def get(
         cfg.get("unpaywall", {}).get("email", ""),
         cfg.get("filename_pattern", "{year}_{source}_{author}_{title}"),
     )
+    if not path and auto:
+        path = _auto_retry([paper], cfg, cache, max_papers=max_auto).get(paper.uid)
     if not path and interactive:
         path = _interactive_retry([paper], cfg, cache).get(paper.uid)
     if not path and handoff:
@@ -709,7 +729,7 @@ def get(
         rprint("[red]Could not find a downloadable PDF for this DOI.[/red]")
         if _no_email(cfg):
             rprint(f"[yellow]{_EMAIL_HINT}[/yellow]")
-        if not (interactive or handoff):
+        if not (interactive or handoff or auto):
             rprint(f"[dim]{_RETRY_HINT}[/dim]")
 
     if zotero:
@@ -1678,8 +1698,8 @@ def _emit_json(
 
 
 _RETRY_HINT = (
-    "Have access? Retry with --handoff (your own browser; works for Elsevier) "
-    "or --interactive (a browser window mosaic drives)."
+    "Have access? Retry with --auto (mosaic drives your Chrome; Elsevier included), "
+    "--handoff (your own browser) or --interactive (a browser window mosaic drives)."
 )
 _EMAIL_HINT = (
     "Unpaywall was not asked for open copies: it needs an e-mail address. "
@@ -1767,6 +1787,78 @@ def _handoff_retry(
     return {by_key[k].uid: v for k, v in saved.items()}
 
 
+def _prompt_login(url: str) -> None:
+    rprint(
+        "\n[yellow]Login needed:[/yellow] complete the sign-in (SSO) in the Chrome window"
+        f" that just opened at\n  [dim]{url[:110]}[/dim]\n"
+        "[dim]Waiting up to 3 minutes; if you have no account here, just wait it out; press Enter here to skip the wait.[/dim]"
+    )
+
+
+def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> dict[str, str]:
+    """Run failed papers through the user's real Chrome over CDP.
+
+    Returns uid -> saved path. See :mod:`mosaic.realbrowser` for why the real
+    binary is needed and how the flow differs from the saved-session pass.
+    """
+    from mosaic.downloader import resolve_landing
+    from mosaic.realbrowser import auto_download_sync, download_folder
+
+    pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
+    dest_dir = Path(cfg["download_dir"])
+    by_key = {(p.doi or p.uid): p for p in papers}
+
+    # The auto pass walks the organic chain: doi.org's genuine navigation
+    # (linkinghub included) is what the fingerprint checks accept; a plain
+    # article-URL hit can arrive through a challenge that never resolves.
+    items = [
+        (
+            key,
+            f"{_clip(p.title, 90)} ({p.year or 'n.d.'})" if p.source != "manual" else key,
+            f"https://doi.org/{p.doi}" if p.doi else (resolve_landing(p.url) if p.url else ""),
+            str(dest_dir / p.safe_filename(pattern)),
+        )
+        for key, p in by_key.items()
+    ]
+
+    def report(key: str, path: str | None, note: str) -> None:
+        label = _clip(by_key[key].title or key, 90)
+        if path:
+            cache.set_download(by_key[key].uid, path, "ok")
+            console.print(f"  [green]✓[/green] {label} → {Path(path).name}", soft_wrap=True)
+        elif note == "skipped: over the per-run cap":
+            rprint(f"  [dim]– over the per-run cap: {_clip(label, 80)}[/dim]")
+        elif note == "stopped: repeated walls":
+            rprint(f"  [dim]– stopped after repeated walls: {_clip(label, 80)}[/dim]")
+        elif note == "login required":
+            rprint(f"  [yellow]?[/yellow] login needed: {_clip(label, 80)}")
+        else:
+            rprint(f"  [dim]– no PDF: {_clip(label, 80)}[/dim]")
+
+    try:
+        folder = download_folder()
+    except Exception:
+        folder = None
+    console.print(
+        f"\n[bold]Auto pass with your Chrome[/bold]: driving it over CDP and filing each"
+        f" PDF it saves to [cyan]{_tilde(folder)}[/cyan].",
+        soft_wrap=True,
+    )
+    saved, state = auto_download_sync(
+        items,
+        on_result=report,
+        prompt_login=_prompt_login,
+        max_papers=max_papers,
+    )
+    if state == "dependency":
+        rprint(
+            "[yellow]No Chrome found to drive: install Google Chrome, or use --handoff.[/yellow]"
+        )
+    elif state == "failed":
+        rprint("[yellow]The auto pass saved nothing; try --handoff for these papers.[/yellow]")
+    return {by_key[k].uid: v for k, v in saved.items()}
+
+
 def _interactive_retry(papers: list, cfg: dict, cache: Cache) -> dict[str, str]:
     """Retry *papers* in a visible browser; return uid -> saved path."""
     from mosaic.auth import interactive_download
@@ -1820,6 +1912,8 @@ def _bulk_download(
     obsidian_folder: str = "",
     interactive: bool = False,
     handoff: bool = False,
+    auto: bool = False,
+    max_papers: int = 50,
     watch_dir: Path | None = None,
     batch: int = 1,
 ) -> int:
@@ -1873,8 +1967,11 @@ def _bulk_download(
                 rprint(f"  [red]✗[/red] {doi}")
 
     rescued: dict[str, str] = {}
-    if interactive and failed:
-        rescued.update(_interactive_retry(failed, cfg, cache))
+    if auto and failed:
+        rescued.update(_auto_retry(failed, cfg, cache, max_papers=max_papers))
+    remaining = [p for p in failed if p.uid not in rescued]
+    if interactive and remaining:
+        rescued.update(_interactive_retry(remaining, cfg, cache))
     remaining = [p for p in failed if p.uid not in rescued]
     if handoff and remaining:
         rescued.update(_handoff_retry(remaining, cfg, cache, watch_dir, batch))
@@ -1886,7 +1983,7 @@ def _bulk_download(
         fail -= len(rescued)
     if failed and _no_email(cfg):
         rprint(f"\n[yellow]{_EMAIL_HINT}[/yellow]")
-    if failed and not (interactive or handoff) and not oa_only:
+    if failed and not (interactive or handoff or auto) and not oa_only:
         rprint(f"\n[dim]{_RETRY_HINT}[/dim]")
 
     parts = [f"[bold]{ok}[/bold] downloaded"]

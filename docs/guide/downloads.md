@@ -130,10 +130,12 @@ again. See [Cache](./cache#verify).
   `mosaic config --unpaywall-email`.
 - **Open access, still not downloaded.** Some open-access publishers refuse every scripted client: MDPI, for one,
   answers HTTP 403 to mosaic and to `curl` alike. mosaic does not disguise itself to get past such walls. Use
-  `mosaic get DOI --handoff`, which opens the paper in your own browser and files the PDF you download there
-  ([hand-off](./authenticated-access#hand-off-to-your-own-browser-handoff)).
+  `mosaic get DOI --auto` (mosaic drives your Chrome through the same moves you would make) or
+  `mosaic get DOI --handoff` (you click, mosaic files)
+  ([authenticated access](./authenticated-access#auto-pass-with-your-chrome-auto)).
 - **Paywalled papers.** If you have access through a subscription or your institution, see
-  [Authenticated access](./authenticated-access): saved sessions, `--interactive`, `--handoff`.
+  [Authenticated access](./authenticated-access): the `--auto` pass, saved sessions, `--interactive`,
+  `--handoff`.
 - **Why did a download fail?** The cache keeps the reason of the last failure: `mosaic cache show DOI` prints it
   as the download status, for example `error: not a pdf (text/html)`.
 

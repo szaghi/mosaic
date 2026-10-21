@@ -11,24 +11,37 @@ Recipes for papers you can read through a subscription or an account but that ha
 ## An Elsevier paper
 
 ```bash
+mosaic get 10.1016/j.paerosci.2006.01.001 --auto
+```
+
+`--auto` drives your own Chrome (or Edge; on WSL the Windows one) through the paper's PDF chain and files each
+download it saves; ScienceDirect's fingerprint wall passes because the driver is a genuine browser. Log in once
+per publisher in the window mosaic opens. Guide:
+[auto pass](/guide/authenticated-access#auto-pass-with-your-chrome-auto).
+
+### The same paper, you click
+
+```bash
 mosaic get 10.1016/j.paerosci.2006.01.001 --handoff
 ```
 
-mosaic opens the article page in your default browser and watches your Downloads folder. Click "Download PDF" as
-usual; mosaic checks the new file is a PDF, moves it into the library under the paper's name and stops. Elsevier
-refuses every automated browser, so this is the way for ScienceDirect.
+Without Chrome, or when a site shows a check a browser must pass by hand: mosaic opens the article page in your
+default browser and watches your Downloads folder. Click "Download PDF" as usual; mosaic checks the new file is a
+PDF, moves it into the library under the paper's name and stops.
 Tutorial: [your browser does the download](/tutorial/05-paywalls#your-browser-does-the-download). Guide:
 [hand-off](/guide/authenticated-access#hand-off-to-your-own-browser-handoff).
 
 ## Every failed paper of a reference list
 
 ```bash
-mosaic get --from refs.bib --handoff
-mosaic get --from refs.bib -i --handoff     # an automated window first, your browser for the rest
+mosaic get --from refs.bib --auto
+mosaic get --from refs.bib --auto --interactive   # the auto pass, then a window for the rest
+mosaic get --from refs.bib --handoff              # you click, mosaic files
 ```
 
-The open papers download as usual; the ones that fail open in your browser one at a time. Enter in the terminal
-means "done with this paper", or skips it. Each paper waits up to 5 minutes.
+The open papers download as usual; the subscribed ones run through the auto pass, one publisher after the other.
+A login prompt waits up to 3 minutes per site. `--max-auto N` raises the 50-paper per-run cap for the auto pass.
+Each paper's ledger is in the cache, so re-running the same command resumes where it stopped.
 
 ## mosaic cannot find your Downloads folder
 

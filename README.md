@@ -32,7 +32,11 @@
 <td><b>📄 The PDFs you can read</b><br><sub>The source's link, every open copy Unpaywall knows (publisher, arXiv, PMC, HAL, repositories), then your saved publisher logins. Each file is checked to be a real PDF and named after the paper; a <code>.bib</code> or <code>.csv</code> of DOIs downloads in one command. <a href="https://szaghi.github.io/mosaic/tutorial/04-pdfs">Getting the PDFs</a></sub></td>
 </tr>
 <tr>
-<td><b>🔐 Paywalls, legally</b><br><sub>Where a publisher blocks automation (Elsevier), <code>mosaic get --handoff</code> opens the article in your own browser and files the PDF you download; <code>mosaic import</code> files PDFs you already have, by their DOI. No paywall or bot-check evasion. <a href="https://szaghi.github.io/mosaic/tutorial/05-paywalls">Paywalled papers</a></sub></td>
+<td><b>🔐 Paywalls, legally</b><br><sub>Where a publisher blocks automation (Elsevier), <code>mosaic get --auto</code>
+drives <em>your</em> Chrome through the same moves you would make and files each download unattended; without
+Chrome, <code>mosaic get --handoff</code> opens the article in your own browser and files the PDF you download;
+<code>mosaic import</code> files PDFs you already have, by their DOI. No paywall or bot-check evasion.
+<a href="https://szaghi.github.io/mosaic/tutorial/05-paywalls">Paywalled papers</a></sub></td>
 <td><b>🗄️ A library that grows</b><br><sub>Every result goes into a local SQLite cache that fills in what one source leaves out. Search it offline with <code>--cached</code>; export to BibTeX, RIS, CSV, JSON, Markdown, Zotero or Obsidian. <a href="https://szaghi.github.io/mosaic/tutorial/03-cache">The cache</a> · <a href="https://szaghi.github.io/mosaic/tutorial/06-exporting">Exporting</a></sub></td>
 </tr>
 <tr>
@@ -61,7 +65,8 @@ mosaic config --unpaywall-email you@example.org   # lets mosaic ask Unpaywall fo
 mosaic search "hall thruster particle-in-cell"                 # every source, one table
 mosaic search "hall thruster" --year 2020-2025 --oa-only -d    # filter, then download the PDFs
 mosaic get --from refs.bib                                     # every DOI of a BibTeX file
-mosaic get 10.1016/j.paerosci.2006.01.001 --handoff            # a paywalled paper, via your browser
+mosaic get 10.1016/j.paerosci.2006.01.001 --auto              # a paywalled paper, via your Chrome
+mosaic get 10.1016/j.paerosci.2006.01.001 --handoff            # a paywalled paper, via your click
 mosaic search "hall thruster" --cached --output refs.bib       # the cache, as BibTeX
 mosaic watch add "hall thruster anomalous transport" --name hall && mosaic watch run
 ```

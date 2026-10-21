@@ -69,6 +69,8 @@ mosaic get [OPTIONS] [DOI]
 | `--obsidian-folder` | `TEXT` |  | Override Obsidian vault subfolder for this run |
 | `--interactive`, `-i` |  |  | Retry failed papers in a visible browser where you can log in or solve checks |
 | `--handoff` |  |  | Open failed papers in your own browser and file the PDFs you download (works where publishers block automated browsers, e.g. Elsevier) |
+| `--auto` |  |  | Retry failed papers with your own Chrome driven by mosaic over CDP (the Elsevier-included real-browser pass; needs Chrome/Edge installed) |
+| `--max-auto` | `INTEGER RANGE` | `50` | Papers --auto may attempt per run (it drives a real browser: keep it sane) |
 | `--watch-dir` | `PATH` |  | Browser download folder for --handoff (default: auto-detect) |
 | `--batch` | `INTEGER RANGE` | `1` | Papers --handoff opens at once; download them in any order |
 <!-- cli:end -->

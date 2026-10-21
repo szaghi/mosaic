@@ -51,7 +51,9 @@ mosaic get --from papers.csv --oa-only
 
 mosaic reads the `doi` fields of a `.bib` file, or the `doi` column of a `.csv` (header in any case), and downloads
 each DOI once. The summary counts downloaded, failed and skipped papers; with `--oa-only`, a paper with no open copy
-counts as skipped instead of failed, and the hint about `--handoff` is not printed.
+counts as skipped instead of failed, and the hint about the rescues (`--auto`, `--interactive`, `--handoff`) is not
+printed. With `--auto`, the subscribed failures run afterwards through your Chrome (see
+[paid access](/cookbook/paywalls)).
 Tutorial: [a list of DOIs](/tutorial/04-pdfs#a-list-of-dois).
 
 ## A folder per project
@@ -104,10 +106,11 @@ Guide: [checking the library](/guide/downloads#checking-the-library).
 <<< @/examples/output/04/blocked.txt{console}
 
 Some publishers, MDPI among them, refuse every scripted download with HTTP 403, even for open-access papers.
-mosaic does not get around that. Download it in your browser and let mosaic file it:
+mosaic does not get around that. Either let the auto pass drive your Chrome through the same chain (the pass is
+real Chrome, so the wall passes), or do it by hand:
 
 ```bash
-mosaic get 10.3390/aerospace10010044 --handoff
+mosaic get 10.3390/aerospace10010044 --auto     # your Chrome, unattended
+mosaic get 10.3390/aerospace10010044 --handoff  # your click, mosaic files it
 ```
-
 Recipes: [Paywalled papers](./paywalls).

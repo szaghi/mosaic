@@ -70,7 +70,8 @@ merges duplicates, caches every result in SQLite, downloads PDFs, and runs LLM f
   -> saved browser session; `.part` + atomic rename; `resolve_landing` maps Elsevier linkinghub to
   ScienceDirect), `pdf.py` (`%PDF-` magic check; HTML saved as PDF is rejected), `auth.py` (Playwright sessions,
   `interactive_download`, `session_health`), `handoff.py` (`--handoff`: the user's own browser + `DownloadWatcher`
-  on the Downloads folder, WSL-aware), `importer.py` (`mosaic import`: DOI from metadata, ScienceDirect
+  on the Downloads folder, WSL-aware), `realbrowser.py` (`--auto`: the user's Chrome over CDP, native-download
+  filing, guardrails; WSL drives the Windows Chrome), `importer.py` (`mosaic import`: DOI from metadata, ScienceDirect
   `1-s2.0-<PII>-main` names via Crossref, or a single DOI in the text), `cite.py` (`paper_for_download`,
   citation styles), `bulk.py` (DOIs from .bib/.csv).
 - **Library and LLM:** `llm.py` (the single chat-completion entry point: OpenAI, Anthropic, any

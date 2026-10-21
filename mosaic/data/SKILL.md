@@ -34,7 +34,8 @@ mosaic config --show            # view or edit configuration
 mosaic cache list               # inspect local SQLite cache
 mosaic cache stats              # cache statistics
 mosaic notebook create "topic"  # create a Google NotebookLM notebook
-mosaic auth login elsevier      # browser session for authenticated PDF access
+mosaic auth login elsevier      # browser session for authenticated SEARCH on ScienceDirect
+mosaic get <doi> --auto         # subscribed PDF via your own Chrome (Elsevier included)
 mosaic skill install            # install this Claude Code skill to the current project
 mosaic skill install --global   # install to ~/.claude/skills/ (available in all projects)
 mosaic skill show               # print skill content to stdout
@@ -211,6 +212,11 @@ mosaic get --from library.csv   # bulk-download from CSV file (must have 'doi' c
 ```
 
 Options: `--oa-only`, `--download-dir`, `--zotero`, `--zotero-collection`, `--obsidian`.
+
+Rescues for paywalled papers you are entitled to: `--auto` (mosaic drives your own Chrome/Edge through the
+publisher's PDF chain and files each download; Elsevier included; one login per publisher per browser session),
+`--interactive` (a visible automated window; CAPTCHAs), `--handoff` (you click in your own browser, mosaic files
+the PDF). With `--from`, the rescues run over the failed papers; the cache ledgers them, so re-runs resume.
 
 ## cite Command
 
