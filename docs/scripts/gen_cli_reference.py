@@ -59,7 +59,10 @@ def root() -> Any:
 def _cell(text: str) -> str:
     text = " ".join(text.split()).replace("|", "\\|")
     # URLs in help texts are examples (http://localhost:...): code, not links
-    return re.sub(r"(?<!`)(https?://[^\s)`]+)", r"`\1`", text)
+    text = re.sub(r"(?<!`)(https?://[^\s)`]+)", r"`\1`", text)
+    # placeholders such as /scidb/<DOI> are code too: bare, Vue reads them as
+    # unclosed HTML tags and the docs build fails
+    return re.sub(r"(?<![`\w/])([^\s()`]*<[A-Za-z][\w-]*>[^\s()`,;]*)", r"`\1`", text)
 
 
 # click and typer's vendored click name the same types differently (INTEGER / INT)
