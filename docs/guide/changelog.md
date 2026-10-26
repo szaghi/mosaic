@@ -2,6 +2,23 @@
 title: Changelog
 ---
 
+## [1.11.3] — 2026-10-26
+### Added
+- **get**: Add --anna hand-off, a failed-papers list, and an attended --auto pass
+
+- **get**: Open --auto papers through an institutional proxy (proxy.url)
+
+
+### Fixed
+- **realbrowser**: Stop --auto failing fast on AIAA logins and reference links
+
+- **docs**: Wrap <placeholder> help text in code spans in the CLI reference
+
+- **ci**: Escape titles in the Telegram notifications
+
+- **realbrowser**: Let --auto run unattended and skip papers behind a login
+
+
 ## [1.11.2] — 2026-10-21
 ### Fixed
 - **ui**: Show the [ui] extra in the missing-Flask install hint
