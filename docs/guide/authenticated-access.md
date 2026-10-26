@@ -41,8 +41,12 @@ first in `mosaic-auto-downloads` next to it.
 
 The first `--auto` run on a fresh mosaic profile opens a Chrome window and asks for the institutional sign-in;
 complete it once, and the pass runs unattended. Publishers' session cookies die with the browser, so one login
-per browser session is all the interaction you should expect; after that, papers come one at a time, 8 to 15
-seconds apart on the same site, with 3 more seconds between sites.
+per browser session is all the interaction you should expect; after that, the pass opens the first paper right
+away, and every later paper only after you press Enter in the terminal — one paper at a time, released by you.
+While a paper hangs in flight, pressing Enter abandons it and asks for the next; at the hold between papers,
+`s` skips the next paper without opening it, and `q` ends the run, reporting the rest as stopped by hand.
+A run without a terminal (a script) paces itself instead: 8 to 15 seconds apart on the same site, 3 more
+between sites.
 
 - **Opt-in by design**: without `--auto` nothing is driven, and the pass never runs as a fallback on its own.
 - **Guardrails**: at most 50 papers per run (`--max-auto N` changes it). After 3 papers in a row on one
@@ -101,6 +105,10 @@ same run. Once you have signed in, press Enter in the terminal to retry at once:
 cookies have names mosaic cannot recognize, so without the Enter the wait runs to its end. Type `s` and Enter
 to skip the paper instead. A PDF link the profile is not entitled to (AIAA answers it with HTTP 403) counts
 as a login page, so the login comes up in seconds.
+
+When the article page shows a Cloudflare human check ("Just a moment...", as ScienceDirect does), the check
+never clears by itself in a driven Chrome. mosaic prints `Human check` and waits up to 3 minutes while you
+click the box in the Chrome window; pressing Enter skips the paper.
 
 ::: warning Automated access and publisher terms ⚠
 Automated access may conflict with a publisher's terms. mosaic does not disguise itself here; it drives a real

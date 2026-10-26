@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -639,6 +640,15 @@ def get(
             "(works where publishers block automated browsers, e.g. Elsevier)",
         ),
     ] = False,
+    anna: Annotated[
+        bool,
+        typer.Option(
+            "--anna",
+            help="Open failed papers on Anna's Archive (/scidb/<DOI>) in your own browser "
+            "and file the PDFs you download there; the mirror base comes from "
+            "config anna.mirror (default https://annas-archive.gd)",
+        ),
+    ] = False,
     auto: Annotated[
         bool,
         typer.Option(
@@ -695,6 +705,7 @@ def get(
             max_papers=max_auto,
             interactive=interactive,
             handoff=handoff,
+            anna=anna,
             watch_dir=watch_dir,
             batch=batch,
         )
@@ -722,16 +733,17 @@ def get(
         path = _auto_retry([paper], cfg, cache, max_papers=max_auto).get(paper.uid)
     if not path and interactive:
         path = _interactive_retry([paper], cfg, cache).get(paper.uid)
-    if not path and handoff:
-        path = _handoff_retry([paper], cfg, cache, watch_dir, batch).get(paper.uid)
+    if not path and (handoff or anna):
+        path = _handoff_retry([paper], cfg, cache, watch_dir, batch, anna=anna).get(paper.uid)
     if path:
         console.print(f"[green]Saved:[/green] {_tilde(path)}", soft_wrap=True)
     else:
         rprint("[red]Could not find a downloadable PDF for this DOI.[/red]")
         if _no_email(cfg):
             rprint(f"[yellow]{_EMAIL_HINT}[/yellow]")
-        if not (interactive or handoff or auto):
+        if not (interactive or handoff or anna or auto):
             rprint(f"[dim]{_RETRY_HINT}[/dim]")
+        _offer_failed_save([paper], None)
 
     if zotero:
         pdf_map = {paper.uid: path} if path else {}
@@ -1710,14 +1722,80 @@ _EMAIL_HINT = (
 )
 
 
+def _stdin_isatty() -> bool:
+    """Whether the run has an interactive terminal: only then may mosaic ask."""
+    return sys.stdin.isatty()
+
+
+def _failed_csv_path(source: Path | None) -> Path:
+    """A fresh name for the failed list: <stem>-failed.csv, numbered when one exists."""
+    if source is None:  # a single DOI: failed.csv, failed-2.csv, ...
+        path = Path("failed.csv")
+        n = 2
+        while path.exists():
+            path = Path(f"failed-{n}.csv")
+            n += 1
+        return path
+    base = source.stem
+    path = Path(f"{base}-failed.csv")
+    n = 2
+    while path.exists():
+        path = Path(f"{base}-failed-{n}.csv")
+        n += 1
+    return path
+
+
+def _offer_failed_save(papers: list, source: Path | None) -> None:
+    """Ask whether to keep the papers still failing in a CSV feedable to `--from`.
+
+    Silent when the terminal is not interactive (scripts, tests, pipes):
+    nothing is written and nothing is asked.
+    """
+    if not papers or not _stdin_isatty():
+        return
+    path = _failed_csv_path(source)
+    rprint(f"\n[bold]{len(papers)} paper(s) could not be downloaded.[/bold]")
+    try:
+        if typer.confirm(f"Save their list to {path} for a later run?", default=True):
+            path.write_text(
+                "doi\n" + "\n".join(p.doi or p.uid for p in papers) + "\n", encoding="utf-8"
+            )
+            rprint(
+                f"[green]Saved:[/green] {path} (retry with [bold]mosaic get --from {path}[/bold])"
+            )
+    except Exception:
+        pass  # the question is a convenience; a failure here must not turn a run into a crash
+
+
 def _no_email(cfg: dict) -> bool:
     return not cfg.get("unpaywall", {}).get("email", "")
 
 
+_ANNA_DEFAULT_BASE = "https://annas-archive.gd"
+
+
+def _anna_scidb_url(cfg: dict, doi: str) -> str:
+    """The Anna's Archive page of *doi*; the mirror base lives in config anna.mirror."""
+    base = (cfg.get("anna", {}) or {}).get("mirror", "") or _ANNA_DEFAULT_BASE
+    return f"{base.rstrip('/')}/scidb/{doi}"
+
+
 def _handoff_retry(
-    papers: list, cfg: dict, cache: Cache, watch_dir: Path | None, batch: int = 1
+    papers: list,
+    cfg: dict,
+    cache: Cache,
+    watch_dir: Path | None,
+    batch: int = 1,
+    anna: bool = False,
 ) -> dict[str, str]:
-    """Hand *papers* to the user's own browser; return uid -> saved path."""
+    """Hand *papers* to the user's own browser; return uid -> saved path.
+
+    With *anna* the browser opens the paper's Anna's Archive ``/scidb`` page
+    instead of the publisher landing: the mirror for an institutional source
+    that is offline. The papers run one at a time: the next page opens only
+    after an explicit Enter, so the site's check window is never crossed by a
+    burst. Nothing there is automated; the download is the user's own click.
+    """
     from mosaic.downloader import resolve_landing
     from mosaic.handoff import default_downloads_dir, handoff_download
 
@@ -1732,11 +1810,17 @@ def _handoff_retry(
     pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
     dest_dir = Path(cfg["download_dir"])
     by_key = {(p.doi or p.uid): p for p in papers}
+
+    def paper_url(p) -> str:
+        if anna and p.doi:
+            return _anna_scidb_url(cfg, p.doi)
+        return resolve_landing(p.url or f"https://doi.org/{p.doi}")
+
     items = [
         (
             key,
             f"{_clip(p.title, 90)} ({p.year or 'n.d.'})" if p.source != "manual" else key,
-            resolve_landing(p.url or f"https://doi.org/{p.doi}"),
+            paper_url(p),
             str(dest_dir / p.safe_filename(pattern)),
         )
         for key, p in by_key.items()
@@ -1772,20 +1856,27 @@ def _handoff_retry(
         else:
             rprint("  [dim]– skipped[/dim]")
 
+    pacing = "one at a time, enters in between" if anna else ""
     console.print(
         f"\n[bold]Hand-off of {len(items)} paper(s) to your browser[/bold]: "
-        f"watching [cyan]{_tilde(folder)}[/cyan] for each PDF you download "
-        + ("(one paper at a time)." if batch == 1 else f"({batch} papers at a time)."),
+        f"watching [cyan]{_tilde(folder)}[/cyan] for each PDF you download"
+        + (
+            f" ({pacing})."
+            if anna
+            else (" (one paper at a time)." if batch == 1 else f" ({batch} papers at a time).")
+        ),
         soft_wrap=True,
     )
     saved = handoff_download(
         items,
         Path(folder),
-        batch=batch,
+        batch=1 if anna and batch <= 1 else batch,
+        wait_enter_between=True,
         on_result=report,
         announce=announce,
         on_opened=opened,
         on_unmatched=unmatched,
+        on_hold=lambda: rprint("  [dim]Press Enter to open the next paper…[/dim]"),
     )
     return {by_key[k].uid: v for k, v in saved.items()}
 
@@ -1796,6 +1887,14 @@ def _prompt_login(url: str) -> None:
         f" that just opened at\n  [dim]{url[:110]}[/dim]\n"
         "[dim]Waiting up to 3 minutes. Once you are signed in, press Enter here to retry the"
         " paper; type s and Enter to skip it.[/dim]"
+    )
+
+
+def _prompt_check() -> None:
+    rprint(
+        "  [yellow]Human check:[/yellow] the page in the Chrome window asks you to confirm you"
+        " are human; click the box there.\n"
+        "  [dim]Waiting up to 3 minutes; Enter here skips this paper.[/dim]"
     )
 
 
@@ -1832,10 +1931,14 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
             console.print(f"  [green]✓[/green] {label} → {Path(path).name}", soft_wrap=True)
         elif note == "skipped: over the per-run cap":
             rprint(f"  [dim]– over the per-run cap: {_clip(label, 80)}[/dim]")
+        elif note.startswith(("skipped:", "stopped:")):
+            rprint(f"  [dim]– {note}: {_clip(label, 80)}[/dim]")
         elif note == "stopped: repeated walls":
             rprint(f"  [dim]– stopped after repeated walls: {_clip(label, 80)}[/dim]")
         elif note == "login required":
             rprint(f"  [yellow]?[/yellow] login needed: {_clip(label, 80)}")
+        elif note.startswith("no PDF:"):
+            rprint(f"  [dim]– {note}: {_clip(label, 80)}[/dim]")
         else:
             rprint(f"  [dim]– no PDF: {_clip(label, 80)}[/dim]")
 
@@ -1852,6 +1955,11 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
         items,
         on_result=report,
         prompt_login=_prompt_login,
+        prompt_next=lambda: rprint(
+            "  [dim]Enter opens the next paper; s skips it; q stops the run.[/dim]"
+        ),
+        prompt_paper=lambda: rprint("  [dim]Enter skips this paper and moves on…[/dim]"),
+        prompt_check=_prompt_check,
         max_papers=max_papers,
     )
     if state == "dependency":
@@ -1918,6 +2026,7 @@ def _bulk_download(
     interactive: bool = False,
     handoff: bool = False,
     auto: bool = False,
+    anna: bool = False,
     max_papers: int = 50,
     watch_dir: Path | None = None,
     batch: int = 1,
@@ -1978,17 +2087,20 @@ def _bulk_download(
     if interactive and remaining:
         rescued.update(_interactive_retry(remaining, cfg, cache))
     remaining = [p for p in failed if p.uid not in rescued]
-    if handoff and remaining:
-        rescued.update(_handoff_retry(remaining, cfg, cache, watch_dir, batch))
+    if (handoff or anna) and remaining:
+        rescued.update(_handoff_retry(remaining, cfg, cache, watch_dir, batch, anna=anna))
     pdf_map.update(rescued)
     ok += len(rescued)
+    not_rescued = [p for p in failed if p.uid not in rescued]
     if oa_only:
         skip -= len(rescued)
     else:
         fail -= len(rescued)
+    if not_rescued:
+        _offer_failed_save(not_rescued, from_file)
     if failed and _no_email(cfg):
         rprint(f"\n[yellow]{_EMAIL_HINT}[/yellow]")
-    if failed and not (interactive or handoff or auto) and not oa_only:
+    if failed and not (interactive or handoff or anna or auto) and not oa_only:
         rprint(f"\n[dim]{_RETRY_HINT}[/dim]")
 
     parts = [f"[bold]{ok}[/bold] downloaded"]

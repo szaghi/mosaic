@@ -1,6 +1,7 @@
 """Tests for mosaic.bulk — DOI extraction from BibTeX and CSV files."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -128,3 +129,93 @@ class TestReadCsv:
     def test_strips_whitespace_from_values(self, tmp_path):
         f = write(tmp_path, "r.csv", "doi\n  10.1/ws  \n")
         assert _read_csv(f) == ["10.1/ws"]
+
+
+class TestFailedListPrompt:
+    """`mosaic get --from` asks whether to save the still-failing DOIs in a CSV."""
+
+    def _invoke(self, monkeypatch, tmp_path, dois, confirm_return=True, isatty=False):
+        from typer.testing import CliRunner
+
+        from mosaic.cli import app
+        from mosaic.models import Paper
+
+        monkeypatch.chdir(tmp_path)
+        source = tmp_path / "missing.csv"
+        source.write_text("doi\n" + "\n".join(dois) + "\n")
+        cfg = {
+            "db_path": ":memory:",
+            "download_dir": str(tmp_path / "dl"),
+            "unpaywall": {"email": ""},
+        }
+        with (
+            patch("mosaic.cli.cfg_mod.load", return_value=cfg),
+            patch("mosaic.cli.Cache"),
+            patch(
+                "mosaic.cite.paper_for_download",
+                side_effect=lambda d, *a: Paper(title=f"T {d}", doi=d, year=2018),
+            ),
+            patch("mosaic.cli.dl_paper", return_value=None),
+            patch("mosaic.cli.typer.confirm", return_value=confirm_return) as ask,
+            patch("mosaic.cli._stdin_isatty", return_value=isatty),
+        ):
+            r = CliRunner().invoke(app, ["get", "--from", str(source)])
+        return r, ask
+
+    def test_prompt_is_skipped_when_not_a_tty(self, monkeypatch, tmp_path):
+        r, ask = self._invoke(monkeypatch, tmp_path, ["10.1/a"])
+        assert r.exit_code == 1, r.output  # papers still failed
+        ask.assert_not_called()
+        assert not (tmp_path / "missing-failed.csv").exists()
+
+    def test_accept_writes_csv_feedable_to_from(self, monkeypatch, tmp_path):
+        from mosaic.bulk import read_dois
+
+        r, ask = self._invoke(monkeypatch, tmp_path, ["10.1/a", "10.1/b"], isatty=True)
+        assert r.exit_code == 1, r.output
+        out = tmp_path / "missing-failed.csv"
+        assert ask.called and out.exists()
+        assert read_dois(out) == ["10.1/a", "10.1/b"]
+
+    def test_decline_writes_nothing(self, monkeypatch, tmp_path):
+        r, ask = self._invoke(monkeypatch, tmp_path, ["10.1/a"], confirm_return=False, isatty=True)
+        assert r.exit_code == 1, r.output
+        assert ask.called
+        assert not (tmp_path / "missing-failed.csv").exists()
+
+    def test_none_saved_when_all_download(self, monkeypatch, tmp_path):
+        from typer.testing import CliRunner
+
+        from mosaic.cli import app
+        from mosaic.models import Paper
+
+        monkeypatch.chdir(tmp_path)
+        source = tmp_path / "ok.csv"
+        source.write_text("doi\n10.1/a\n")
+        cfg = {
+            "db_path": ":memory:",
+            "download_dir": str(tmp_path / "dl"),
+            "unpaywall": {"email": ""},
+        }
+        with (
+            patch("mosaic.cli.cfg_mod.load", return_value=cfg),
+            patch("mosaic.cli.Cache"),
+            patch(
+                "mosaic.cite.paper_for_download",
+                side_effect=lambda d, *a: Paper(title=f"T {d}", doi=d, year=2018),
+            ),
+            patch("mosaic.cli.dl_paper", return_value=str(tmp_path / "dl" / "x.pdf")),
+        ):
+            r = CliRunner().invoke(app, ["get", "--from", str(source)])
+        assert r.exit_code == 0, r.output
+
+
+class TestFailedCsvPath:
+    def test_versions_when_the_suggested_name_exists(self, monkeypatch, tmp_path):
+        from mosaic.cli import _failed_csv_path
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "refs-failed.csv").write_text("doi\n", encoding="utf-8")
+        (tmp_path / "refs-failed-2.csv").write_text("doi\n", encoding="utf-8")
+        assert _failed_csv_path(Path("refs.bib")) == Path("refs-failed-3.csv")
+        assert _failed_csv_path(None) == Path("failed.csv")

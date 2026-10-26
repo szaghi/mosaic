@@ -359,12 +359,20 @@ async def download_one(
     natural_wait_s: float = 8.0,
     hop_wait_s: float = 75.0,
     link_wait_s: float = 30.0,
+    check_wait_s: float = 180.0,
     poll_s: float = 1.0,
+    on_check: Callable[[], None] | None = None,
 ) -> str:
     """Download one paper through the real browser.
 
     Returns the destination path on success, ``"login-required"`` when the
-    article page demanded a login, or ``None`` when no PDF could be fetched.
+    article page demanded a login, ``"challenge"`` when a human check stayed
+    unsolved, or ``None`` when no PDF could be fetched.
+
+    A Cloudflare check (Turnstile) never clears by itself in a driven Chrome:
+    it waits for a human click. In an attended run *on_check* is called and
+    the page is watched for up to *check_wait_s* more seconds, so the user can
+    click it; an Enter in the terminal abandons the paper as usual.
     """
     folder = download_folder()
     folder.mkdir(parents=True, exist_ok=True)
@@ -389,10 +397,19 @@ async def download_one(
         ids = _name_ids(item.key, url)
         doi = item.key if item.key.startswith("10.") else ""
         links = await poll_pdf_links(article, pii, seconds=link_wait_s, doi=doi)
+        if (
+            not links
+            and on_check
+            and sys.stdin.isatty()
+            and await classify_hop_wall(article) == "challenge"
+        ):
+            on_check()
+            links = await poll_pdf_links(article, pii, seconds=check_wait_s, doi=doi)
         log.debug("%s: landed %s, pii=%s, %d pdf link(s)", item.key, url[:80], pii, len(links))
         if not links:
-            log.debug("no PDF link found on %s", url)
-            return None
+            wall = await classify_hop_wall(article)
+            log.debug("no PDF link found on %s (page %s)", url, wall or "renders without one")
+            return wall or None
 
         watcher = handoff.DownloadWatcher(folder)
         watcher.arm()
@@ -564,6 +581,45 @@ async def login_wait(
                 pass
 
 
+async def wait_for_enter(callback: Callable[[], None] | None = None) -> str:
+    """Hold until the user presses Enter; no-op (returns "next") without a TTY.
+
+    A bare Enter means "next"; a line starting with ``s`` means "skip the
+    next paper"; a line starting with ``q`` means "abandon the run". The
+    caller gives these words their meanings; this only reads them.
+    """
+    if not sys.stdin.isatty():
+        return "next"
+    if callback:
+        callback()
+    loop = asyncio.get_running_loop()
+    pressed = asyncio.Event()
+    try:
+        loop.add_reader(sys.stdin, pressed.set)
+    except Exception:  # a stdin the loop cannot watch: fall back to blocking read
+        await asyncio.to_thread(_blocking_enter)
+        return "next"
+    try:
+        await pressed.wait()
+        # Read the pressed line (which also drains it for the next press).
+        line = await asyncio.to_thread(sys.stdin.readline)
+        first = line.strip().lower()[:1]
+        if first == "s":
+            return "skip"
+        if first == "q":
+            return "quit"
+        return "next"
+    finally:
+        try:
+            loop.remove_reader(sys.stdin)
+        except Exception:
+            pass
+
+
+def _blocking_enter() -> None:
+    sys.stdin.readline()
+
+
 async def connect(p, exe: Path):
     """Attach to the debug Chrome, launching it when absent; return (b, ctx)."""
     if _port_open():
@@ -591,15 +647,22 @@ async def auto_download(
     *,
     on_result: Callable[[str, str | None, str], None] | None = None,
     prompt_login: Callable[[str], None] | None = None,
+    prompt_next: Callable[[], None] | None = None,
+    prompt_paper: Callable[[], None] | None = None,
+    prompt_check: Callable[[], None] | None = None,
     politeness_s: tuple[float, float] = (8.0, 15.0),
     max_papers: int = 50,
     block_abort_after: int = 3,
 ) -> dict[str, str]:
     """Drive the real browser over *items*; return ``key -> saved path``.
 
-    Guardrails: strictly sequential papers, a jittered delay between them, a
-    per-run cap, and a hard stop after *block_abort_after* consecutive
-    login/challenge walls (never hammer a publisher that is deflecting).
+    Guardrails: strictly sequential papers, a per-run cap, and a hard stop
+    after *block_abort_after* consecutive walls (never hammer a publisher
+    that is deflecting). In an attended run (a TTY) the user holds the reins:
+    the first paper opens at once, every later one after an explicit Enter,
+    a press while a paper is in flight abandons that paper, ``s`` skips the
+    next one and ``q`` stops the run. Scripts (no TTY) pace themselves
+    instead, 8 to 15 seconds apart.
 
     ``on_result(key, path_or_None, note)`` runs after every paper; the note is
     "" on success or the reason for a skip.
@@ -654,18 +717,78 @@ async def auto_download(
                 buckets.setdefault(site or "unknown", []).append(it)
 
             attempted = 0
+            abandon = False
             brought_up: set[str] = set()
             for site, bucket in buckets.items():
                 site_blocked = 0
                 for n, item in enumerate(bucket, 1):
+                    if abandon:
+                        if on_result:
+                            on_result(item.key, None, "stopped: by hand (Enter)")
+                        continue
                     if attempted >= max_papers:
                         for rest in bucket[n - 1 :]:
                             if on_result:
                                 on_result(rest.key, None, "skipped: over the per-run cap")
                         break
                     attempted += 1
-                    outcome = await download_one(ctx, item)
-                    if outcome and outcome != "login-required":
+                    # Attended pace: the first paper goes at once; every later
+                    # one needs an explicit release (Enter), a skip (s), or
+                    # the end of the run (q).
+                    if attempted > 1:
+                        cmd = await wait_for_enter(prompt_next)
+                        if cmd == "skip":
+                            if on_result:
+                                on_result(item.key, None, "skipped: by hand (Enter)")
+                            continue
+                        if cmd == "quit":
+                            abandon = True
+                            if on_result:
+                                on_result(item.key, None, "stopped: by hand (Enter)")
+                            continue
+                    # An in-flight paper can be abandoned too: an Enter during
+                    # the attempt skips THIS paper (q stops the run outright).
+                    release = None
+                    if sys.stdin.isatty():
+                        if prompt_paper:
+                            prompt_paper()
+                        release = asyncio.create_task(wait_for_enter())
+                    attempt = asyncio.create_task(download_one(ctx, item, on_check=prompt_check))
+                    hand_cmd = ""
+                    outcome = None
+                    if release is None:
+                        outcome = await attempt
+                    else:
+                        done, _pending = await asyncio.wait(
+                            {attempt, release}, return_when=asyncio.FIRST_COMPLETED
+                        )
+                        if release in done and attempt.done():
+                            # The PDF arrived just as the user pressed: it counts.
+                            outcome = attempt.result()
+                        elif release in done:
+                            # Any press mid-attempt abandons this paper
+                            # (a bare Enter and `s` both count); `q` stops
+                            # the run outright.
+                            hand_cmd = "quit" if release.result() == "quit" else "skip"
+                            attempt.cancel()
+                        else:
+                            outcome = attempt.result()
+                            release.cancel()
+                        for tsk in (release, attempt):
+                            try:
+                                await tsk
+                            except (asyncio.CancelledError, Exception):
+                                pass
+                    if hand_cmd == "quit":
+                        abandon = True
+                        if on_result:
+                            on_result(item.key, None, "stopped: by hand (Enter)")
+                        continue
+                    if hand_cmd == "skip":
+                        if on_result:
+                            on_result(item.key, None, "skipped: by hand (Enter)")
+                        continue
+                    if outcome and outcome not in ("login-required", "challenge"):
                         site_blocked = 0
                         saved[item.key] = outcome
                         if on_result:
@@ -701,7 +824,12 @@ async def auto_download(
                     else:
                         site_blocked += 1
                         if on_result:
-                            on_result(item.key, None, "no PDF arrived")
+                            if outcome == "challenge":
+                                on_result(
+                                    item.key, None, "no PDF: the page asked for a human check"
+                                )
+                            else:
+                                on_result(item.key, None, "no PDF arrived")
 
                     if site_blocked >= block_abort_after:
                         log.warning(
@@ -713,10 +841,10 @@ async def auto_download(
                             if on_result:
                                 on_result(rest.key, None, "stopped: repeated walls")
                         break
-                    if n < len(bucket) and politeness_s:
+                    if n < len(bucket) and politeness_s and not sys.stdin.isatty():
                         lo, hi = politeness_s
                         await asyncio.sleep(random.uniform(lo, hi))  # noqa: S311
-                if attempted < max_papers and politeness_s != (0.0, 0.0):
+                if attempted < max_papers and politeness_s and not sys.stdin.isatty():
                     await asyncio.sleep(3)  # a pause between publisher sites
         finally:
             try:
@@ -732,6 +860,9 @@ def auto_download_sync(
     *,
     on_result: Callable[[str, str | None, str], None] | None = None,
     prompt_login: Callable[[str], None] | None = None,
+    prompt_next: Callable[[], None] | None = None,
+    prompt_paper: Callable[[], None] | None = None,
+    prompt_check: Callable[[], None] | None = None,
     politeness_s: tuple[float, float] = (8.0, 15.0),
     max_papers: int = 50,
 ) -> tuple[dict[str, str], str]:
@@ -747,6 +878,9 @@ def auto_download_sync(
                 real,
                 on_result=on_result,
                 prompt_login=prompt_login,
+                prompt_next=prompt_next,
+                prompt_paper=prompt_paper,
+                prompt_check=prompt_check,
                 politeness_s=politeness_s,
                 max_papers=max_papers,
             )

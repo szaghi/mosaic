@@ -88,6 +88,39 @@ are ignored.
 With `--oa-only`, a paper without a downloadable copy counts as skipped, `– DOI (no OA copy)`, instead of
 failed, and the retry hint is not shown.
 
+### Hand-off to Anna's Archive (`--anna`)
+
+```bash
+mosaic get --from missing-01.csv --anna
+mosaic get 10.1016/j.paerosci.2006.01.001 --anna
+```
+
+Same mechanism as [the hand-off](./authenticated-access#hand-off-to-your-own-browser-handoff): the download
+stays your own browser click, so nothing here is bypassed. For every paper the ordinary steps cannot reach,
+mosaic opens the paper's page on Anna's Archive in your browser instead of the publisher's: search the DOI
+there, make the download happen as you would by hand (the site's own checks included), and mosaic files the PDF
+under the usual name from your Downloads folder. The papers run one at a time: the next page opens only after
+you press Enter, so a burst of tabs never races the site's check page, and every PDF is filed by the DOI it
+carries (Anna's own file names are md5s, so matching relies on the DOI inside the file or on what is left when
+a batch ends). Enter without downloading a PDF in the tab skips that paper. A run without a terminal (a
+script) skips the ask and presses on by itself.
+
+Mirrors change host often; set yours once with the `anna.mirror` key of the config (default
+`https://annas-archive.gd`), and mosaic opens `<mirror>/scidb/<DOI>`.
+
+### A list of the papers that failed
+
+When one or more papers of a run stay without a PDF, mosaic asks whether to keep their DOIs in a CSV in
+the current directory, named after the input (`missing-01-failed.csv` for `missing-01.csv`; `failed.csv` for a
+single DOI). Decline, and nothing is written. A terminal that is not interactive (a script, a pipe) is never
+asked. The list is a plain `doi` column, so a later run retries those papers:
+
+```bash
+mosaic get --from missing-01-failed.csv
+```
+
+Add `--anna` or `--auto` as you prefer; your [saved sessions](./authenticated-access) apply on their own.
+
 ## PDFs you downloaded yourself
 
 `mosaic import FILE...` moves PDFs you already have into the library, named and recorded as if `mosaic get` had

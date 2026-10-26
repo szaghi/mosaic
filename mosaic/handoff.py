@@ -307,11 +307,13 @@ def handoff_download(
     poll_s: float = 1.0,
     grace_s: float = 8.0,
     open_gap_s: float = 1.0,
+    wait_enter_between: bool = False,
     on_result: Callable[[str, str | None, str | None], None] | None = None,
     opener: Callable[[str], bool] = open_in_browser,
     announce: Callable[[int, int, str, str], None] | None = None,
     on_opened: Callable[[int], None] | None = None,
     on_unmatched: Callable[[str], None] | None = None,
+    on_hold: Callable[[], None] | None = None,
 ) -> dict[str, str]:
     """Open papers in the user's browser and file the PDFs they download.
 
@@ -329,14 +331,21 @@ def handoff_download(
     batch : int
         Papers opened together. The batch ends when all its PDFs have arrived,
         when the user presses Enter, or after *wait_s* without a new PDF.
+    wait_enter_between : bool
+        When True, the next batch opens only after an explicit Enter, even
+        when the previous one just finished on its own: one paper, one
+        explicit release. A run without a TTY skips the gate, so scripts and
+        tests never stall.
     on_result : callable, optional
         Called as ``on_result(key, dest_or_None, original_filename_or_None)``.
     announce : callable, optional
         Called as ``announce(n, total, label, url)`` before opening each paper.
     on_opened : callable, optional
         Called with the batch size once the batch is open.
-    on_unmatched : callable, optional
+    on_unmatched : Callable[[str], None], optional
         Called with the name of a downloaded PDF that matches no paper.
+    on_hold : callable, optional
+        Called once, just before the wait that releases the next batch.
 
     Returns
     -------
@@ -346,7 +355,17 @@ def handoff_download(
     watcher = DownloadWatcher(watch_dir)
     saved: dict[str, str] = {}
     batch = max(batch, 1)
+    ended_by_enter = False
     for first in range(0, len(items), batch):
+        # The user's press that ends a batch is exactly the explicit release
+        # the next paper needs; a batch that ended on its own (all PDFs in,
+        # or the idle lapse) still asks for the press first.
+        if wait_enter_between and first > 0 and sys.stdin.isatty() and not ended_by_enter:
+            if on_hold:
+                on_hold()
+            while not _enter_pressed(60.0):
+                pass
+        ended_by_enter = False
         chunk = items[first : first + batch]
         watcher.arm()
         for n, (_, label, url, _) in enumerate(chunk, first + 1):
@@ -386,6 +405,7 @@ def handoff_download(
         deadline = time.monotonic() + wait_s
         while pending and time.monotonic() < deadline:
             if _enter_pressed(poll_s):
+                ended_by_enter = True
                 # Enter means "done with this batch", and users press it right
                 # after clicking Download: keep polling while a download is
                 # finishing instead of discarding it.

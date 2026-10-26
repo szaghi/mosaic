@@ -257,6 +257,103 @@ class TestGetHandoffCli:
             r = CliRunner().invoke(app, ["get", "10.1016/a", "--handoff"])
         assert "--watch-dir" in r.output
 
+    def test_anna_papers_open_on_scidb_pages(self, tmp_path, tmp_cache):
+        """--anna hands off with /scidb/<DOI> URLs from the configured mirror."""
+        from typer.testing import CliRunner
+
+        from mosaic.cli import app
+        from mosaic.models import Paper
+
+        csv = tmp_path / "dois.csv"
+        csv.write_text("doi\n10.1016/a\n10.1016/b\n")
+        cfg = {
+            "db_path": ":memory:",
+            "download_dir": str(tmp_path / "dl"),
+            "unpaywall": {"email": ""},
+            "anna": {"mirror": "https://annas-archive.example.org/"},
+        }
+        urls = []
+        batches = []
+
+        def fake_handoff(items, folder, on_result=None, announce=None, **kw):
+            urls.extend(url for _k, _l, url, _d in items)
+            batches.append((kw.get("batch"), kw.get("wait_enter_between")))
+            if on_result:
+                for k, _l, _u, dest in items:
+                    on_result(k, dest, "main.pdf")
+            return {k: dest for k, _l, _u, dest in items}
+
+        with (
+            patch("mosaic.cli.cfg_mod.load", return_value=cfg),
+            patch("mosaic.cli.Cache", return_value=tmp_cache),
+            patch(
+                "mosaic.cite.paper_for_download",
+                side_effect=lambda d, *a: Paper(title=f"T {d}", doi=d, year=2018),
+            ),
+            patch("mosaic.cli.dl_paper", return_value=None),
+            patch("mosaic.handoff.handoff_download", side_effect=fake_handoff),
+        ):
+            r = CliRunner().invoke(
+                app, ["get", "--from", str(csv), "--anna", "--watch-dir", str(tmp_path)]
+            )
+        assert r.exit_code == 0, r.output
+        assert urls == [
+            "https://annas-archive.example.org/scidb/10.1016/a",
+            "https://annas-archive.example.org/scidb/10.1016/b",
+        ]
+        # Every paper is a breath apart: the enter-gated, one-at-a-time flow.
+        assert batches == [(1, True)]
+
+    def test_anna_runs_one_at_a_time_enter_gated(self, monkeypatch, tmp_path, tmp_cache):
+        """Anna hand-off opens exactly one tab and releases the next on Enter."""
+        from typer.testing import CliRunner
+
+        from mosaic.cli import app
+        from mosaic.models import Paper
+
+        monkeypatch.chdir(tmp_path)
+        csv = tmp_path / "dois.csv"
+        csv.write_text("doi\n" + "\n".join(f"10.1016/{c}" for c in "abcdefgh") + "\n")
+        cfg = {
+            "db_path": ":memory:",
+            "download_dir": str(tmp_path / "dl"),
+            "unpaywall": {"email": ""},
+        }
+
+        def fake_handoff(items, folder, on_result=None, announce=None, **kw):
+            key, _l, url, dest = items[0]
+            return {key: dest}
+
+        with (
+            patch("mosaic.cli.cfg_mod.load", return_value=cfg),
+            patch("mosaic.cli.Cache", return_value=tmp_cache),
+            patch(
+                "mosaic.cite.paper_for_download",
+                side_effect=lambda d, *a: Paper(title=f"T {d}", doi=d, year=2018),
+            ),
+            patch("mosaic.cli.dl_paper", return_value=None),
+            patch("mosaic.handoff.handoff_download", side_effect=fake_handoff) as ho,
+        ):
+            r = CliRunner().invoke(
+                app, ["get", "--from", str(csv), "--anna", "--watch-dir", str(tmp_path)]
+            )
+        assert r.exit_code == 1, r.output
+        assert ho.call_args.kwargs["batch"] == 1
+        assert ho.call_args.kwargs["wait_enter_between"] is True
+
+    def test_anna_scidb_url_defaults_and_trailing_slash(self):
+        from mosaic.cli import _anna_scidb_url
+
+        assert _anna_scidb_url({}, "10.1/a") == "https://annas-archive.gd/scidb/10.1/a"
+        assert (
+            _anna_scidb_url({"anna": {"mirror": "https://annas-archive.se/"}}, "10.1/a")
+            == "https://annas-archive.se/scidb/10.1/a"
+        )
+        assert (
+            _anna_scidb_url({"anna": {"mirror": "https://annas-archive.se"}}, "10.1/a")
+            == "https://annas-archive.se/scidb/10.1/a"
+        )
+
 
 class TestCollect:
     def test_locked_original_is_retried_then_left_in_place(self, tmp_path):
