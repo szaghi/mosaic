@@ -99,9 +99,9 @@ class FakePage:
         self.gotos.append(url)
         handler = self.ctx.goto_handler
         if handler:
-            await handler(self, url)
-        else:
-            self.url = ARTICLE
+            return await handler(self, url)
+        self.url = ARTICLE
+        return None
 
     async def wait_for_url(self, *_a, **_k):
         pass
@@ -358,6 +358,67 @@ def test_download_one_no_pdf_link(monkeypatch, tmp_path):
         return await rb.download_one(ctx, item, natural_wait_s=0.3, link_wait_s=0.5)
 
     assert asyncio.run(run()) is None
+
+
+def test_download_one_hop_403_is_a_login_wall(monkeypatch, tmp_path):
+    """An Atypon site (AIAA) answers an unentitled PDF with a 403 page: that is
+    a login wall at once, not an 83-second wait for a download that never comes."""
+    ctx = FakeContext()
+    monkeypatch.setattr(rb, "download_folder", lambda: tmp_path / "dl")
+    ctx.content = "<html>" + "Access denied. " * 400 + "</html>"
+    aiaa = "https://arc.aiaa.org/doi/10.2514/1.C037192"
+    ctx.pdf_links = ["https://arc.aiaa.org/doi/pdf/10.2514/1.C037192?download=true"]
+
+    async def goto(page, url):
+        page.url = url if "/doi/pdf/" in url else aiaa
+        return types.SimpleNamespace(status=403 if "/doi/pdf/" in url else 200)
+
+    ctx.goto_handler = goto
+
+    async def run():
+        item = rb.AutoItem(key="10.2514/1.c037192", url=aiaa, dest=str(tmp_path / "a.pdf"))
+        return await rb.download_one(ctx, item, natural_wait_s=30, hop_wait_s=30)
+
+    assert asyncio.run(asyncio.wait_for(run(), timeout=5)) == "login-required"
+
+
+class _PipeStdin:
+    """A TTY-looking stdin backed by a pipe, so the event loop can watch it."""
+
+    def __init__(self, text: str):
+        import os
+
+        r, w = os.pipe()
+        os.write(w, text.encode())
+        os.close(w)
+        self._f = os.fdopen(r, "r")
+
+    def fileno(self):
+        return self._f.fileno()
+
+    def readline(self):
+        return self._f.readline()
+
+    def isatty(self):
+        return True
+
+
+class _NoLogin:
+    async def cookies(self, url=None):
+        return []
+
+
+@pytest.mark.parametrize(("typed", "skipped"), [("\n", False), ("s\n", True)])
+def test_login_wait_enter_retries_and_s_skips(monkeypatch, typed, skipped):
+    """Enter after signing in asks for the retry (the site's cookie names are
+    unknown to mosaic); only `s` skips. The line is consumed either way, so it
+    cannot leak into the next prompt and abandon the next paper."""
+    stdin = _PipeStdin(typed + "left over\n")
+    monkeypatch.setattr(rb.sys, "stdin", stdin)
+
+    out = asyncio.run(rb.login_wait(_NoLogin(), "https://doi.org/10.a/b", wait_s=5))
+    assert out == (False, skipped)
+    assert stdin.readline() == "left over\n"
 
 
 def test_download_one_times_out(monkeypatch, tmp_path):

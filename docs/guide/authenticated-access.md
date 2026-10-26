@@ -97,7 +97,10 @@ same window and reuses the login. Close the window and the next run asks you to 
 
 When a page asks for a login, mosaic opens that site's article in a window and prints `Login needed`. It then
 waits up to 3 minutes for a login cookie, retries the paper once, and does not ask again for that site in the
-same run. Press Enter in the terminal to stop waiting.
+same run. Once you have signed in, press Enter in the terminal to retry at once: most publishers' session
+cookies have names mosaic cannot recognize, so without the Enter the wait runs to its end. Type `s` and Enter
+to skip the paper instead. A PDF link the profile is not entitled to (AIAA answers it with HTTP 403) counts
+as a login page, so the login comes up in seconds.
 
 ::: warning Automated access and publisher terms ⚠
 Automated access may conflict with a publisher's terms. mosaic does not disguise itself here; it drives a real

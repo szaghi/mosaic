@@ -1794,7 +1794,8 @@ def _prompt_login(url: str) -> None:
     rprint(
         "\n[yellow]Login needed:[/yellow] complete the sign-in (SSO) in the Chrome window"
         f" that just opened at\n  [dim]{url[:110]}[/dim]\n"
-        "[dim]Waiting up to 3 minutes; if you have no account here, just wait it out; press Enter here to skip the wait.[/dim]"
+        "[dim]Waiting up to 3 minutes. Once you are signed in, press Enter here to retry the"
+        " paper; type s and Enter to skip it.[/dim]"
     )
 
 

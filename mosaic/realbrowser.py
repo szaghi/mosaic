@@ -218,19 +218,30 @@ _FIRE_REDIRECT = """() => {
 
 _ASSET_URL_RE = re.compile(r'https://pdf\.sciencedirectassets\.com/[^\s"\'<>]+')
 
-_PDF_LINKS_JS = """(pii) => {
+# The article's own PDF link, never one of its references: a reference list
+# links the PDFs of cited papers (AIAA pages link NeurIPS ones), so anchors on
+# another host or inside the bibliography are dropped, and links that name
+# the paper's DOI go first.
+_PDF_LINKS_JS = """([pii, doi]) => {
   const ok = (u) => !pii || u.toUpperCase().includes(pii);
+  const named = (u) => !!doi && decodeURIComponent(u).toUpperCase().includes(doi);
   const out = [];
   const meta = document.querySelector('meta[name="citation_pdf_url"]');
   if (meta && meta.content && ok(meta.content)) out.push(meta.content);
+  const refs = '.references, #references, .ref-list, .bibliography, [class*="reference"]';
   for (const a of document.querySelectorAll('a[href]')) {
     if (!a.href) continue;
     const h = a.href.toUpperCase();
     const isPdf = h.includes('/PDFFT') || h.includes('PDFDIRECT') ||
       h.endsWith('.PDF') || h.includes('/DOI/PDF/') || h.includes('/DOI/EPDF/');
-    if (isPdf && ok(a.href)) out.push(a.href);
+    if (!isPdf || !ok(a.href) || a.closest(refs)) continue;
+    let host = '';
+    try { host = new URL(a.href).host; } catch (e) { continue; }
+    if (host !== location.host && !named(a.href)) continue;
+    out.push(a.href);
   }
-  return Array.from(new Set(out)).slice(0, 5);
+  const uniq = Array.from(new Set(out));
+  return uniq.filter(named).concat(uniq.filter((u) => !named(u))).slice(0, 5);
 }"""
 
 # Journal DOIs resolve over HTTP only as far as Elsevier's linkinghub, whose
@@ -279,7 +290,7 @@ class AutoItem:
 
 
 async def poll_pdf_links(
-    article, pii: str | None, seconds: float = 30.0, step_s: float = 1.5
+    article, pii: str | None, seconds: float = 30.0, step_s: float = 1.5, doi: str = ""
 ) -> list[str]:
     """Read the article page for PDF links until they appear, or give up.
 
@@ -290,7 +301,7 @@ async def poll_pdf_links(
     deadline = time.monotonic() + seconds
     while True:
         try:
-            links = await article.evaluate(_PDF_LINKS_JS, pii)
+            links = await article.evaluate(_PDF_LINKS_JS, [pii, doi.upper()])
         except Exception:
             links = []
         if links:
@@ -376,7 +387,8 @@ async def download_one(
 
         pii = extract_pii(url)
         ids = _name_ids(item.key, url)
-        links = await poll_pdf_links(article, pii, seconds=link_wait_s)
+        doi = item.key if item.key.startswith("10.") else ""
+        links = await poll_pdf_links(article, pii, seconds=link_wait_s, doi=doi)
         log.debug("%s: landed %s, pii=%s, %d pdf link(s)", item.key, url[:80], pii, len(links))
         if not links:
             log.debug("no PDF link found on %s", url)
@@ -388,8 +400,12 @@ async def download_one(
         # The hop happens on a SECOND page; the article page stays open, since
         # closing the initiating page cancels an in-flight download.
         hop = await ctx.new_page()
+        status = 0
         try:
-            await hop.goto(links[0], referer=article.url, wait_until="commit", timeout=60_000)
+            resp = await hop.goto(
+                links[0], referer=article.url, wait_until="commit", timeout=60_000
+            )
+            status = getattr(resp, "status", 0) or 0
         except Exception:
             log.debug("hop navigation aborted (download conversion), %s", item.key)
         # a hop that lands on the identity or sign-in pages means the session
@@ -398,6 +414,18 @@ async def download_one(
         if wall == "login-required":
             log.debug("hop hit the login wall for %s", item.key)
             return "login-required"
+        if status in (401, 403):
+            # an Atypon site (AIAA, ...) answers a PDF the profile is not
+            # entitled to with a 403 page: no download will ever follow. At
+            # commit the body is still empty, so read it once it has loaded;
+            # a Cloudflare 403 is a check, left to the flow below.
+            try:
+                await hop.wait_for_load_state("domcontentloaded", timeout=15_000)
+            except Exception:
+                pass
+            if await classify_hop_wall(hop) != "challenge":
+                log.debug("hop refused with HTTP %d for %s", status, item.key)
+                return "login-required"
 
         async def poll(seconds: float) -> Path | None:
             deadline = time.monotonic() + seconds
@@ -500,9 +528,12 @@ async def login_wait(
 ) -> tuple[bool, bool]:
     """Wait for the user to complete the SSO in the visible browser.
 
-    *prompt* receives the article URL (the CLI prints guidance). Pressing
-    Enter in the terminal skips ahead; a login cookie appearing for *url*
-    ends the wait successfully.
+    *prompt* receives the article URL (the CLI prints guidance). A login
+    cookie appearing for *url* ends the wait successfully. A bare Enter ends
+    it too and asks for the retry ("I have logged in": most sites' session
+    cookies carry names mosaic cannot recognize); a line starting with ``s``
+    skips the paper. The pressed line is consumed, so it cannot leak into the
+    next prompt and abandon the paper after this one.
 
     Returns ``(login_visible, user_skipped)``: the retry decision belongs to
     the caller, since a login cookie mosaic does not recognize by name is
@@ -510,18 +541,20 @@ async def login_wait(
     """
     if prompt:
         prompt(url)
-    skip = asyncio.Event()
+    pressed = asyncio.Event()
     loop = asyncio.get_running_loop()
     if sys.stdin.isatty():
-        loop.add_reader(sys.stdin, skip.set)
+        loop.add_reader(sys.stdin, pressed.set)
     try:
         deadline = time.monotonic() + wait_s
         while time.monotonic() < deadline:
-            if skip.is_set():
-                return await _has_login_cookie(ctx, url), True
+            if pressed.is_set():
+                line = await asyncio.to_thread(sys.stdin.readline)
+                skipped = line.strip().lower().startswith("s")
+                return await _has_login_cookie(ctx, url), skipped
             if await _has_login_cookie(ctx, url):
                 return True, False
-            await asyncio.sleep(3)
+            await asyncio.sleep(1)
         return False, False  # timed out: the user may still have logged in
     finally:
         if sys.stdin.isatty():
