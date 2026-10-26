@@ -1881,15 +1881,6 @@ def _handoff_retry(
     return {by_key[k].uid: v for k, v in saved.items()}
 
 
-def _prompt_login(url: str) -> None:
-    rprint(
-        "\n[yellow]Login needed:[/yellow] complete the sign-in (SSO) in the Chrome window"
-        f" that just opened at\n  [dim]{url[:110]}[/dim]\n"
-        "[dim]Waiting up to 3 minutes. Once you are signed in, press Enter here to retry the"
-        " paper; type s and Enter to skip it.[/dim]"
-    )
-
-
 def _prompt_check() -> None:
     rprint(
         "  [yellow]Human check:[/yellow] the page in the Chrome window asks you to confirm you"
@@ -1924,6 +1915,8 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
         for key, p in by_key.items()
     ]
 
+    login_sites: list[str] = []
+
     def report(key: str, path: str | None, note: str) -> None:
         label = _clip(by_key[key].title or key, 90)
         if path:
@@ -1935,8 +1928,11 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
             rprint(f"  [dim]– {note}: {_clip(label, 80)}[/dim]")
         elif note == "stopped: repeated walls":
             rprint(f"  [dim]– stopped after repeated walls: {_clip(label, 80)}[/dim]")
-        elif note == "login required":
-            rprint(f"  [yellow]?[/yellow] login needed: {_clip(label, 80)}")
+        elif note.startswith("login required"):
+            site = note.partition(": ")[2]
+            if site and site not in login_sites:
+                login_sites.append(site)
+            rprint(f"  [dim]– login needed: {_clip(label, 80)}[/dim]")
         elif note.startswith("no PDF:"):
             rprint(f"  [dim]– {note}: {_clip(label, 80)}[/dim]")
         else:
@@ -1948,17 +1944,17 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
         folder = None
     console.print(
         f"\n[bold]Auto pass with your Chrome[/bold]: driving it over CDP and filing each"
-        f" PDF it saves to [cyan]{_tilde(folder)}[/cyan].",
+        f" PDF it saves to [cyan]{_tilde(folder)}[/cyan]."
+        + (
+            " Enter skips the paper in flight; q and Enter stops the run."
+            if _stdin_isatty()
+            else ""
+        ),
         soft_wrap=True,
     )
     saved, state = auto_download_sync(
         items,
         on_result=report,
-        prompt_login=_prompt_login,
-        prompt_next=lambda: rprint(
-            "  [dim]Enter opens the next paper; s skips it; q stops the run.[/dim]"
-        ),
-        prompt_paper=lambda: rprint("  [dim]Enter skips this paper and moves on…[/dim]"),
         prompt_check=_prompt_check,
         max_papers=max_papers,
     )
@@ -1969,6 +1965,11 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
         )
     elif state == "failed":
         rprint("[yellow]The auto pass saved nothing; try --handoff for these papers.[/yellow]")
+    if login_sites:
+        rprint(
+            f"[dim]Skipped behind a login: {', '.join(login_sites)}. If you have access there,"
+            " sign in once in the mosaic Chrome window (it stays open) and re-run.[/dim]"
+        )
     return {by_key[k].uid: v for k, v in saved.items()}
 
 

@@ -39,20 +39,18 @@ usual name. It runs Chrome with a separate mosaic profile and never opens your d
 Windows Chrome or Edge, with the profile in `mosaic-cdp-profile` under your Windows user folder; the PDFs land
 first in `mosaic-auto-downloads` next to it.
 
-The first `--auto` run on a fresh mosaic profile opens a Chrome window and asks for the institutional sign-in;
-complete it once, and the pass runs unattended. Publishers' session cookies die with the browser, so one login
-per browser session is all the interaction you should expect; after that, the pass opens the first paper right
-away, and every later paper only after you press Enter in the terminal — one paper at a time, released by you.
-While a paper hangs in flight, pressing Enter abandons it and asks for the next; at the hold between papers,
-`s` skips the next paper without opening it, and `q` ends the run, reporting the rest as stopped by hand.
-A run without a terminal (a script) paces itself instead: 8 to 15 seconds apart on the same site, 3 more
-between sites.
+The pass runs unattended: one paper at a time, 8 to 15 seconds apart on the same site and 3 more between
+sites, with nothing to press. A paper whose site asks for a login is skipped and reported as "login needed",
+never waited on, so the sites you have no account with cost a few seconds per paper and the others still
+download. At the end mosaic lists the sites that asked for a login; if you do have access to one, sign in
+there once in the mosaic Chrome window and re-run. While a paper hangs in flight, pressing Enter in the
+terminal abandons it; `q` and Enter ends the run, reporting the rest as stopped by hand.
 
 - **Opt-in by design**: without `--auto` nothing is driven, and the pass never runs as a fallback on its own.
 - **Guardrails**: at most 50 papers per run (`--max-auto N` changes it). After 3 papers in a row on one
   publisher site end with no PDF, mosaic skips that site's remaining papers, reported as "stopped after
-  repeated walls", and goes on with the other sites. A login page does not count toward the 3. Re-run later:
-  the failed papers stay marked in the cache.
+  repeated walls", and goes on with the other sites. After 3 login pages in a row on one site, its remaining
+  papers are skipped without being opened. Re-run later: the failed papers stay marked in the cache.
 - **Rescue chain**: `--auto --interactive --handoff` together run them in this order; each takes what it can
   and passes the rest on.
 - **Account risk**: automating browser actions can conflict with a publisher's terms even when the papers are
@@ -97,18 +95,16 @@ For each paper the pass:
 The login lives in the mosaic profile, not in your daily one, so you sign in to ScienceDirect there once.
 ScienceDirect's login cookies (`sd_session_id`) are session cookies and end when that Chrome exits. mosaic only
 disconnects from the browser at the end of a run, so Chrome stays open. A later `--auto` run attaches to the
-same window and reuses the login. Close the window and the next run asks you to sign in again.
+same window and reuses the login. Close the window and the next run reports those papers as "login
+needed" until you sign in there again.
 
-When a page asks for a login, mosaic opens that site's article in a window and prints `Login needed`. It then
-waits up to 3 minutes for a login cookie, retries the paper once, and does not ask again for that site in the
-same run. Once you have signed in, press Enter in the terminal to retry at once: most publishers' session
-cookies have names mosaic cannot recognize, so without the Enter the wait runs to its end. Type `s` and Enter
-to skip the paper instead. A PDF link the profile is not entitled to (AIAA answers it with HTTP 403) counts
-as a login page, so the login comes up in seconds.
+A PDF link the profile is not entitled to (AIAA answers it with HTTP 403) counts as a login page, so a
+paper behind a paywall you have no account for is skipped in seconds.
 
 When the article page shows a Cloudflare human check ("Just a moment...", as ScienceDirect does), the check
-never clears by itself in a driven Chrome. mosaic prints `Human check` and waits up to 3 minutes while you
-click the box in the Chrome window; pressing Enter skips the paper.
+never clears by itself in a driven Chrome. This is the one step that needs you: mosaic prints `Human check`
+and waits up to 3 minutes while you click the box in the Chrome window; pressing Enter skips the paper. A run
+without a terminal does not wait, and reports the paper as "the page asked for a human check".
 
 ::: warning Automated access and publisher terms ⚠
 Automated access may conflict with a publisher's terms. mosaic does not disguise itself here; it drives a real

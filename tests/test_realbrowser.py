@@ -456,21 +456,13 @@ class _PipeStdin:
         return True
 
 
-class _NoLogin:
-    async def cookies(self, url=None):
-        return []
-
-
-@pytest.mark.parametrize(("typed", "skipped"), [("\n", False), ("s\n", True)])
-def test_login_wait_enter_retries_and_s_skips(monkeypatch, typed, skipped):
-    """Enter after signing in asks for the retry (the site's cookie names are
-    unknown to mosaic); only `s` skips. The line is consumed either way, so it
-    cannot leak into the next prompt and abandon the next paper."""
+@pytest.mark.parametrize(("typed", "cmd"), [("\n", "next"), ("s\n", "skip"), ("q\n", "quit")])
+def test_wait_for_enter_reads_and_consumes_the_line(monkeypatch, typed, cmd):
+    """The pressed line is read, so it cannot leak into the next paper's wait."""
     stdin = _PipeStdin(typed + "left over\n")
     monkeypatch.setattr(rb.sys, "stdin", stdin)
 
-    out = asyncio.run(rb.login_wait(_NoLogin(), "https://doi.org/10.a/b", wait_s=5))
-    assert out == (False, skipped)
+    assert asyncio.run(rb.wait_for_enter()) == cmd
     assert stdin.readline() == "left over\n"
 
 
@@ -589,8 +581,8 @@ def test_auto_download_one_site_stops_the_others(monkeypatch, tmp_path):
     assert notes["c"] == "stopped: repeated walls"
 
 
-def test_auto_download_waits_for_enter_between_papers(monkeypatch, tmp_path):
-    """One paper at a time: every paper after the first waits for an Enter."""
+def test_auto_download_needs_no_press_between_papers(monkeypatch, tmp_path):
+    """The pass runs by itself, even in a terminal: nobody presses anything."""
     ctx = FakeContext()
     browser = wire_connect(monkeypatch, ctx)
     monkeypatch.setattr(rb, "find_chrome", lambda: Path("/usr/bin/chrome"))
@@ -600,25 +592,24 @@ def test_auto_download_waits_for_enter_between_papers(monkeypatch, tmp_path):
         return f"/lib/{item.key}.pdf"
 
     monkeypatch.setattr(rb, "download_one", fake_one)
-    asks: list[str | None] = []
 
-    async def fake_wait(cb=None):
-        asks.append("pressed")
+    async def never_pressed(cb=None):
+        await asyncio.sleep(3600)
 
-    monkeypatch.setattr(rb, "wait_for_enter", fake_wait)
+    monkeypatch.setattr(rb, "wait_for_enter", never_pressed)
+    monkeypatch.setattr(rb.sys.stdin, "isatty", lambda: True)
 
     async def run():
         items = [rb.AutoItem(key=k, url="u", dest="d") for k in "abc"]
         return await rb.auto_download([*items], politeness_s=(0, 0))
 
-    saved = asyncio.run(run())
+    saved = asyncio.run(asyncio.wait_for(run(), timeout=5))
     assert saved == {"a": "/lib/a.pdf", "b": "/lib/b.pdf", "c": "/lib/c.pdf"}
-    assert asks == ["pressed", "pressed"]  # the first paper needs no release
     assert len(browser.sends) == 1  # download behavior still claimed once
 
 
-def test_auto_download_skip_at_the_gate(monkeypatch, tmp_path):
-    """`s` at the hold skips the next paper without driving the browser."""
+def test_auto_download_quit_during_a_flight_ends_the_run(monkeypatch, tmp_path):
+    """`q` while a paper is in flight stops it and reports the rest as hand-stopped."""
     ctx = FakeContext()
     wire_connect(monkeypatch, ctx)
     monkeypatch.setattr(rb, "find_chrome", lambda: Path("/usr/bin/chrome"))
@@ -626,50 +617,17 @@ def test_auto_download_skip_at_the_gate(monkeypatch, tmp_path):
 
     driven: list[str] = []
 
-    async def fake_one(_ctx, item, **kw):
+    async def slow_one(_ctx, item, **kw):
         driven.append(item.key)
-        return f"/lib/{item.key}.pdf"
+        await asyncio.sleep(3600)
 
-    monkeypatch.setattr(rb, "download_one", fake_one)
-    commands = iter(["skip", "next"])
-
-    async def fake_wait(cb=None):
-        return next(commands)
-
-    monkeypatch.setattr(rb, "wait_for_enter", fake_wait)
-    notes: dict[str, str] = {}
-
-    async def run():
-        items = [rb.AutoItem(key=k, url="u", dest="d") for k in "abc"]
-        return await rb.auto_download(
-            [*items], on_result=lambda k, _p, n: notes.setdefault(k, n), politeness_s=(0, 0)
-        )
-
-    saved = asyncio.run(run())
-    assert saved == {"a": "/lib/a.pdf", "c": "/lib/c.pdf"}
-    assert driven == ["a", "c"]  # b was never driven
-    assert notes["b"] == "skipped: by hand (Enter)"
-
-
-def test_auto_download_quit_ends_the_run(monkeypatch, tmp_path):
-    """`q` at the hold releases the remaining papers as hand-stopped."""
-    ctx = FakeContext()
-    wire_connect(monkeypatch, ctx)
-    monkeypatch.setattr(rb, "find_chrome", lambda: Path("/usr/bin/chrome"))
-    monkeypatch.setattr(rb, "download_folder", lambda: tmp_path / "dl")
-
-    driven: list[str] = []
-
-    async def fake_one(_ctx, item, **kw):
-        driven.append(item.key)
-        return f"/lib/{item.key}.pdf"
-
-    monkeypatch.setattr(rb, "download_one", fake_one)
+    monkeypatch.setattr(rb, "download_one", slow_one)
 
     async def fake_wait(cb=None):
         return "quit"
 
     monkeypatch.setattr(rb, "wait_for_enter", fake_wait)
+    monkeypatch.setattr(rb.sys.stdin, "isatty", lambda: True)
     notes: dict[str, str] = {}
 
     async def run():
@@ -678,11 +636,9 @@ def test_auto_download_quit_ends_the_run(monkeypatch, tmp_path):
             [*items], on_result=lambda k, _p, n: notes.setdefault(k, n), politeness_s=(0, 0)
         )
 
-    saved = asyncio.run(run())
-    assert saved == {"a": "/lib/a.pdf"}
+    assert asyncio.run(run()) == {}
     assert driven == ["a"]
-    assert notes["b"] == "stopped: by hand (Enter)"
-    assert notes["c"] == "stopped: by hand (Enter)"
+    assert notes == dict.fromkeys("abc", "stopped: by hand (Enter)")
 
 
 def test_auto_download_enter_during_a_flight_skips_it(monkeypatch, tmp_path):
@@ -716,40 +672,43 @@ def test_auto_download_enter_during_a_flight_skips_it(monkeypatch, tmp_path):
     assert notes["a"] == "skipped: by hand (Enter)"
 
 
-def test_auto_download_recovers_after_login(monkeypatch, tmp_path):
+def test_auto_download_skips_login_walls_and_goes_on(monkeypatch, tmp_path):
+    """A site the profile has no access to is skipped, never waited on: after 3
+    login walls in a row its other papers are not even opened, and the sites
+    with access still download."""
     ctx = FakeContext()
     wire_connect(monkeypatch, ctx)
     monkeypatch.setattr(rb, "find_chrome", lambda: Path("/usr/bin/chrome"))
     monkeypatch.setattr(rb, "download_folder", lambda: tmp_path / "dl")
 
-    calls = {"n": 0}
+    driven: list[str] = []
 
     async def fake_one(_ctx, item, **kw):
-        calls["n"] += 1
-        if calls["n"] == 1:
+        driven.append(item.key)
+        if "aiaa" in item.url:
             return "login-required"
         return f"/lib/{item.key}.pdf"
 
     monkeypatch.setattr(rb, "download_one", fake_one)
-    prompted: dict[str, bool] = {}
-
-    async def fake_login_wait(_ctx, url, prompt=None, **kw):
-        if prompt:
-            prompt(url)
-        return True, False
-
-    monkeypatch.setattr(rb, "login_wait", fake_login_wait)
-    monkeypatch.setattr(rb, "resolve_landing", lambda u: u)
+    notes: dict[str, str] = {}
 
     async def run():
-        items = [rb.AutoItem(key="a", url="https://doi.org/10.a/b", dest="d")]
+        items = [
+            *(
+                rb.AutoItem(key=f"a{i}", url=f"https://arc.aiaa.org/{i}", dest="d")
+                for i in range(5)
+            ),
+            rb.AutoItem(key="sd", url="https://www.sciencedirect.com/x", dest="d"),
+        ]
         return await rb.auto_download(
-            items, prompt_login=lambda u: prompted.update({u: True}), politeness_s=(0, 0)
+            items, on_result=lambda k, _p, n: notes.setdefault(k, n), politeness_s=(0, 0)
         )
 
-    saved = asyncio.run(run())
-    assert saved == {"a": "/lib/a.pdf"}
-    assert "https://doi.org/10.a/b" in prompted
+    saved = asyncio.run(asyncio.wait_for(run(), timeout=5))
+    assert saved == {"sd": "/lib/sd.pdf"}
+    assert driven == ["a0", "a1", "a2", "sd"]
+    assert notes["a0"] == "login required: arc.aiaa.org"
+    assert notes["a3"] == notes["a4"] == "skipped: arc.aiaa.org asks for a login"
 
 
 def test_auto_download_no_chrome_raises(monkeypatch, tmp_path):
@@ -772,72 +731,6 @@ def test_auto_download_without_playwright_raises(monkeypatch):
 
     with pytest.raises(DependencyError, match=r"mosaic-search\[browser\]"):
         asyncio.run(run())
-
-
-def test_login_cookie_seen_across_host_boundary(monkeypatch):
-    """Regression: doi.org URLs must still find a sciencedirect.com login."""
-
-    class JarOnly:
-        def __init__(self):
-            self.calls: list = []
-
-        async def cookies(self, url=None):
-            self.calls.append(url)
-            if url:  # scoped to doi.org: no sd_session_id there
-                return [{"name": "doi_resolving", "value": "x"}]
-            return [
-                {"name": "sd_session_id", "value": "v"},
-                {"name": "user_id", "value": "u"},
-            ]
-
-    ok = asyncio.run(rb._has_login_cookie(JarOnly(), "https://doi.org/10.a/b"))
-    assert ok is True
-
-    class Empty:
-        async def cookies(self, url=None):
-            return []
-
-    assert asyncio.run(rb._has_login_cookie(Empty(), "https://doi.org/10.a/b")) is False
-
-
-def test_auto_download_bings_up_login_mid_batch(monkeypatch, tmp_path):
-    """A session that dies mid-run gets its login bring-up and recovery too."""
-    ctx = FakeContext()
-    wire_connect(monkeypatch, ctx)
-    monkeypatch.setattr(rb, "find_chrome", lambda: Path("/usr/bin/chrome"))
-    monkeypatch.setattr(rb, "download_folder", lambda: tmp_path / "dl")
-
-    calls: dict[str, int] = {}
-
-    async def fake_one(_ctx, item, **kw):
-        if item.key == "b":
-            calls[item.key] = calls.get(item.key, 0) + 1
-            if calls[item.key] == 1:
-                return "login-required"  # first attempt: the wall
-        return f"/lib/{item.key}.pdf"
-
-    monkeypatch.setattr(rb, "download_one", fake_one)
-    prompted: dict[str, bool] = {}
-
-    async def fake_login_wait(_ctx, url, prompt=None, **kw):
-        if prompt:
-            prompt(url)
-        return True, False
-
-    monkeypatch.setattr(rb, "login_wait", fake_login_wait)
-    monkeypatch.setattr(rb, "resolve_landing", lambda u: u)
-
-    async def run():
-        items = [
-            rb.AutoItem(key=k, url="https://doi.org/10.a/" + k, dest="d") for k in ("a", "b", "c")
-        ]
-        return await rb.auto_download(
-            items, prompt_login=lambda u: prompted.update({u: True}), politeness_s=(0, 0)
-        )
-
-    saved = asyncio.run(run())
-    assert saved == {"a": "/lib/a.pdf", "b": "/lib/b.pdf", "c": "/lib/c.pdf"}
-    assert "https://doi.org/10.a/b" in prompted
 
 
 @pytest.fixture(autouse=True)

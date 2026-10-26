@@ -204,9 +204,6 @@ def set_pdf_download_prefs() -> None:
 
 # ── publisher page pieces ────────────────────────────────────────────────────
 
-# Station cookies whose presence (scoped to the article host) signals a login.
-_LOGIN_COOKIE_HINTS = ("sd_session_id", "idp_session", "_shibsession_", "pd_session")
-
 # ScienceDirect's interstitial fires the transfer from its own JS.
 _FIRE_REDIRECT = """() => {
   try {
@@ -516,71 +513,6 @@ async def download_one(
                     pass
 
 
-async def _has_login_cookie(ctx, url: str = "") -> bool:
-    """True when a publisher login cookie exists.
-
-    The hint names are short-lived session cookies that only exist while the
-    publisher considers the browser logged in. The lookup scoped to *url*'s
-    host cannot see a ScienceDirect login from a doi.org URL, so when the
-    scoped jar is empty the whole cookie jar is checked as a fallback.
-    """
-    for scope in ([url] if url else []) + [None]:
-        try:
-            cookies = await (ctx.cookies(scope) if scope else ctx.cookies())
-        except TypeError:
-            try:
-                cookies = await ctx.cookies()
-            except Exception:
-                cookies = []
-        except Exception:
-            continue
-        names = {c.get("name", "") for c in cookies}
-        if any(h in n for n in names for h in _LOGIN_COOKIE_HINTS):
-            return True
-    return False
-
-
-async def login_wait(
-    ctx, url: str, *, wait_s: float = 180.0, prompt: Callable[[str], None] | None = None
-) -> tuple[bool, bool]:
-    """Wait for the user to complete the SSO in the visible browser.
-
-    *prompt* receives the article URL (the CLI prints guidance). A login
-    cookie appearing for *url* ends the wait successfully. A bare Enter ends
-    it too and asks for the retry ("I have logged in": most sites' session
-    cookies carry names mosaic cannot recognize); a line starting with ``s``
-    skips the paper. The pressed line is consumed, so it cannot leak into the
-    next prompt and abandon the paper after this one.
-
-    Returns ``(login_visible, user_skipped)``: the retry decision belongs to
-    the caller, since a login cookie mosaic does not recognize by name is
-    still a real login.
-    """
-    if prompt:
-        prompt(url)
-    pressed = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    if sys.stdin.isatty():
-        loop.add_reader(sys.stdin, pressed.set)
-    try:
-        deadline = time.monotonic() + wait_s
-        while time.monotonic() < deadline:
-            if pressed.is_set():
-                line = await asyncio.to_thread(sys.stdin.readline)
-                skipped = line.strip().lower().startswith("s")
-                return await _has_login_cookie(ctx, url), skipped
-            if await _has_login_cookie(ctx, url):
-                return True, False
-            await asyncio.sleep(1)
-        return False, False  # timed out: the user may still have logged in
-    finally:
-        if sys.stdin.isatty():
-            try:
-                loop.remove_reader(sys.stdin)
-            except Exception:
-                pass
-
-
 async def wait_for_enter(callback: Callable[[], None] | None = None) -> str:
     """Hold until the user presses Enter; no-op (returns "next") without a TTY.
 
@@ -646,8 +578,6 @@ async def auto_download(
     items: list[AutoItem],
     *,
     on_result: Callable[[str, str | None, str], None] | None = None,
-    prompt_login: Callable[[str], None] | None = None,
-    prompt_next: Callable[[], None] | None = None,
     prompt_paper: Callable[[], None] | None = None,
     prompt_check: Callable[[], None] | None = None,
     politeness_s: tuple[float, float] = (8.0, 15.0),
@@ -656,13 +586,15 @@ async def auto_download(
 ) -> dict[str, str]:
     """Drive the real browser over *items*; return ``key -> saved path``.
 
-    Guardrails: strictly sequential papers, a per-run cap, and a hard stop
-    after *block_abort_after* consecutive walls (never hammer a publisher
-    that is deflecting). In an attended run (a TTY) the user holds the reins:
-    the first paper opens at once, every later one after an explicit Enter,
-    a press while a paper is in flight abandons that paper, ``s`` skips the
-    next one and ``q`` stops the run. Scripts (no TTY) pace themselves
-    instead, 8 to 15 seconds apart.
+    Guardrails: strictly sequential papers, 8 to 15 seconds apart (3 more
+    between publisher sites), a per-run cap, and a hard stop after
+    *block_abort_after* consecutive walls on one site (never hammer a
+    publisher that is deflecting). The run needs nobody: a paper behind a
+    login is reported and skipped, never waited on, so a site the profile has
+    no access to costs a few seconds per paper and the others still download.
+    The one wait is a human check (Cloudflare), which only a click clears:
+    with a TTY, *prompt_check* asks for it. With a TTY an Enter while a paper
+    is in flight abandons that paper and ``q`` stops the run.
 
     ``on_result(key, path_or_None, note)`` runs after every paper; the note is
     "" on success or the reason for a skip.
@@ -718,9 +650,9 @@ async def auto_download(
 
             attempted = 0
             abandon = False
-            brought_up: set[str] = set()
             for site, bucket in buckets.items():
                 site_blocked = 0
+                site_login = 0
                 for n, item in enumerate(bucket, 1):
                     if abandon:
                         if on_result:
@@ -732,20 +664,6 @@ async def auto_download(
                                 on_result(rest.key, None, "skipped: over the per-run cap")
                         break
                     attempted += 1
-                    # Attended pace: the first paper goes at once; every later
-                    # one needs an explicit release (Enter), a skip (s), or
-                    # the end of the run (q).
-                    if attempted > 1:
-                        cmd = await wait_for_enter(prompt_next)
-                        if cmd == "skip":
-                            if on_result:
-                                on_result(item.key, None, "skipped: by hand (Enter)")
-                            continue
-                        if cmd == "quit":
-                            abandon = True
-                            if on_result:
-                                on_result(item.key, None, "stopped: by hand (Enter)")
-                            continue
                     # An in-flight paper can be abandoned too: an Enter during
                     # the attempt skips THIS paper (q stops the run outright).
                     release = None
@@ -789,38 +707,16 @@ async def auto_download(
                             on_result(item.key, None, "skipped: by hand (Enter)")
                         continue
                     if outcome and outcome not in ("login-required", "challenge"):
-                        site_blocked = 0
+                        site_blocked = site_login = 0
                         saved[item.key] = outcome
                         if on_result:
                             on_result(item.key, outcome, "")
                     elif outcome == "login-required":
-                        # a login wall is not a publisher deflection: never
-                        # count it toward the abort; prompt its site once
-                        if site not in brought_up and prompt_login:
-                            brought_up.add(site)
-                            page = await ctx.new_page()
-                            try:
-                                await page.goto(
-                                    item.url, wait_until="domcontentloaded", timeout=45_000
-                                )
-                                _, skipped = await login_wait(ctx, item.url, prompt=prompt_login)
-                            except Exception:
-                                skipped = False
-                            try:
-                                await page.close()
-                            except Exception:
-                                pass
-                            if not skipped:
-                                # the user may have logged in even when the
-                                # hint names do not recognize the cookie:
-                                # the retry is the proof
-                                outcome = await download_one(ctx, item)
-                                if outcome and outcome != "login-required":
-                                    saved[item.key] = outcome
-                                    if on_result:
-                                        on_result(item.key, outcome, "")
-                        if on_result and item.key not in saved:
-                            on_result(item.key, None, "login required")
+                        # no access from this profile: skip it, never wait on
+                        # it (the user may have no account there at all)
+                        site_login += 1
+                        if on_result:
+                            on_result(item.key, None, f"login required: {site}")
                     else:
                         site_blocked += 1
                         if on_result:
@@ -831,6 +727,14 @@ async def auto_download(
                             else:
                                 on_result(item.key, None, "no PDF arrived")
 
+                    if site_login >= block_abort_after:
+                        log.debug(
+                            "%d login walls in a row at %s: skipping that site", site_login, site
+                        )
+                        for rest in bucket[n:]:
+                            if on_result:
+                                on_result(rest.key, None, f"skipped: {site} asks for a login")
+                        break
                     if site_blocked >= block_abort_after:
                         log.warning(
                             "%d consecutive walls at %s: skipping that site",
@@ -841,10 +745,10 @@ async def auto_download(
                             if on_result:
                                 on_result(rest.key, None, "stopped: repeated walls")
                         break
-                    if n < len(bucket) and politeness_s and not sys.stdin.isatty():
+                    if n < len(bucket) and politeness_s:
                         lo, hi = politeness_s
                         await asyncio.sleep(random.uniform(lo, hi))  # noqa: S311
-                if attempted < max_papers and politeness_s and not sys.stdin.isatty():
+                if attempted < max_papers and politeness_s != (0.0, 0.0):
                     await asyncio.sleep(3)  # a pause between publisher sites
         finally:
             try:
@@ -859,8 +763,6 @@ def auto_download_sync(
     items: list[tuple[str, str, str, str]],
     *,
     on_result: Callable[[str, str | None, str], None] | None = None,
-    prompt_login: Callable[[str], None] | None = None,
-    prompt_next: Callable[[], None] | None = None,
     prompt_paper: Callable[[], None] | None = None,
     prompt_check: Callable[[], None] | None = None,
     politeness_s: tuple[float, float] = (8.0, 15.0),
@@ -877,8 +779,6 @@ def auto_download_sync(
             auto_download(
                 real,
                 on_result=on_result,
-                prompt_login=prompt_login,
-                prompt_next=prompt_next,
                 prompt_paper=prompt_paper,
                 prompt_check=prompt_check,
                 politeness_s=politeness_s,

@@ -40,7 +40,8 @@ mosaic get --from refs.bib --handoff              # you click, mosaic files
 ```
 
 The open papers download as usual; the subscribed ones run through the auto pass, one publisher after the other.
-A login prompt waits up to 3 minutes per site. `--max-auto N` raises the 50-paper per-run cap for the auto pass.
+A paper behind a login you do not have is skipped, not waited on; a Cloudflare check waits up to 3 minutes
+for your click. `--max-auto N` raises the 50-paper per-run cap for the auto pass.
 Each paper's ledger is in the cache, so re-running the same command resumes where it stopped.
 
 ## mosaic cannot find your Downloads folder
