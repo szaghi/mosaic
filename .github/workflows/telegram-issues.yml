@@ -25,7 +25,7 @@ jobs:
           ACTION:       ${{ github.event.action }}
         run: |
           python3 - <<'EOF'
-          import os, json, urllib.request
+          import os, json, html, urllib.request
 
           # Skip if this event is actually a PR (GitHub fires `issues` for PRs too)
           if os.environ.get("ISSUE_PR_URL", "").strip():
@@ -34,7 +34,7 @@ jobs:
 
           action  = os.environ["ACTION"]
           number  = os.environ["ISSUE_NUMBER"]
-          title   = os.environ["ISSUE_TITLE"]
+          title   = html.escape(os.environ["ISSUE_TITLE"])   # parse_mode HTML
           url     = os.environ["ISSUE_URL"]
           body    = os.environ.get("ISSUE_BODY", "").strip()
           author  = os.environ["ISSUE_AUTHOR"]

@@ -19,7 +19,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           python3 - <<'EOF'
-          import os, json, urllib.request, urllib.parse
+          import os, json, html, urllib.request, urllib.parse
           from datetime import datetime, timezone, timedelta
 
           token       = os.environ["TELEGRAM_BOT_TOKEN"]
@@ -90,7 +90,7 @@ jobs:
           if merged_prs:
               lines.append(f"✅ <b>PRs merged:</b> {len(merged_prs)}")
               for p in merged_prs[:5]:
-                  lines.append(f'   · <a href="{p["html_url"]}">#{p["number"]}</a> {p["title"]}')
+                  lines.append(f'   · <a href="{p["html_url"]}">#{p["number"]}</a> {html.escape(p["title"])}')
               if len(merged_prs) > 5:
                   lines.append(f"   … and {len(merged_prs) - 5} more")
           else:

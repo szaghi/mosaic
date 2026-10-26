@@ -20,7 +20,7 @@ jobs:
           COMMITS_JSON: ${{ toJson(github.event.commits) }}
         run: |
           python3 - <<'EOF'
-          import os, json, urllib.request
+          import os, json, html, urllib.request
 
           pusher      = os.environ["PUSHER"]
           branch      = os.environ["BRANCH"]
@@ -41,7 +41,7 @@ jobs:
               sha   = c["id"][:7]
               msg   = c["message"].splitlines()[0]   # first line only
               msg   = msg if len(msg) <= MAX_MSG_LEN else msg[:MAX_MSG_LEN - 1] + "…"
-              lines.append(f"{sha} {msg}")
+              lines.append(f"{sha} {html.escape(msg)}")   # parse_mode HTML: <x> in a title is a 400
 
           if len(commits) > MAX_COMMITS:
               lines.append(f"… and {len(commits) - MAX_COMMITS} more")

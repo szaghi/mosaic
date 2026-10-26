@@ -26,12 +26,12 @@ jobs:
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           python3 - <<'EOF'
-          import os, json, urllib.request
+          import os, json, html, urllib.request
 
           action  = os.environ["ACTION"]
           merged  = os.environ["PR_MERGED"].lower() == "true"
           number  = os.environ["PR_NUMBER"]
-          title   = os.environ["PR_TITLE"]
+          title   = html.escape(os.environ["PR_TITLE"])   # parse_mode HTML
           url     = os.environ["PR_URL"]
           body    = os.environ.get("PR_BODY", "").strip()
           author  = os.environ["PR_AUTHOR"]
