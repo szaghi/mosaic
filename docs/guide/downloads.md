@@ -167,8 +167,8 @@ again. See [Cache](./cache#verify).
   `mosaic get DOI --handoff` (you click, mosaic files)
   ([authenticated access](./authenticated-access#auto-pass-with-your-chrome-auto)).
 - **Paywalled papers.** If you have access through a subscription or your institution, see
-  [Authenticated access](./authenticated-access): the `--auto` pass, saved sessions, `--interactive`,
-  `--handoff`.
+  [Authenticated access](./authenticated-access): the `--auto` pass (also through your institution's
+  [proxy](./authenticated-access#institutional-proxy)), saved sessions, `--interactive`, `--handoff`.
 - **Why did a download fail?** The cache keeps the reason of the last failure: `mosaic cache show DOI` prints it
   as the download status, for example `error: not a pdf (text/html)`.
 

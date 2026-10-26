@@ -36,6 +36,7 @@ mosaic cache stats              # cache statistics
 mosaic notebook create "topic"  # create a Google NotebookLM notebook
 mosaic auth login elsevier      # browser session for authenticated SEARCH on ScienceDirect
 mosaic get <doi> --auto         # subscribed PDF via your own Chrome (Elsevier included)
+mosaic config --proxy-url 'https://proxy.example.org:2481/{doi}'  # --auto through an institutional proxy
 mosaic skill install            # install this Claude Code skill to the current project
 mosaic skill install --global   # install to ~/.claude/skills/ (available in all projects)
 mosaic skill show               # print skill content to stdout
@@ -214,9 +215,12 @@ mosaic get --from library.csv   # bulk-download from CSV file (must have 'doi' c
 Options: `--oa-only`, `--download-dir`, `--zotero`, `--zotero-collection`, `--obsidian`.
 
 Rescues for paywalled papers you are entitled to: `--auto` (mosaic drives your own Chrome/Edge through the
-publisher's PDF chain and files each download; Elsevier included; one login per publisher per browser session),
-`--interactive` (a visible automated window; CAPTCHAs), `--handoff` (you click in your own browser, mosaic files
-the PDF). With `--from`, the rescues run over the failed papers; the cache ledgers them, so re-runs resume.
+publisher's PDF chain and files each download; Elsevier included; unattended: papers behind a login the mosaic
+profile lacks are skipped as "login needed"; at most 50 per run, `--max-auto N`; with config `proxy.url` every
+DOI starts at the institutional proxy), `--interactive` (a visible automated window; CAPTCHAs), `--handoff` (you
+click in your own browser, mosaic files the PDF), `--anna` (the same hand-off on Anna's Archive). With `--from`,
+the rescues run over the failed papers; the cache ledgers them, so re-runs resume. From a terminal, mosaic offers
+to save the papers still failing to `<input>-failed.csv` for a later `--from`.
 
 ## cite Command
 

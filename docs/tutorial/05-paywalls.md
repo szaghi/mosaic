@@ -25,9 +25,11 @@ lands in a mosaic watch folder and is filed under the paper's name. ScienceDirec
 fingerprint checks that every automatically installed browser fails; a genuine Chrome passes them, so this is
 the pass that finishes Elsevier unattended.
 
-You log in once per publisher; browsers' session cookies die with the window, so a fresh run may ask again and
-wait three minutes per site. The pass is strictly sequential with a pause between papers and stops a site after
-three consecutive walls, so re-running is always safe. [Authenticated access](/guide/authenticated-access) has
+The pass runs unattended. A paper behind a login the mosaic profile does not have is reported as "login needed"
+and skipped, and the run ends by naming those sites: sign in there once in the mosaic window (it stays open) and
+re-run. It is strictly sequential with a pause between papers and stops a site after three consecutive walls, so
+re-running is always safe. If your institution has a proxy, `mosaic config --proxy-url` sends every paper
+through it. [Authenticated access](/guide/authenticated-access) has
 the full description and the guardrails.
 
 ## Your browser does the download

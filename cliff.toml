@@ -33,6 +33,8 @@ commit_preprocessors = [
     { pattern = "^\\s+", replace = "" },
     { pattern = "^Merge pull request.*", replace = "chore: merge" },
     { pattern = "^Merge branch.*", replace = "chore: merge" },
+    # <placeholder> in a title is code: bare, VitePress reads it as an unclosed HTML tag
+    { pattern = '(^|[^`])<([A-Za-z][\w-]*)>', replace = '${1}`<${2}>`' },
 ]
 conventional_commits = true
 filter_unconventional = true

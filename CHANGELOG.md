@@ -14,7 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - **realbrowser**: Stop --auto failing fast on AIAA logins and reference links
 
-- **docs**: Wrap <placeholder> help text in code spans in the CLI reference
+- **docs**: Wrap `<placeholder>` help text in code spans in the CLI reference
 
 - **ci**: Escape titles in the Telegram notifications
 

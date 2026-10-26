@@ -15,9 +15,22 @@ mosaic get 10.1016/j.paerosci.2006.01.001 --auto
 ```
 
 `--auto` drives your own Chrome (or Edge; on WSL the Windows one) through the paper's PDF chain and files each
-download it saves; ScienceDirect's fingerprint wall passes because the driver is a genuine browser. Log in once
-per publisher in the window mosaic opens. Guide:
+download it saves; ScienceDirect's fingerprint wall passes because the driver is a genuine browser. Where the
+mosaic profile has no login, the paper is skipped as "login needed"; sign in there once in the mosaic window and
+re-run. Guide:
 [auto pass](/guide/authenticated-access#auto-pass-with-your-chrome-auto).
+
+### Through your institution's proxy
+
+```bash
+mosaic config --proxy-url 'https://biblioproxy.cnr.it:2481/{doi}'
+mosaic get --from refs.bib --auto
+```
+
+Copy your proxy's address from a paper you opened through it, with `{doi}` in place of the DOI, and sign in to the
+proxy once in the mosaic Chrome window. Publishers the proxy covers then download with your institution's
+subscription; when the proxy session ends mid-run, mosaic opens its sign-in page and goes on once you are in.
+Guide: [institutional proxy](/guide/authenticated-access#institutional-proxy).
 
 ### The same paper, you click
 

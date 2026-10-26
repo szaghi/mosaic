@@ -5,7 +5,8 @@ title: mosaic get
 # mosaic get
 
 Downloads the PDF of one paper by DOI, or of every DOI in a BibTeX or CSV file. Papers that fail can be retried
-in a browser: one mosaic drives (`--interactive`) or your own (`--handoff`).
+in a browser: your Chrome, driven by mosaic (`--auto`), a window mosaic controls (`--interactive`), or your own
+browser, where you click (`--handoff`, `--anna`).
 
 ## Usage
 
@@ -13,6 +14,8 @@ in a browser: one mosaic drives (`--interactive`) or your own (`--handoff`).
 mosaic get 10.3389/fphy.2019.00140                    # one paper
 mosaic get --from refs.bib                            # every DOI in a BibTeX file
 mosaic get --from refs.csv --oa-only                  # papers with no open copy count as skipped
+mosaic get 10.1016/j.paerosci.2006.01.001 --auto      # your Chrome, unattended
+mosaic get --from refs.bib --auto --max-auto 200      # the same over a list, past the 50-paper cap
 mosaic get 10.1016/j.paerosci.2006.01.001 --handoff   # download it yourself; mosaic files it
 mosaic get --from refs.bib --interactive              # retry failures in a visible browser
 mosaic get 10.3389/fphy.2019.00140 --download-dir ~/papers/project
@@ -36,6 +39,26 @@ you log in or pass a check; it needs the `browser` extra. **`--handoff`** opens 
 the downloads folder (`--watch-dir`, or the detected one): the next PDF that appears is moved into the library
 under the paper's name. Press Enter when done with a paper, or to skip it. Hand-off works where publishers refuse
 any automated browser, as Elsevier does.
+
+**`--auto`** drives your installed Chrome or Edge (on WSL the Windows one), with a dedicated mosaic profile,
+through each failed paper's PDF chain, and files the download. It runs unattended, one paper at a time: a paper
+behind a login the profile does not have is reported as "login needed" and skipped, and the run ends by naming
+those sites. Run from a terminal, it stops only for what needs you: a Cloudflare check to click, or the sign-in
+of your institutional proxy when its session has ended; Enter skips the paper in flight, `q` and Enter ends the
+run. With `proxy.url` set ([`mosaic config --proxy-url`](./config)), every DOI starts at your institution's
+proxy instead of `doi.org`. At most 50 papers per run (`--max-auto N`). See
+[the auto pass](/guide/authenticated-access#auto-pass-with-your-chrome-auto).
+
+**`--anna`** is a hand-off to Anna's Archive: the failed papers open there, one at a time, in your own browser,
+and mosaic files what you download (mirror from config `anna.mirror`). See
+[downloads](/guide/downloads#hand-off-to-anna-s-archive-anna).
+
+**Rescue order.** Given together, the rescues run as `--auto`, then `--interactive`, then `--handoff` or `--anna`;
+each takes the papers the previous one left.
+
+**The failed papers.** When papers stay without a PDF and the run has a terminal, mosaic asks whether to save
+their DOIs to `<input>-failed.csv` in the current directory (`failed.csv` for a single DOI), ready for a later
+`mosaic get --from`.
 
 Exit code 1 if you give both a DOI and `--from`, neither, or a file that does not exist or has the wrong type; if
 the DOI has no downloadable copy; or, with `--from`, if any paper failed. Papers counted as skipped with

@@ -33,7 +33,8 @@
 </tr>
 <tr>
 <td><b>🔐 Paywalls, legally</b><br><sub>Where a publisher blocks automation (Elsevier), <code>mosaic get --auto</code>
-drives <em>your</em> Chrome through the same moves you would make and files each download unattended; without
+drives <em>your</em> Chrome through the same moves you would make and files each download unattended, through
+your institution's proxy if you have one; without
 Chrome, <code>mosaic get --handoff</code> opens the article in your own browser and files the PDF you download;
 <code>mosaic import</code> files PDFs you already have, by their DOI. No paywall or bot-check evasion.
 <a href="https://szaghi.github.io/mosaic/tutorial/05-paywalls">Paywalled papers</a></sub></td>

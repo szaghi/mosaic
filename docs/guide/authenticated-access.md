@@ -10,7 +10,7 @@ session, an interactive browser window, and a hand-off to your own browser.
 
 | Method | You do | Works when |
 |---|---|---|
-| Auto pass (`mosaic get --auto`) | log in once per browser session | your machine has a Chrome/Edge mosaic can drive (Windows Chrome from WSL included); follows you through fingerprint-guarded publishers like Elsevier |
+| Auto pass (`mosaic get --auto`) | log in once per browser session, at each publisher or once at your institution's [proxy](#institutional-proxy) | your machine has a Chrome/Edge mosaic can drive (Windows Chrome from WSL included); follows you through fingerprint-guarded publishers like Elsevier |
 | Saved session (`mosaic auth login`) | log in once | the publisher accepts a headless browser with your cookies |
 | `mosaic get --interactive` | log in or solve a check in a window mosaic drives | the publisher accepts a visible automated browser |
 | `mosaic get --handoff` | click Download in your own browser | always, including Elsevier without Chrome |
@@ -51,10 +51,10 @@ terminal abandons it; `q` and Enter ends the run, reporting the rest as stopped 
   publisher site end with no PDF, mosaic skips that site's remaining papers, reported as "stopped after
   repeated walls", and goes on with the other sites. After 3 login pages in a row on one site, its remaining
   papers are skipped without being opened. Re-run later: the failed papers stay marked in the cache.
-- **Rescue chain**: `--auto --interactive --handoff` together run them in this order; each takes what it can
-  and passes the rest on.
+- **Rescue chain**: `--auto --interactive --handoff` (or `--anna` in place of `--handoff`) together run them in
+  this order; each takes what it can and passes the rest on.
 - **Account risk**: automating browser actions can conflict with a publisher's terms even when the papers are
-  yours to read. The pass paces itself to look like a person reading; how you weigh the terms is yours to
+  yours to read. The pass goes at a reader's pace, one paper at a time; how you weigh the terms is yours to
   decide.
 
 Works best where the bot checks are the *only* obstacle, Elsevier above all: the probe behind this pass saved
@@ -130,7 +130,8 @@ A PDF link the profile is not entitled to (AIAA answers it with HTTP 403) counts
 paper behind a paywall you have no account for is skipped in seconds.
 
 When the article page shows a Cloudflare human check ("Just a moment...", as ScienceDirect does), the check
-never clears by itself in a driven Chrome. This is the one step that needs you: mosaic prints `Human check`
+never clears by itself in a driven Chrome. This is one of the two steps that need you (the other is the
+[proxy sign-in](#institutional-proxy)): mosaic prints `Human check`
 and waits up to 3 minutes while you click the box in the Chrome window; pressing Enter skips the paper. A run
 without a terminal does not wait, and reports the paper as "the page asked for a human check".
 
