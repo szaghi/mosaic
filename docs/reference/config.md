@@ -69,6 +69,7 @@ mosaic config [OPTIONS]
 | `--zenodo-key` | `TEXT` |  | Set Zenodo API key |
 | `--zotero-key` | `TEXT` |  | Set Zotero API key (web API) |
 | `--unpaywall-email` | `TEXT` |  | Set Unpaywall email |
+| `--proxy-url` | `TEXT` |  | Set an institutional proxy (EZproxy) for get --auto, with {doi} where the DOI goes, e.g. `https://biblioproxy.cnr.it:2481/{doi};` none removes it |
 | `--download-dir` | `TEXT` |  | Set PDF download directory |
 | `--db-path` | `TEXT` |  | Set SQLite cache path |
 | `--filename-pattern` | `TEXT` |  | Set PDF filename pattern (placeholders: {year}, {source}, {author}, {title}, {doi}) |

@@ -810,3 +810,263 @@ def test_auto_download_sync_empty_ok():
     with patch.object(rb, "auto_download", fake):
         saved, state = rb.auto_download_sync([("k", "l", "u", "d")])
     assert state == "failed"
+
+
+# ── institutional proxy (EZproxy) ────────────────────────────────────────────
+
+PROXY = "https://biblioproxy.cnr.it:2481/{doi}"
+
+
+def test_proxied_url_places_the_doi():
+    assert rb.proxied_url(PROXY, "10.1016/j.jcp.2022.110998") == (
+        "https://biblioproxy.cnr.it:2481/10.1016/j.jcp.2022.110998"
+    )
+    assert rb.proxied_url(PROXY, "10.1002/(SICI)1097<x>") == (
+        "https://biblioproxy.cnr.it:2481/10.1002/(SICI)1097%3Cx%3E"
+    )
+
+
+def test_is_proxy_login():
+    assert rb.is_proxy_login("https://biblioproxy.cnr.it/login?qurl=https://doi.org%2f10.1%2fx")
+    assert rb.is_proxy_login("https://ezproxy.example.edu/login?url=https://doi.org/10.1/x")
+    assert not rb.is_proxy_login("https://biblioproxy.cnr.it/menu")
+    assert not rb.is_proxy_login("https://arc.aiaa.org/action/showLogin?uri=/doi/x")
+    assert not rb.is_proxy_login("https://biblioproxy.cnr.it:2114/science/article/pii/S1")
+
+
+def test_download_one_proxy_login_page(monkeypatch, tmp_path):
+    """An expired proxy session lands on the proxy's sign-in form."""
+    login = "https://biblioproxy.cnr.it/login?qurl=https://doi.org%2f10.1%2fx"
+    ctx = _login_ctx(monkeypatch, tmp_path, lambda url: login)
+
+    async def run():
+        item = rb.AutoItem(key="10.1/x", url=rb.proxied_url(PROXY, "10.1/x"), dest="d")
+        return await rb.download_one(ctx, item)
+
+    assert asyncio.run(run()) == "proxy-login"
+
+
+def test_auto_download_groups_proxied_papers_by_publisher(monkeypatch, tmp_path):
+    """Every proxied URL resolves to the proxy host: grouping uses site_url, so a
+    publisher outside the proxy (AIAA) cannot starve the ones inside it."""
+    ctx = FakeContext()
+    wire_connect(monkeypatch, ctx)
+    monkeypatch.setattr(rb, "find_chrome", lambda: Path("/usr/bin/chrome"))
+    monkeypatch.setattr(rb, "download_folder", lambda: tmp_path / "dl")
+    hosts = {"10.2514": "https://arc.aiaa.org/doi/x", "10.1016": "https://www.sciencedirect.com/x"}
+    monkeypatch.setattr(rb, "resolve_landing", lambda u: hosts.get(u.split("/")[3], u))
+
+    async def fake_one(_ctx, item, **kw):
+        return "login-required" if item.key.startswith("10.2514") else f"/lib/{item.key}.pdf"
+
+    monkeypatch.setattr(rb, "download_one", fake_one)
+    notes: dict[str, str] = {}
+
+    def item(doi):
+        return rb.AutoItem(
+            key=doi, url=rb.proxied_url(PROXY, doi), dest="d", site_url=f"https://doi.org/{doi}"
+        )
+
+    async def run():
+        items = [item(f"10.2514/a{i}") for i in range(3)] + [item("10.1016/j.x")]
+        return await rb.auto_download(
+            items, on_result=lambda k, _p, n: notes.setdefault(k, n), politeness_s=(0, 0)
+        )
+
+    saved = asyncio.run(asyncio.wait_for(run(), timeout=5))
+    assert saved == {"10.1016/j.x": "/lib/10.1016/j.x.pdf"}
+    assert notes["10.2514/a0"] == "login required: arc.aiaa.org"
+
+
+def test_auto_download_proxy_login_names_the_proxy(monkeypatch, tmp_path):
+    ctx = FakeContext()
+    wire_connect(monkeypatch, ctx)
+    monkeypatch.setattr(rb, "find_chrome", lambda: Path("/usr/bin/chrome"))
+    monkeypatch.setattr(rb, "download_folder", lambda: tmp_path / "dl")
+
+    async def fake_one(_ctx, item, **kw):
+        return "proxy-login"
+
+    monkeypatch.setattr(rb, "download_one", fake_one)
+    notes: dict[str, str] = {}
+
+    async def run():
+        it = rb.AutoItem(key="10.1/x", url=rb.proxied_url(PROXY, "10.1/x"), dest="d")
+        return await rb.auto_download(
+            [it], on_result=lambda k, _p, n: notes.setdefault(k, n), politeness_s=(0, 0)
+        )
+
+    assert asyncio.run(run()) == {}
+    assert notes["10.1/x"] == "login required: biblioproxy.cnr.it"
+
+
+def test_auto_download_sync_carries_site_url(monkeypatch):
+    seen: dict = {}
+
+    async def fake_auto(items, **kw):
+        seen["site"] = [i.site_url for i in items]
+        return {}
+
+    monkeypatch.setattr(rb, "auto_download", fake_auto)
+    rb.auto_download_sync([("k", "l", "u", "d", "https://doi.org/10.1/x"), ("k2", "l", "u", "d")])
+    assert seen["site"] == ["https://doi.org/10.1/x", ""]
+
+
+@pytest.mark.parametrize("proxy", [PROXY, ""])
+def test_cli_auto_pass_starts_at_the_proxy(monkeypatch, tmp_path, proxy):
+    """With proxy.url set, --auto opens <proxy>/<DOI>; doi.org still names the site."""
+    from mosaic import cli
+    from mosaic.models import Paper
+
+    seen: dict = {}
+
+    def fake_sync(items, **kw):
+        seen["items"] = items
+        return {}, "failed"
+
+    monkeypatch.setattr(rb, "auto_download_sync", fake_sync)
+    monkeypatch.setattr(rb, "download_folder", lambda: tmp_path / "dl")
+    p = Paper(title="T", authors=["A"], year=2022, doi="10.1016/j.x", source="crossref")
+    cfg = {"download_dir": str(tmp_path), "proxy": {"url": proxy}}
+    cli._auto_retry([p], cfg, cache=None)
+    (_key, _label, url, _dest, site_url) = seen["items"][0]
+    if proxy:
+        assert (url, site_url) == (
+            "https://biblioproxy.cnr.it:2481/10.1016/j.x",
+            "https://doi.org/10.1016/j.x",
+        )
+    else:
+        assert (url, site_url) == ("https://doi.org/10.1016/j.x", "")
+
+
+def test_direct_pdf_url_from_a_wiley_viewer_page():
+    html = (
+        '<iframe src="/templates/pdf-viewer/web/viewer.html?file=/doi/pdfdirect/10.1002/fld.5091">'
+        '<a href="/doi/pdfdirect/10.1002/fld.5091">'
+    )
+    base = "https://biblioproxy.cnr.it:2270/doi/pdf/10.1002/fld.5091"
+    assert rb._direct_pdf_url(html, base) == (
+        "https://biblioproxy.cnr.it:2270/doi/pdfdirect/10.1002/fld.5091?download=true"
+    )
+    assert rb._direct_pdf_url("<html>no viewer</html>", base) is None
+
+
+def test_download_one_files_a_pdf_named_without_ids_by_its_doi(monkeypatch, tmp_path):
+    """Wiley's viewer page hides the file behind /doi/pdfdirect/, and the file it
+    saves is named after journal, year and title: the DOI inside the PDF files it."""
+    ctx = FakeContext()
+    dl = tmp_path / "dl"
+    monkeypatch.setattr(rb, "download_folder", lambda: dl)
+    doi = "10.1002/fld.5091"
+    article = "https://biblioproxy.cnr.it:2270/doi/" + doi
+    ctx.pdf_links = ["https://biblioproxy.cnr.it:2270/doi/pdf/" + doi]
+    ctx.fire_result = "no-fn"
+    ctx.content = '<html><a href="/doi/pdfdirect/10.1002/fld.5091">' + "x" * 5000 + "</html>"
+    later = _Later(dl, 0.1)
+    named = "Numerical Methods in Fluids - 2022 - Gao - On the investigation.pdf"
+    opened: list[str] = []
+
+    async def goto(page, url):
+        page.url = url
+
+    def on_location(page, url):
+        opened.append(url)
+        later.write(name=named, body=PDF_BODY + b" /doi " + doi.encode())
+
+    ctx.goto_handler = goto
+    ctx.on_location = on_location
+    dest = tmp_path / "lib" / "p.pdf"
+
+    async def run():
+        item = rb.AutoItem(key=doi, url=article, dest=str(dest))
+        return await rb.download_one(
+            ctx, item, natural_wait_s=0.3, hop_wait_s=3, link_wait_s=0.5, poll_s=0.05
+        )
+
+    assert asyncio.run(run()) == str(dest)
+    assert opened == [
+        "https://biblioproxy.cnr.it:2270/doi/pdfdirect/10.1002/fld.5091?download=true"
+    ]
+    assert dest.read_bytes().startswith(b"%PDF-")
+
+
+def test_proxy_login_wait_ends_when_the_tab_leaves_the_login(monkeypatch, tmp_path):
+    ctx = FakeContext()
+    login = "https://biblioproxy.cnr.it/login?qurl=https://doi.org%2f10.1%2fx"
+    paper = "https://biblioproxy.cnr.it:2671/aip/pof/article/1"
+    tasks = []
+
+    async def goto(page, url):
+        page.url = login
+
+        async def signed_in():
+            await asyncio.sleep(0.2)
+            page.url = paper  # EZproxy forwards to the paper after the login
+
+        tasks.append(asyncio.ensure_future(signed_in()))
+
+    ctx.goto_handler = goto
+
+    async def never_pressed(cb=None):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(rb, "wait_for_enter", never_pressed)
+    monkeypatch.setattr(rb.sys.stdin, "isatty", lambda: True)
+    asked: list[str] = []
+
+    async def run():
+        return await rb.proxy_login_wait(
+            ctx, rb.proxied_url(PROXY, "10.1/x"), wait_s=5, poll_s=0.05, prompt=asked.append
+        )
+
+    assert asyncio.run(run()) is True
+    assert asked == ["biblioproxy.cnr.it"]
+    assert all(p.closed for p in ctx.pages)
+
+
+def test_proxy_login_wait_never_asks_without_a_terminal(monkeypatch):
+    monkeypatch.setattr(rb.sys.stdin, "isatty", lambda: False)
+    assert asyncio.run(rb.proxy_login_wait(FakeContext(), "https://p/x", prompt=print)) is False
+
+
+def test_auto_download_recovers_from_an_ended_proxy_session(monkeypatch, tmp_path):
+    """The proxy's sign-in is asked once; after it the paper is retried and saved,
+    and a later expiry in the same run is reported, not waited on again."""
+    ctx = FakeContext()
+    wire_connect(monkeypatch, ctx)
+    monkeypatch.setattr(rb, "find_chrome", lambda: Path("/usr/bin/chrome"))
+    monkeypatch.setattr(rb, "download_folder", lambda: tmp_path / "dl")
+    attempts: dict[str, int] = {}
+
+    async def fake_one(_ctx, item, **kw):
+        attempts[item.key] = attempts.get(item.key, 0) + 1
+        if item.key == "a" and attempts["a"] == 1:
+            return "proxy-login"
+        if item.key == "b":
+            return "proxy-login"
+        return f"/lib/{item.key}.pdf"
+
+    waits: list[str] = []
+
+    async def fake_wait(_ctx, url, prompt=None, **kw):
+        waits.append(url)
+        return True
+
+    monkeypatch.setattr(rb, "download_one", fake_one)
+    monkeypatch.setattr(rb, "proxy_login_wait", fake_wait)
+    notes: dict[str, str] = {}
+
+    async def run():
+        items = [rb.AutoItem(key=k, url=rb.proxied_url(PROXY, "10.1/" + k), dest="d") for k in "ab"]
+        return await rb.auto_download(
+            items,
+            on_result=lambda k, _p, n: notes.setdefault(k, n),
+            prompt_proxy_login=lambda host: None,
+            politeness_s=(0, 0),
+        )
+
+    saved = asyncio.run(run())
+    assert saved == {"a": "/lib/a.pdf"}
+    assert attempts == {"a": 2, "b": 1}
+    assert len(waits) == 1
+    assert notes["b"] == "login required: biblioproxy.cnr.it"

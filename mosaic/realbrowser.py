@@ -45,7 +45,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 from mosaic import handoff
 from mosaic.downloader import resolve_landing
@@ -247,6 +247,17 @@ _PDF_LINKS_JS = """([pii, doi]) => {
 _LINKINGHUB = "linkinghub.elsevier.com"
 
 
+# Wiley's /doi/pdf/ is an HTML viewer that never downloads; the file itself is
+# /doi/pdfdirect/<DOI>, which the viewer page names.
+_PDFDIRECT_RE = re.compile(r"/doi/pdfdirect/[^\s\"'<>?#&]+")
+
+
+def _direct_pdf_url(html: str, base: str) -> str | None:
+    """The download address behind a Wiley-style PDF viewer page, or None."""
+    m = _PDFDIRECT_RE.search(html)
+    return urljoin(base, m.group(0) + "?download=true") if m else None
+
+
 def _signed_asset_url(html: str) -> str | None:
     m = _ASSET_URL_RE.search(html)
     if not m:
@@ -284,6 +295,28 @@ class AutoItem:
     url: str
     dest: str
     label: str = ""
+    # the unproxied URL (doi.org) that names the publisher: through an
+    # institutional proxy every *url* resolves to the proxy host
+    site_url: str = ""
+
+
+def proxied_url(template: str, doi: str) -> str:
+    """The proxy's address of *doi*: ``{doi}`` in *template* is replaced by it.
+
+    EZproxy-style proxies serve doi.org on a port of their own
+    (``https://biblioproxy.cnr.it:2481/{doi}``) and the publisher behind it.
+    """
+    return template.replace("{doi}", quote(doi, safe="/:;()"))
+
+
+def is_proxy_login(url: str) -> bool:
+    """True on an EZproxy sign-in page (``<proxy>/login?qurl=...`` or ``?url=``).
+
+    The proxy session has expired (or was never opened in this profile): the
+    paper is behind the proxy's login, not the publisher's.
+    """
+    u = urlparse(url or "")
+    return u.path.rstrip("/") == "/login" and ("qurl=" in u.query or "url=" in u.query)
 
 
 async def poll_pdf_links(
@@ -331,7 +364,12 @@ async def classify_hop_wall(hop) -> str:
         url = (hop.url or "").lower()
     except Exception:
         url = ""
-    if "id.elsevier.com" in url or "/user/login" in url or url.startswith("https://idp"):
+    if (
+        "id.elsevier.com" in url
+        or "/user/login" in url
+        or url.startswith("https://idp")
+        or is_proxy_login(url)
+    ):
         return "login-required"
     try:
         html = (await hop.content()) or ""
@@ -386,6 +424,9 @@ async def download_one(
             except Exception:
                 log.debug("linkinghub redirect did not complete for %s", item.key)
             url = article.url or ""
+        if is_proxy_login(url):
+            log.debug("proxy login wall for %s at %s", item.key, url[:100])
+            return "proxy-login"
         if "id.elsevier.com" in url or "/user/login" in url:
             log.debug("login wall for %s at %s", item.key, url[:100])
             return "login-required"
@@ -451,6 +492,11 @@ async def download_one(
                 nm = handoff._norm(found.name)
                 if nm and any(i in nm for i in ids):
                     return found
+                # Wiley ("Journal - Year - Author - Title.pdf") and newer AIP
+                # ("015114_1_online.pdf") names carry no identifier: the DOI
+                # inside the PDF still names the paper
+                if doi and handoff._doi_mentions(found, [doi]):
+                    return found
                 watcher.ignore(found)  # another tab's file; keep watching
                 deadline = min(deadline, time.monotonic() + seconds)
             return None
@@ -467,7 +513,8 @@ async def download_one(
                     "natural launch stalled for %s (state=%r); firing manually", item.key, state
                 )
                 try:
-                    asset = _signed_asset_url(await hop.content())
+                    html = await hop.content()
+                    asset = _signed_asset_url(html) or _direct_pdf_url(html, hop.url)
                     if asset:
                         try:
                             await hop.evaluate("(u) => { window.location = u; }", asset)
@@ -511,6 +558,57 @@ async def download_one(
                     await pg.close()
                 except Exception:
                     pass
+
+
+async def proxy_login_wait(
+    ctx,
+    url: str,
+    *,
+    wait_s: float = 300.0,
+    poll_s: float = 1.0,
+    prompt: Callable[[str], None] | None = None,
+) -> bool:
+    """Open the proxy's sign-in page for *url* and wait for the user to sign in.
+
+    The proxy is a login the user has (they configured it), unlike a
+    publisher's: its session ending mid-run is worth one question. The tab
+    leaving the proxy's ``/login`` page is the proof of the login (EZproxy then
+    forwards to the paper). True on a login; False on Enter, a timeout, or no
+    terminal.
+    """
+    if not sys.stdin.isatty():
+        return False
+    page = await ctx.new_page()
+    release = None
+    try:
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+        except Exception:
+            log.debug("could not open the proxy login for %s", url, exc_info=True)
+        if prompt:
+            prompt(urlparse(url).hostname or url)
+        release = asyncio.create_task(wait_for_enter())
+        deadline = time.monotonic() + wait_s
+        while time.monotonic() < deadline and not release.done():
+            try:
+                here = page.url or ""
+            except Exception:
+                here = ""
+            if here and not is_proxy_login(here) and urlparse(here).path.rstrip("/") != "/login":
+                return True
+            await asyncio.sleep(poll_s)
+        return False
+    finally:
+        if release is not None and not release.done():
+            release.cancel()
+            try:
+                await release
+            except (asyncio.CancelledError, Exception):
+                pass
+        try:
+            await page.close()
+        except Exception:
+            pass
 
 
 async def wait_for_enter(callback: Callable[[], None] | None = None) -> str:
@@ -580,6 +678,7 @@ async def auto_download(
     on_result: Callable[[str, str | None, str], None] | None = None,
     prompt_paper: Callable[[], None] | None = None,
     prompt_check: Callable[[], None] | None = None,
+    prompt_proxy_login: Callable[[str], None] | None = None,
     politeness_s: tuple[float, float] = (8.0, 15.0),
     max_papers: int = 50,
     block_abort_after: int = 3,
@@ -592,8 +691,11 @@ async def auto_download(
     publisher that is deflecting). The run needs nobody: a paper behind a
     login is reported and skipped, never waited on, so a site the profile has
     no access to costs a few seconds per paper and the others still download.
-    The one wait is a human check (Cloudflare), which only a click clears:
-    with a TTY, *prompt_check* asks for it. With a TTY an Enter while a paper
+    Two waits remain, both for something only the user can do, and only with
+    a TTY: a human check (Cloudflare), which only a click clears
+    (*prompt_check*), and the institutional proxy's sign-in when its session
+    has ended (*prompt_proxy_login*, once per run): the proxy is a login the
+    user has, unlike a publisher's. With a TTY an Enter while a paper
     is in flight abandons that paper and ``q`` stops the run.
 
     ``on_result(key, path_or_None, note)`` runs after every paper; the note is
@@ -640,16 +742,18 @@ async def auto_download(
             # its own attempts and its own guardrail.
             buckets: dict[str, list[AutoItem]] = {}
             for it in items:
+                probe = it.site_url or it.url
                 try:
-                    site = urlparse(resolve_landing(it.url)).netloc or urlparse(it.url).netloc
+                    site = urlparse(resolve_landing(probe)).netloc or urlparse(probe).netloc
                 except Exception:
-                    site = urlparse(it.url).netloc
+                    site = urlparse(probe).netloc
                 if not site and it.dest.startswith(("http://", "https://")):
                     site = urlparse(it.dest).netloc
                 buckets.setdefault(site or "unknown", []).append(it)
 
             attempted = 0
             abandon = False
+            proxy_asked = False
             for site, bucket in buckets.items():
                 site_blocked = 0
                 site_login = 0
@@ -706,17 +810,24 @@ async def auto_download(
                         if on_result:
                             on_result(item.key, None, "skipped: by hand (Enter)")
                         continue
-                    if outcome and outcome not in ("login-required", "challenge"):
+                    if outcome == "proxy-login" and prompt_proxy_login and not proxy_asked:
+                        # asked once per run: a second expiry is reported, not waited on
+                        proxy_asked = True
+                        if await proxy_login_wait(ctx, item.url, prompt=prompt_proxy_login):
+                            outcome = await download_one(ctx, item, on_check=prompt_check)
+                    if outcome and outcome not in ("login-required", "proxy-login", "challenge"):
                         site_blocked = site_login = 0
                         saved[item.key] = outcome
                         if on_result:
                             on_result(item.key, outcome, "")
-                    elif outcome == "login-required":
+                    elif outcome in ("login-required", "proxy-login"):
                         # no access from this profile: skip it, never wait on
-                        # it (the user may have no account there at all)
+                        # it (the user may have no account there at all); a
+                        # proxy wall names the proxy, where the login goes
                         site_login += 1
+                        where = urlparse(item.url).hostname if outcome == "proxy-login" else site
                         if on_result:
-                            on_result(item.key, None, f"login required: {site}")
+                            on_result(item.key, None, f"login required: {where}")
                     else:
                         site_blocked += 1
                         if on_result:
@@ -760,20 +871,24 @@ async def auto_download(
 
 
 def auto_download_sync(
-    items: list[tuple[str, str, str, str]],
+    items: list[tuple[str, ...]],
     *,
     on_result: Callable[[str, str | None, str], None] | None = None,
     prompt_paper: Callable[[], None] | None = None,
     prompt_check: Callable[[], None] | None = None,
+    prompt_proxy_login: Callable[[str], None] | None = None,
     politeness_s: tuple[float, float] = (8.0, 15.0),
     max_papers: int = 50,
 ) -> tuple[dict[str, str], str]:
-    """Sync wrapper: items as ``(key, label, url, dest)``.
+    """Sync wrapper: items as ``(key, label, url, dest[, site_url])``.
 
     Returns ``(saved, state)`` where state is "", "dependency", or "failed":
     callers keep offering ``--interactive``/``--handoff`` on any state change.
     """
-    real = [AutoItem(key=k, url=u, dest=d, label=lab) for k, lab, u, d in items]
+    real = [
+        AutoItem(key=k, url=u, dest=d, label=lab, site_url=rest[0] if rest else "")
+        for k, lab, u, d, *rest in items
+    ]
     try:
         saved = asyncio.run(
             auto_download(
@@ -781,6 +896,7 @@ def auto_download_sync(
                 on_result=on_result,
                 prompt_paper=prompt_paper,
                 prompt_check=prompt_check,
+                prompt_proxy_login=prompt_proxy_login,
                 politeness_s=politeness_s,
                 max_papers=max_papers,
             )

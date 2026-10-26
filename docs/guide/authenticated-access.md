@@ -61,6 +61,32 @@ Works best where the bot checks are the *only* obstacle, Elsevier above all: the
 all 5 sampled subscribed PDFs unattended on the first try. A paper whose PDF link needs a CAPTCHA (IOP) still
 ends in the interactive window; combine the flags for that.
 
+### Through an institutional proxy {#institutional-proxy}
+
+If your institution runs a proxy (EZproxy) for its subscriptions, give mosaic the address of a paper there, with
+`{doi}` where the DOI goes, and `--auto` opens each paper through it:
+
+```bash
+mosaic config --proxy-url 'https://biblioproxy.cnr.it:2481/{doi}'
+mosaic get --from refs.bib --auto
+```
+
+Sign in to the proxy once in the mosaic Chrome window (open its address there, for example
+`https://biblioproxy.cnr.it/menu`, and log in). The proxy session lives in that window, like a publisher login:
+it lasts while the window stays open, and mosaic never sees or stores your password. Through the proxy the
+publishers see your institution's subscription, and ScienceDirect serves its pages without the Cloudflare check.
+
+A publisher the proxy does not cover is handed back to its own site by the proxy, so its papers go the usual way:
+downloaded where the profile has access, skipped as "login needed" where it has none. When the proxy session has
+ended (proxies close idle sessions, and some close the older one when you sign in again elsewhere), mosaic opens
+the proxy's sign-in page in the mosaic window and prints `Proxy login needed`. It goes on by itself as soon as
+the tab leaves the sign-in page, retrying the paper; Enter skips. It asks once per run; a run without a
+terminal does not ask, reports those papers as login needed and names the proxy host at the end. mosaic still groups the papers by the publisher `doi.org` leads to, so the guardrails stay per publisher.
+
+The quickest way to find your proxy's address is to open a paper through it in your browser and copy the
+address bar. EZproxy usually serves `doi.org` on a port of its own (`:2481` at CNR), so `<proxy>:<port>/<DOI>` is
+the address to look for.
+
 ### Why mosaic drives your Chrome on Elsevier {#linkinghub-auto}
 
 ScienceDirect refuses two kinds of client. A plain HTTP request for its PDF URLs gets HTTP 403 even when it
@@ -82,14 +108,16 @@ For each paper the pass:
 3. **Opens the link in a second tab.** The article tab stays open: closing the page that started a download
    cancels it. The link leads to an interstitial page whose own script sends the browser to a signed copy of
    the file on `pdf.sciencedirectassets.com`. If no file arrives within 8 seconds, mosaic runs the page's own
-   `redirectUser()`, or goes to the signed address it finds in the page, and then waits up to 75 seconds more.
+   `redirectUser()`, or goes to the signed address it finds in the page (on a Wiley PDF viewer page, its
+   `/doi/pdfdirect/` file), and then waits up to 75 seconds more.
 4. **Lets Chrome save the file as a normal download.** The mosaic profile is set to download PDFs instead of
    showing them in the viewer, without asking where to save, and with automatic downloads allowed for the two
    ScienceDirect hosts. Chrome blocks repeated downloads from one site otherwise. At the start of each run,
    mosaic also tells the running browser over CDP to save downloads into `mosaic-auto-downloads`. Without that
    instruction, downloads started from pages that mosaic opened over CDP are lost.
-5. **Files the PDF.** A new file counts as the paper's only when its name holds the paper's PII
-   (`1-s2.0-<PII>-main.pdf`) or its DOI suffix. mosaic checks for the `%PDF-` signature, moves the file into the
+5. **Files the PDF.** A new file counts as the paper's when its name holds the paper's PII
+   (`1-s2.0-<PII>-main.pdf`) or its DOI suffix, or, for names that carry neither (Wiley's
+   `Journal - Year - Author - Title.pdf`, AIP's `115112_1_online.pdf`), when the PDF contains the paper's DOI. mosaic checks for the `%PDF-` signature, moves the file into the
    library under the usual name and records it in the cache.
 
 The login lives in the mosaic profile, not in your daily one, so you sign in to ScienceDirect there once.

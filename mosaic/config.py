@@ -49,6 +49,8 @@ _DEFAULTS: dict = {
         "scopus": {"enabled": True, "api_key": "", "inst_token": ""},
     },
     "unpaywall": {"email": ""},
+    # institutional proxy (EZproxy) for `get --auto`: {doi} marks where the DOI goes
+    "proxy": {"url": ""},
     "zotero": {"api_key": "", "user_id": 0},
     "obsidian": {
         "vault_path": "",
@@ -147,6 +149,17 @@ def validate(cfg: dict) -> list[str]:
         email = unpaywall.get("email")
         if email is not None and email != "" and not isinstance(email, str):
             warnings.append("unpaywall.email should be a string")
+
+    # -- proxy ---------------------------------------------------------------
+    proxy = cfg.get("proxy")
+    if isinstance(proxy, dict) and proxy.get("url"):
+        url = proxy["url"]
+        if not isinstance(url, str):
+            warnings.append("proxy.url should be a string")
+        elif "{doi}" not in url:
+            warnings.append(
+                "proxy.url should contain {doi}, e.g. https://proxy.example.org:2481/{doi}"
+            )
 
     # -- zotero --------------------------------------------------------------
     zotero = cfg.get("zotero")

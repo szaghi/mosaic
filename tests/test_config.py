@@ -49,3 +49,10 @@ class TestSaveAndLoad:
             cfg_mod.save(cfg)
             loaded = cfg_mod.load()
         assert loaded["unpaywall"]["email"] == "test@example.com"
+
+
+def test_validate_proxy_url_needs_doi():
+    assert cfg_mod.validate({"proxy": {"url": "https://biblioproxy.cnr.it:2481/{doi}"}}) == []
+    assert cfg_mod.validate({"proxy": {"url": ""}}) == []
+    (msg,) = cfg_mod.validate({"proxy": {"url": "https://biblioproxy.cnr.it:2481/"}})
+    assert "{doi}" in msg

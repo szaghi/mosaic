@@ -157,6 +157,20 @@ Unpaywall wants an e-mail address with each request and has no account. Without 
 the PDF links the sources return. mosaic also sends this address to OpenAlex, Crossref and the citation providers,
 which serve identified clients faster.
 
+## Institutional proxy
+
+| Key | Default | Flag |
+|---|---|---|
+| `proxy.url` | `""` | `--proxy-url` |
+
+The address of a paper behind your institution's proxy (EZproxy), with `{doi}` where the DOI goes. With it set,
+`get --auto` opens each paper there instead of at `doi.org`. `--proxy-url none` removes it. See
+[Authenticated access, institutional proxy](./authenticated-access#institutional-proxy).
+
+```bash
+mosaic config --proxy-url 'https://biblioproxy.cnr.it:2481/{doi}'
+```
+
 ## Zotero
 
 | Key | Default | Flag |

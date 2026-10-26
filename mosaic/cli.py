@@ -1246,6 +1246,13 @@ def config(
     zenodo_key: Annotated[str, typer.Option(help="Set Zenodo API key")] = "",
     zotero_key: Annotated[str, typer.Option(help="Set Zotero API key (web API)")] = "",
     unpaywall_email: Annotated[str, typer.Option(help="Set Unpaywall email")] = "",
+    proxy_url: Annotated[
+        str,
+        typer.Option(
+            help="Set an institutional proxy (EZproxy) for get --auto, with {doi} where the DOI goes, "
+            "e.g. https://biblioproxy.cnr.it:2481/{doi}; none removes it"
+        ),
+    ] = "",
     # --- download / files ---
     download_dir: Annotated[str, typer.Option(help="Set PDF download directory")] = "",
     db_path: Annotated[str, typer.Option(help="Set SQLite cache path")] = "",
@@ -1432,6 +1439,16 @@ def config(
             )
     if unpaywall_email:
         cfg["unpaywall"]["email"] = unpaywall_email
+    if proxy_url:
+        if proxy_url.lower() == "none":
+            cfg.setdefault("proxy", {})["url"] = ""
+        elif "{doi}" not in proxy_url:
+            rprint(
+                "[red]--proxy-url needs {doi} where the DOI goes, e.g. https://proxy.example.org:2481/{doi}[/red]"
+            )
+            raise typer.Exit(1)
+        else:
+            cfg.setdefault("proxy", {})["url"] = proxy_url
 
     # --- download / files ---
     if download_dir:
@@ -1555,6 +1572,7 @@ def config(
             api_keys_changed,
             zotero_key,
             unpaywall_email,
+            proxy_url,
             download_dir,
             db_path,
             filename_pattern,
@@ -1881,6 +1899,16 @@ def _handoff_retry(
     return {by_key[k].uid: v for k, v in saved.items()}
 
 
+def _prompt_proxy_login(host: str) -> None:
+    rprint(
+        f"  [yellow]Proxy login needed:[/yellow] your [bold]{host}[/bold] session has ended. Sign in"
+        " in the mosaic Chrome window (the tab that just opened); mosaic goes on by itself once"
+        " you are in.\n"
+        "  [dim]Waiting up to 5 minutes; Enter here skips the sign-in, and papers behind the"
+        " proxy are then reported as login needed.[/dim]"
+    )
+
+
 def _prompt_check() -> None:
     rprint(
         "  [yellow]Human check:[/yellow] the page in the Chrome window asks you to confirm you"
@@ -1895,8 +1923,10 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
     Returns uid -> saved path. See :mod:`mosaic.realbrowser` for why the real
     binary is needed and how the flow differs from the saved-session pass.
     """
+    from urllib.parse import urlparse
+
     from mosaic.downloader import resolve_landing
-    from mosaic.realbrowser import auto_download_sync, download_folder
+    from mosaic.realbrowser import auto_download_sync, download_folder, proxied_url
 
     pattern = cfg.get("filename_pattern", "{year}_{source}_{author}_{title}")
     dest_dir = Path(cfg["download_dir"])
@@ -1905,15 +1935,30 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
     # The auto pass walks the organic chain: doi.org's genuine navigation
     # (linkinghub included) is what the fingerprint checks accept; a plain
     # article-URL hit can arrive through a challenge that never resolves.
-    items = [
-        (
-            key,
-            f"{_clip(p.title, 90)} ({p.year or 'n.d.'})" if p.source != "manual" else key,
-            f"https://doi.org/{p.doi}" if p.doi else (resolve_landing(p.url) if p.url else ""),
-            str(dest_dir / p.safe_filename(pattern)),
+    # With an institutional proxy (config proxy.url) a DOI starts there
+    # instead; doi.org still names the publisher, for the per-site guardrails.
+    proxy = (cfg.get("proxy", {}) or {}).get("url", "") or ""
+    if "{doi}" not in proxy:
+        proxy = ""
+
+    def start(p) -> tuple[str, str]:
+        if not p.doi:
+            return (resolve_landing(p.url) if p.url else ""), ""
+        plain = f"https://doi.org/{p.doi}"
+        return (proxied_url(proxy, p.doi), plain) if proxy else (plain, "")
+
+    items = []
+    for key, p in by_key.items():
+        url, site_url = start(p)
+        items.append(
+            (
+                key,
+                f"{_clip(p.title, 90)} ({p.year or 'n.d.'})" if p.source != "manual" else key,
+                url,
+                str(dest_dir / p.safe_filename(pattern)),
+                site_url,
+            )
         )
-        for key, p in by_key.items()
-    ]
 
     login_sites: list[str] = []
 
@@ -1945,6 +1990,7 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
     console.print(
         f"\n[bold]Auto pass with your Chrome[/bold]: driving it over CDP and filing each"
         f" PDF it saves to [cyan]{_tilde(folder)}[/cyan]."
+        + (f" Through the proxy [cyan]{urlparse(proxy).hostname}[/cyan]." if proxy else "")
         + (
             " Enter skips the paper in flight; q and Enter stops the run."
             if _stdin_isatty()
@@ -1956,6 +2002,7 @@ def _auto_retry(papers: list, cfg: dict, cache: Cache, max_papers: int = 50) -> 
         items,
         on_result=report,
         prompt_check=_prompt_check,
+        prompt_proxy_login=_prompt_proxy_login if proxy else None,
         max_papers=max_papers,
     )
     if state == "dependency":
